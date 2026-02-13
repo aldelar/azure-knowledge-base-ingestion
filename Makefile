@@ -19,7 +19,7 @@ help: ## Show available targets
 	@echo ""
 	@echo "  Local Development"
 	@echo "  ─────────────────"
-	@grep -E '^(dev-|convert|index|test)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^(dev-|convert|index|test|validate)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  Azure Operations"
@@ -63,31 +63,19 @@ dev-setup: ## Install required dev tools (az, azd, uv, func)
 # ------------------------------------------------------------------------------
 # Local Development — Pipeline
 # ------------------------------------------------------------------------------
-.PHONY: convert index test
+.PHONY: convert index test validate-infra
 
 test: ## Run unit tests (pytest)
-	@cd src/functions && uv run pytest tests/ -v
+	@cd src/functions && uv run pytest tests/ -v || test $$? -eq 5
+
+validate-infra: ## Validate Azure infra is ready for local dev
+	@bash scripts/functions/validate-infra.sh
 
 convert: ## Run fn-convert locally (kb/staging → kb/serving)
-	@if [ -z "$(STAGING_ARTICLES)" ]; then \
-		echo "No articles found in kb/staging/. Add article folders first."; \
-		exit 1; \
-	fi
-	@for article in $(STAGING_ARTICLES); do \
-		echo "\n=== fn-convert: $$article ==="; \
-		(cd src && uv run python fn_convert.py --article $$article); \
-	done
+	@bash scripts/functions/convert.sh
 
 index: ## Run fn-index locally (kb/serving → Azure AI Search)
-	@SERVING_ARTICLES=$$(ls -d kb/serving/*/ 2>/dev/null | xargs -I{} basename {}); \
-	if [ -z "$$SERVING_ARTICLES" ]; then \
-		echo "No articles found in kb/serving/. Run 'make convert' first."; \
-		exit 1; \
-	fi; \
-	for article in $$SERVING_ARTICLES; do \
-		echo "\n=== fn-index: $$article ==="; \
-		(cd src && uv run python fn_index.py --article $$article); \
-	done
+	@bash scripts/functions/index.sh
 
 # ------------------------------------------------------------------------------
 # Azure — Provision & Deploy
@@ -100,7 +88,7 @@ azure-provision: ## Provision all Azure resources (azd provision)
 azure-deploy: ## Deploy functions, search index, and CU analyzer (azd deploy)
 	azd deploy
 	@echo "Deploying kb-image-analyzer..."
-	@(cd src && uv run python manage_analyzers.py deploy)
+	@(cd src/functions && uv run python -m manage_analyzers deploy)
 
 # ------------------------------------------------------------------------------
 # Azure — Run Pipeline
@@ -145,5 +133,5 @@ azure-clean-index: ## Delete the AI Search index
 
 azure-clean: azure-clean-storage azure-clean-index ## Clean all Azure data (storage + index + analyzer)
 	@echo "Deleting kb-image-analyzer..."
-	@(cd src && uv run python manage_analyzers.py delete) 2>/dev/null || true
+	@(cd src/functions && uv run python -m manage_analyzers delete) 2>/dev/null || true
 	@echo "All Azure data cleaned."

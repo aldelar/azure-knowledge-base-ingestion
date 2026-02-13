@@ -73,6 +73,20 @@ resource functionsStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
+// Blob service + deployments container for Flex Consumption
+resource funcBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: functionsStorage
+  name: 'default'
+}
+
+resource deploymentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: funcBlobService
+  name: 'deployments'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Function App (Python 3.11, Flex Consumption)
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Epic 001 — Local Pipeline End-to-End
 
-> **Status:** Not Started
+> **Status:** In Progress
 > **Created:** February 13, 2026
 > **Updated:** February 13, 2026
 
@@ -76,16 +76,16 @@ src/
 
 ---
 
-### Story 1 — Project Scaffolding ✱
+### ✅ Story 1 — Project Scaffolding
 
-> **Status:** Not Started
+> **Status:** Done
 
 Set up the `src/functions/` project structure, dependency management, shared configuration, and update the Makefile and scripts to use the new layout.
 
 #### Deliverables
 
-- [ ] Create `src/functions/` directory structure matching the layout above (empty `__init__.py` files, package folders)
-- [ ] Create `src/functions/pyproject.toml` with all required dependencies:
+- [x] Create `src/functions/` directory structure matching the layout above (empty `__init__.py` files, package folders)
+- [x] Create `src/functions/pyproject.toml` with all required dependencies:
   - `azure-ai-contentunderstanding>=1.0.0b1`
   - `azure-identity>=1.19.0`
   - `azure-storage-blob`
@@ -94,27 +94,27 @@ Set up the `src/functions/` project structure, dependency management, shared con
   - `beautifulsoup4`
   - `python-dotenv`
   - `pytest` (dev dependency)
-- [ ] Create `src/functions/.env.sample` listing all required environment variables (sourced from AZD outputs — see infrastructure.md):
+- [x] Create `src/functions/.env.sample` listing all required environment variables (sourced from AZD outputs — see infrastructure.md):
   - `AI_SERVICES_ENDPOINT` — Content Understanding + embedding endpoint
   - `EMBEDDING_DEPLOYMENT_NAME` — model deployment name (`text-embedding-3-small`)
   - `SEARCH_ENDPOINT` — Azure AI Search endpoint
   - `SEARCH_INDEX_NAME` — target index name (default: `kb-articles`)
   - Note: no storage endpoints needed for local mode (local file I/O)
   - Include comment showing how to populate from AZD: `azd env get-values > .env`
-- [ ] Implement `src/functions/shared/config.py` — loads `.env`, exposes typed config, validates required vars on import. Uses `DefaultAzureCredential` for auth (falls back to `az login` identity for local dev)
-- [ ] Create `scripts/functions/convert.sh` — iterates `kb/staging/*/`, calls the fn-convert entry point per article folder
-- [ ] Create `scripts/functions/index.sh` — iterates `kb/serving/*/`, calls the fn-index entry point per article folder
-- [ ] Update `Makefile` — `convert` target calls `scripts/functions/convert.sh`, `index` target calls `scripts/functions/index.sh`, `azure-deploy` references new `manage_analyzers.py` path
-- [ ] Move existing spike code: move `src/spikes/` contents to `src/spikes/` (no change) and remove old top-level `src/*.py` files if any
-- [ ] Add `make test` target to Makefile (runs `cd src/functions && uv run pytest tests/`)
-- [ ] `uv sync` succeeds in `src/functions/` with no errors
+- [x] Implement `src/functions/shared/config.py` — loads `.env`, exposes typed config, validates required vars on import. Uses `DefaultAzureCredential` for auth (falls back to `az login` identity for local dev)
+- [x] Create `scripts/functions/convert.sh` — iterates `kb/staging/*/`, calls the fn-convert entry point per article folder
+- [x] Create `scripts/functions/index.sh` — iterates `kb/serving/*/`, calls the fn-index entry point per article folder
+- [x] Update `Makefile` — `convert` target calls `scripts/functions/convert.sh`, `index` target calls `scripts/functions/index.sh`, `azure-deploy` references new `manage_analyzers.py` path
+- [x] Move existing spike code: spike code stays in `src/spikes/`; no old top-level `src/*.py` files present
+- [x] Add `make test` target to Makefile (runs `cd src/functions && uv run pytest tests/`)
+- [x] `uv sync --extra dev` succeeds in `src/functions/` with no errors
 
 #### Definition of Done
 
-- [ ] `cd src/functions && uv sync` installs all dependencies
-- [ ] `make help` shows updated target descriptions
-- [ ] `make test` runs (with 0 tests collected — no tests yet)
-- [ ] `.env.sample` documents every required variable
+- [x] `cd src/functions && uv sync --extra dev` installs all dependencies (27 + 7 dev packages)
+- [x] `make help` shows updated target descriptions (including `validate-infra`)
+- [x] `make test` runs (0 tests collected — no tests yet)
+- [x] `.env.sample` documents every required variable
 
 ---
 
