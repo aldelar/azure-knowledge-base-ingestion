@@ -21,7 +21,7 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | Azure AI Services (Foundry) | `ai-services.bicep` | `ai-kbidx-{env}` | S0 (AIServices kind) |
 | → Embedding Deployment | `ai-services.bicep` | `text-embedding-3-small` | GlobalStandard, 120K TPM |
 | → Agent Deployment | `ai-services.bicep` | `gpt-5-mini` | GlobalStandard, 30K TPM |
-| Azure AI Search | `search.bicep` | `srch-kbidx-{env}` | Basic, 1 partition, 1 replica |
+| Azure AI Search | `search.bicep` | `srch-kbidx-{env}` | Free, 1 partition, 1 replica |
 | Function App | `function-app.bicep` | `func-kbidx-{env}` | Flex Consumption (FC1), Python 3.11, Linux |
 | App Service Plan | `function-app.bicep` | `plan-kbidx-{env}` | FlexConsumption / FC1 |
 
@@ -112,7 +112,7 @@ Model deployments are serialized (`dependsOn`) to avoid Azure API conflicts.
 
 | Setting | Value |
 |---------|-------|
-| SKU | Basic |
+| SKU | Free |
 | Partitions | 1 |
 | Replicas | 1 |
 | Semantic Search | Free tier |
@@ -125,7 +125,7 @@ The search index (`kb-articles`) is created by application code at runtime, not 
 
 | Role | Role ID | Purpose |
 |------|---------|---------|
-| Search Index Data Contributor | `8bbe4f3e-f3ed-4a68-b546-e74b3c6b0ace` | Push documents to the search index |
+| Search Index Data Contributor | `8ebe5a00-799e-43f5-93ac-243d3dce84a7` | Push documents to the search index |
 | Search Service Contributor | `7ca78c08-252a-4471-8644-bb5ff32d4ba0` | Create and manage indexes |
 
 ### Function App (`function-app.bicep`)
@@ -230,7 +230,7 @@ AZD reads `azure.yaml` (project root) and `infra/main.parameters.json` to resolv
 |-----------|--------|---------|
 | `environmentName` | `${AZURE_ENV_NAME}` | — (set during `azd init`) |
 | `location` | `${AZURE_LOCATION}` | `eastus2` |
-| `searchSkuName` | Hardcoded in parameters file | `basic` |
+| `searchSkuName` | Hardcoded in parameters file | `free` |
 
 ### Makefile Targets
 
@@ -272,7 +272,7 @@ The following values are exported by `main.bicep` and available as AZD environme
 | 1 | **Flex Consumption plan** over Consumption | Better cold-start performance, VNet support, instance memory control (2 GB). Ideal for AI workloads with moderate execution times. |
 | 2 | **Three separate storage accounts** | Staging, serving, and functions runtime are isolated for security, lifecycle management, and independent scaling. Shared key access is disabled on staging/serving. |
 | 3 | **AIServices kind** (Foundry) | Single resource hosts Content Understanding, OpenAI models (embeddings + agent), avoiding multiple Cognitive Services accounts. |
-| 4 | **Basic search tier** | Supports up to 15 indexes, 2 GB storage, and semantic search — sufficient for the initial knowledge base. Upgrade path to Standard is straightforward. |
+| 4 | **Free search tier** | Supports up to 3 indexes, 50 MB storage, vector search, and semantic search — sufficient for dev. Upgrade path to Basic/Standard is straightforward. |
 | 5 | **System-assigned managed identity** | Simplest identity model — lifecycle tied to the Function App. No credential rotation or secret management required. |
 | 6 | **East US 2 region** | Broadest model availability for the required services: Content Understanding (GA), text-embedding-3-small, gpt-5-mini, Flex Consumption, and AI Search. |
 | 7 | **Modular Bicep structure** | Each service is a self-contained module with optional RBAC parameters. Modules are re-deployed with role assignments after the Function App identity is available. |

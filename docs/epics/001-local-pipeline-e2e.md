@@ -94,8 +94,14 @@ Set up the `src/functions/` project structure, dependency management, shared con
   - `beautifulsoup4`
   - `python-dotenv`
   - `pytest` (dev dependency)
-- [ ] Create `src/functions/.env.sample` listing all required environment variables with placeholder values
-- [ ] Implement `src/functions/shared/config.py` — loads `.env`, exposes typed config (CU endpoint, Search endpoint, Foundry endpoint, storage paths, etc.), validates required vars on import
+- [ ] Create `src/functions/.env.sample` listing all required environment variables (sourced from AZD outputs — see infrastructure.md):
+  - `AI_SERVICES_ENDPOINT` — Content Understanding + embedding endpoint
+  - `EMBEDDING_DEPLOYMENT_NAME` — model deployment name (`text-embedding-3-small`)
+  - `SEARCH_ENDPOINT` — Azure AI Search endpoint
+  - `SEARCH_INDEX_NAME` — target index name (default: `kb-articles`)
+  - Note: no storage endpoints needed for local mode (local file I/O)
+  - Include comment showing how to populate from AZD: `azd env get-values > .env`
+- [ ] Implement `src/functions/shared/config.py` — loads `.env`, exposes typed config, validates required vars on import. Uses `DefaultAzureCredential` for auth (falls back to `az login` identity for local dev)
 - [ ] Create `scripts/functions/convert.sh` — iterates `kb/staging/*/`, calls the fn-convert entry point per article folder
 - [ ] Create `scripts/functions/index.sh` — iterates `kb/serving/*/`, calls the fn-index entry point per article folder
 - [ ] Update `Makefile` — `convert` target calls `scripts/functions/convert.sh`, `index` target calls `scripts/functions/index.sh`, `azure-deploy` references new `manage_analyzers.py` path
@@ -118,26 +124,30 @@ Set up the `src/functions/` project structure, dependency management, shared con
 
 Create a validation script/make target that confirms the deployed Azure infrastructure is ready for local pipeline execution. This unblocks all subsequent stories.
 
+> **Note:** The infra (Bicep) deploys the Azure services and grants RBAC roles to the **Function App's managed identity**. For local development, `DefaultAzureCredential` uses the developer's `az login` identity, which also needs RBAC roles on these resources. The `kb-articles` search index and `kb-image-analyzer` CU analyzer are **not** deployed by infra — they are created by application code (`ensure_index_exists()` in Story 9 and `manage_analyzers.py` in this story).
+
 #### Deliverables
 
+- [ ] Populate `src/functions/.env` from AZD outputs (`azd env get-values > src/functions/.env` or manual copy)
 - [ ] Create `scripts/functions/validate-infra.sh` (or a Python script under `src/functions/`) that checks:
-  - Azure AI Search service is reachable and `kb-articles` index exists with the expected schema
-  - Content Understanding resource is reachable
-  - `kb-image-analyzer` custom analyzer exists in the CU resource
-  - Azure AI Foundry embedding endpoint is reachable (`text-embedding-3-small`)
-  - Staging and serving blob storage accounts/containers are accessible (or local `kb/staging/` and `kb/serving/` exist)
+  - Azure AI Search service is reachable (does NOT require `kb-articles` index to exist — that's created at runtime by Story 9)
+  - Content Understanding resource is reachable (does NOT require `kb-image-analyzer` yet — that's deployed below)
+  - Azure AI Foundry embedding deployment is reachable (`text-embedding-3-small`)
+  - Local `kb/staging/` folder exists and contains at least one article subfolder
+  - Local `kb/serving/` folder exists (may be empty)
+  - Developer's `az login` identity has the required RBAC roles (Cognitive Services OpenAI User, Cognitive Services User on AI Services; Search Index Data Contributor, Search Service Contributor on AI Search)
 - [ ] Add `make validate-infra` target to Makefile
 - [ ] Implement `src/functions/manage_analyzers.py` — CLI with `deploy` and `delete` subcommands for the `kb-image-analyzer` (reads definition from `analyzers/kb-image-analyzer.json`)
 - [ ] Create `analyzers/kb-image-analyzer.json` with the analyzer definition from architecture.md
 - [ ] Validation script prints clear pass/fail per check with actionable error messages
-- [ ] If `kb-articles` index does not exist, offer to create it (or document the manual step)
+- [ ] Add a `make grant-dev-roles` target (or a script) that assigns the developer's identity the same RBAC roles the Function App has on AI Services and AI Search (can use `az role assignment create`)
 
 #### Definition of Done
 
 - [ ] `make validate-infra` passes against the provisioned Azure environment
-- [ ] `make azure-deploy` successfully deploys the CU analyzer
+- [ ] Developer RBAC roles are granted and verified
+- [ ] `make azure-deploy` successfully deploys the CU analyzer (or `manage_analyzers.py deploy` run directly)
 - [ ] `kb-image-analyzer` is confirmed queryable in the CU resource
-- [ ] `kb-articles` index is confirmed in Azure AI Search with correct field schema
 
 ---
 
@@ -421,5 +431,7 @@ Run the complete pipeline end-to-end (`make convert` → `make index`), verify t
 
 - **Local file I/O, not blob:** For this epic, `fn-convert` and `fn-index` read/write directly to the local `kb/staging/` and `kb/serving/` folders. Blob Storage integration (for Azure-deployed functions) is a future epic.
 - **Live Azure services:** Even though functions run locally, they call real Azure endpoints (CU, AI Foundry, AI Search). A valid `.env` with Azure credentials is required.
+- **Developer RBAC:** The developer's `az login` identity needs the same RBAC roles as the Function App's managed identity (Cognitive Services OpenAI User, Cognitive Services User, Search Index Data Contributor, Search Service Contributor). Story 2 provides a `make grant-dev-roles` target for this.
+- **`.env` from AZD:** Run `azd env get-values > src/functions/.env` after `azd provision` to populate the environment file with real endpoints. See infrastructure.md Outputs section for the full list.
 - **Sample articles:** The `kb/staging/` folder already contains sample articles from the spike. These are the test fixtures for this epic.
 - **Idempotent:** Both `make convert` and `make index` should be safe to re-run. Convert overwrites existing output; index uses merge-or-upload.

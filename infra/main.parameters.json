@@ -9,7 +9,7 @@
       "value": "${AZURE_LOCATION}"
     },
     "searchSkuName": {
-      "value": "basic"
+      "value": "free"
     }
   }
 }

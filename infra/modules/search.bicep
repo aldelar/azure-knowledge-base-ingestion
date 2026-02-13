@@ -47,7 +47,7 @@ resource search 'Microsoft.Search/searchServices@2024-06-01-preview' = {
 // Role Assignment: Search Index Data Contributor
 // Allows the Function App to push documents to the index
 // ---------------------------------------------------------------------------
-var searchIndexDataContributorRoleId = '8bbe4f3e-f3ed-4a68-b546-e74b3c6b0ace' // Search Index Data Contributor
+var searchIndexDataContributorRoleId = '8ebe5a00-799e-43f5-93ac-243d3dce84a7' // Search Index Data Contributor
 
 resource searchIndexContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(indexContributorPrincipalId)) {
   name: guid(search.id, indexContributorPrincipalId, searchIndexDataContributorRoleId)
