@@ -31,6 +31,9 @@ param aiServicesEndpoint string
 @description('Embedding deployment name')
 param embeddingDeploymentName string
 
+@description('Agent / completion deployment name')
+param agentDeploymentName string
+
 @description('Azure AI Search endpoint')
 param searchEndpoint string
 
@@ -147,6 +150,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         {
           name: 'EMBEDDING_DEPLOYMENT_NAME'
           value: embeddingDeploymentName
+        }
+        {
+          name: 'AGENT_DEPLOYMENT_NAME'
+          value: agentDeploymentName
         }
         {
           name: 'SEARCH_ENDPOINT'

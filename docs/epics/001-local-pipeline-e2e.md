@@ -118,36 +118,46 @@ Set up the `src/functions/` project structure, dependency management, shared con
 
 ---
 
-### Story 2 — Validate Azure Infrastructure ✱
+### Story 2 — Validate Azure Infrastructure ✅
 
-> **Status:** Not Started
+> **Status:** Done
 
 Create a validation script/make target that confirms the deployed Azure infrastructure is ready for local pipeline execution. This unblocks all subsequent stories.
 
 > **Note:** The infra (Bicep) deploys the Azure services and grants RBAC roles to the **Function App's managed identity**. For local development, `DefaultAzureCredential` uses the developer's `az login` identity, which also needs RBAC roles on these resources. The `kb-articles` search index and `kb-image-analyzer` CU analyzer are **not** deployed by infra — they are created by application code (`ensure_index_exists()` in Story 9 and `manage_analyzers.py` in this story).
 
+> **Implementation Note:** CU requires a completion model from its supported list (gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano). We deployed `gpt-4.1` (GlobalStandard, 30K TPM) to the AI Services account since `gpt-5-mini` is not CU-supported. CU defaults must be set via `manage_analyzers.py setup` before deploying custom analyzers. The `deploy` command auto-runs `setup`. The analyzer ID uses underscores (`kb_image_analyzer`) because CU forbids hyphens in analyzer IDs.
+
 #### Deliverables
 
-- [ ] Populate `src/functions/.env` from AZD outputs (`azd env get-values > src/functions/.env` or manual copy)
-- [ ] Create `scripts/functions/validate-infra.sh` (or a Python script under `src/functions/`) that checks:
+- [x] Populate `src/functions/.env` from AZD outputs (`azd env get-values > src/functions/.env` or manual copy)
+- [x] Create `scripts/functions/validate-infra.sh` (or a Python script under `src/functions/`) that checks:
   - Azure AI Search service is reachable (does NOT require `kb-articles` index to exist — that's created at runtime by Story 9)
   - Content Understanding resource is reachable (does NOT require `kb-image-analyzer` yet — that's deployed below)
   - Azure AI Foundry embedding deployment is reachable (`text-embedding-3-small`)
   - Local `kb/staging/` folder exists and contains at least one article subfolder
   - Local `kb/serving/` folder exists (may be empty)
   - Developer's `az login` identity has the required RBAC roles (Cognitive Services OpenAI User, Cognitive Services User on AI Services; Search Index Data Contributor, Search Service Contributor on AI Search)
-- [ ] Add `make validate-infra` target to Makefile
-- [ ] Implement `src/functions/manage_analyzers.py` — CLI with `deploy` and `delete` subcommands for the `kb-image-analyzer` (reads definition from `analyzers/kb-image-analyzer.json`)
-- [ ] Create `analyzers/kb-image-analyzer.json` with the analyzer definition from architecture.md
-- [ ] Validation script prints clear pass/fail per check with actionable error messages
-- [ ] Add a `make grant-dev-roles` target (or a script) that assigns the developer's identity the same RBAC roles the Function App has on AI Services and AI Search (can use `az role assignment create`)
+- [x] Add `make validate-infra` target to Makefile
+- [x] Implement `src/functions/manage_analyzers.py` — CLI with `setup`, `deploy`, `delete`, and `status` subcommands for the `kb_image_analyzer` (reads definition from `analyzers/kb-image-analyzer.json`)
+- [x] Create `analyzers/kb-image-analyzer.json` with the analyzer definition from architecture.md (+ `models.completion: gpt-4.1`)
+- [x] Validation script prints clear pass/fail per check with actionable error messages
+- [x] Add a `make grant-dev-roles` target that assigns the developer's identity the same RBAC roles the Function App has on AI Services and AI Search (uses `az role assignment create`)
+
+| File | Status |
+|------|--------|
+| `src/functions/manage_analyzers.py` | ✅ |
+| `src/functions/shared/config.py` | ✅ (added `agent_deployment_name`) |
+| `scripts/functions/validate-infra.sh` | ✅ |
+| `analyzers/kb-image-analyzer.json` | ✅ |
+| `Makefile` | ✅ (added `grant-dev-roles`, updated `azure-deploy`) |
 
 #### Definition of Done
 
-- [ ] `make validate-infra` passes against the provisioned Azure environment
-- [ ] Developer RBAC roles are granted and verified
-- [ ] `make azure-deploy` successfully deploys the CU analyzer (or `manage_analyzers.py deploy` run directly)
-- [ ] `kb-image-analyzer` is confirmed queryable in the CU resource
+- [x] `make validate-infra` passes against the provisioned Azure environment (10/10 checks pass)
+- [x] Developer RBAC roles are granted and verified (4 roles: CogSvc OpenAI User, CogSvc User, Search Index Data Contributor, Search Service Contributor)
+- [x] `manage_analyzers.py deploy` successfully deploys the CU analyzer (with auto-setup of defaults)
+- [x] `kb_image_analyzer` is confirmed queryable in the CU resource (status: READY, fields: Description, UIElements, NavigationPath)
 
 ---
 

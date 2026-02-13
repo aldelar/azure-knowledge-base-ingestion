@@ -21,6 +21,7 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | Azure AI Services (Foundry) | `ai-services.bicep` | `ai-kbidx-{env}` | S0 (AIServices kind) |
 | → Embedding Deployment | `ai-services.bicep` | `text-embedding-3-small` | GlobalStandard, 120K TPM |
 | → Agent Deployment | `ai-services.bicep` | `gpt-5-mini` | GlobalStandard, 30K TPM |
+| → CU Completion Deployment | `ai-services.bicep` | `gpt-4.1` | GlobalStandard, 30K TPM |
 | Azure AI Search | `search.bicep` | `srch-kbidx-{env}` | Free, 1 partition, 1 replica |
 | Function App | `function-app.bicep` | `func-kbidx-{env}` | Flex Consumption (FC1), Python 3.11, Linux |
 | App Service Plan | `function-app.bicep` | `plan-kbidx-{env}` | FlexConsumption / FC1 |
@@ -98,6 +99,7 @@ A single **AIServices** (Foundry) resource hosting Content Understanding and two
 |-----------|-------|-----|----------|---------|
 | `text-embedding-3-small` | OpenAI `text-embedding-3-small` v1 | GlobalStandard | 120K TPM | Vector embeddings for fn-index (1536 dimensions) |
 | `gpt-5-mini` | OpenAI `gpt-5-mini` v2025-08-07 | GlobalStandard | 30K TPM | Future agent chat/reasoning |
+| `gpt-4.1` | OpenAI `gpt-4.1` v2025-04-14 | GlobalStandard | 30K TPM | Content Understanding custom analyzer completion model |
 
 Model deployments are serialized (`dependsOn`) to avoid Azure API conflicts.
 
@@ -257,6 +259,7 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `AI_SERVICES_ENDPOINT` | `https://ai-kbidx-dev.cognitiveservices.azure.com/` |
 | `EMBEDDING_DEPLOYMENT_NAME` | `text-embedding-3-small` |
 | `AGENT_DEPLOYMENT_NAME` | `gpt-5-mini` |
+| `CU_COMPLETION_DEPLOYMENT_NAME` | `gpt-4.1` |
 | `SEARCH_SERVICE_NAME` | `srch-kbidx-dev` |
 | `SEARCH_ENDPOINT` | `https://srch-kbidx-dev.search.windows.net` |
 | `FUNCTION_APP_NAME` | `func-kbidx-dev` |

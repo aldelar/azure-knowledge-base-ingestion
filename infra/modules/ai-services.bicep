@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Module: ai-services.bicep
 // Deploys Azure AI Services (Foundry) account with model deployments
-// Used for: Content Understanding, Embeddings, and Agent (GPT-5-mini)
+// Used for: Content Understanding, Embeddings, Agent (GPT-5-mini), and CU completion (gpt-4.1)
 // ---------------------------------------------------------------------------
 
 @description('Azure region for resources')
@@ -75,6 +75,28 @@ resource agentDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-
 }
 
 // ---------------------------------------------------------------------------
+// Model Deployment: gpt-4.1 (for Content Understanding custom analyzers)
+// CU requires a completion model from its supported list:
+//   gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano
+// ---------------------------------------------------------------------------
+resource cuCompletionDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: aiServices
+  name: 'gpt-4.1'
+  dependsOn: [agentDeployment] // Serial deployment to avoid conflicts
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 30 // 30K tokens per minute
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4.1'
+      version: '2025-04-14'
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Role Assignment: Cognitive Services OpenAI User
 // ---------------------------------------------------------------------------
 var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
@@ -112,3 +134,4 @@ output aiServicesName string = aiServices.name
 output aiServicesEndpoint string = aiServices.properties.endpoint
 output embeddingDeploymentName string = embeddingDeployment.name
 output agentDeploymentName string = agentDeployment.name
+output cuCompletionDeploymentName string = cuCompletionDeployment.name

@@ -132,7 +132,7 @@ Each image is analyzed individually through a **custom Content Understanding ana
 
 ```json
 {
-  "analyzerId": "kb-image-analyzer",
+  "analyzerId": "kb_image_analyzer",
   "baseAnalyzerId": "prebuilt-image",
   "models": { "completion": "gpt-4.1" },
   "fieldSchema": {
@@ -160,7 +160,7 @@ Each image is analyzed individually through a **custom Content Understanding ana
 
 The custom analyzer produces richer, more contextual descriptions than the generic `prebuilt-documentSearch` — each image gets dedicated analysis with a prompt tuned for UI screenshots. The extracted `UIElements` and `NavigationPath` fields further enrich the Markdown output and improve search relevance.
 
-The analyzer definition is stored in `analyzers/kb-image-analyzer.json` and managed via `src/manage_analyzers.py`. It must be created once in the Content Understanding resource before running the pipeline (deployed via `make azure-deploy`).
+The analyzer definition is stored in `analyzers/kb-image-analyzer.json` and managed via `src/functions/manage_analyzers.py`. It must be created once in the Content Understanding resource before running the pipeline (deployed via `make azure-deploy`). Note: CU requires model defaults to be set via `manage_analyzers.py setup` — the `deploy` command auto-runs this. CU forbids hyphens in analyzer IDs, so the actual ID is `kb_image_analyzer`.
 
 ### Output Format
 

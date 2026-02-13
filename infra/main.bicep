@@ -128,6 +128,7 @@ module functionApp 'modules/function-app.bicep' = {
     servingBlobEndpoint: servingStorage.outputs.blobEndpoint
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
     embeddingDeploymentName: aiServices.outputs.embeddingDeploymentName
+    agentDeploymentName: aiServices.outputs.agentDeploymentName
     searchEndpoint: search.outputs.searchEndpoint
   }
 }
@@ -200,6 +201,7 @@ output AI_SERVICES_NAME string = aiServices.outputs.aiServicesName
 output AI_SERVICES_ENDPOINT string = aiServices.outputs.aiServicesEndpoint
 output EMBEDDING_DEPLOYMENT_NAME string = aiServices.outputs.embeddingDeploymentName
 output AGENT_DEPLOYMENT_NAME string = aiServices.outputs.agentDeploymentName
+output CU_COMPLETION_DEPLOYMENT_NAME string = aiServices.outputs.cuCompletionDeploymentName
 
 // Search
 output SEARCH_SERVICE_NAME string = search.outputs.searchName

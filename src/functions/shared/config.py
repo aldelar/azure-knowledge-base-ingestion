@@ -36,6 +36,9 @@ class Config:
     # Embedding model deployment name
     embedding_deployment_name: str
 
+    # Agent / completion model deployment name
+    agent_deployment_name: str
+
     # Azure AI Search
     search_endpoint: str
     search_index_name: str
@@ -75,6 +78,7 @@ def _load_config() -> Config:
     return Config(
         ai_services_endpoint=os.environ["AI_SERVICES_ENDPOINT"],
         embedding_deployment_name=os.environ.get("EMBEDDING_DEPLOYMENT_NAME", "text-embedding-3-small"),
+        agent_deployment_name=os.environ.get("AGENT_DEPLOYMENT_NAME", "gpt-5-mini"),
         search_endpoint=os.environ["SEARCH_ENDPOINT"],
         search_index_name=os.environ.get("SEARCH_INDEX_NAME", "kb-articles"),
     )

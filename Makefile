@@ -19,7 +19,7 @@ help: ## Show available targets
 	@echo ""
 	@echo "  Local Development"
 	@echo "  ─────────────────"
-	@grep -E '^(dev-|convert|index|test|validate)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^(dev-|convert|index|test|validate|grant)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  Azure Operations"
@@ -78,6 +78,32 @@ index: ## Run fn-index locally (kb/serving → Azure AI Search)
 	@bash scripts/functions/index.sh
 
 # ------------------------------------------------------------------------------
+# Local Development — RBAC
+# ------------------------------------------------------------------------------
+.PHONY: grant-dev-roles
+
+grant-dev-roles: ## Grant developer RBAC roles on AI Services & AI Search
+	@echo "Granting developer RBAC roles..."
+	@set -a && . src/functions/.env && set +a && \
+	USER_OID=$$(az ad signed-in-user show --query id -o tsv) && \
+	echo "  User: $$USER_OID" && \
+	echo "  AI Services: $$AI_SERVICES_NAME" && \
+	echo "  AI Search:   $$SEARCH_SERVICE_NAME" && \
+	echo "" && \
+	AI_SCOPE="/subscriptions/$$AZURE_SUBSCRIPTION_ID/resourceGroups/$$RESOURCE_GROUP/providers/Microsoft.CognitiveServices/accounts/$$AI_SERVICES_NAME" && \
+	SEARCH_SCOPE="/subscriptions/$$AZURE_SUBSCRIPTION_ID/resourceGroups/$$RESOURCE_GROUP/providers/Microsoft.Search/searchServices/$$SEARCH_SERVICE_NAME" && \
+	for role in "Cognitive Services OpenAI User" "Cognitive Services User"; do \
+		echo "  Assigning '$$role' on AI Services..."; \
+		az role assignment create --assignee $$USER_OID --role "$$role" --scope "$$AI_SCOPE" -o none 2>/dev/null && echo "    ✔ Done" || echo "    ⚠ Already assigned or failed"; \
+	done && \
+	for role in "Search Index Data Contributor" "Search Service Contributor"; do \
+		echo "  Assigning '$$role' on AI Search..."; \
+		az role assignment create --assignee $$USER_OID --role "$$role" --scope "$$SEARCH_SCOPE" -o none 2>/dev/null && echo "    ✔ Done" || echo "    ⚠ Already assigned or failed"; \
+	done && \
+	echo "" && \
+	echo "Done. Run 'make validate-infra' to verify."
+
+# ------------------------------------------------------------------------------
 # Azure — Provision & Deploy
 # ------------------------------------------------------------------------------
 .PHONY: azure-provision azure-deploy
@@ -87,7 +113,7 @@ azure-provision: ## Provision all Azure resources (azd provision)
 
 azure-deploy: ## Deploy functions, search index, and CU analyzer (azd deploy)
 	azd deploy
-	@echo "Deploying kb-image-analyzer..."
+	@echo "Configuring CU defaults and deploying kb-image-analyzer..."
 	@(cd src/functions && uv run python -m manage_analyzers deploy)
 
 # ------------------------------------------------------------------------------

@@ -1,0 +1,27 @@
+{
+  "description": "Custom image analyzer for KB article screenshots and UI diagrams",
+  "baseAnalyzerId": "prebuilt-image",
+  "fieldSchema": {
+    "fields": {
+      "Description": {
+        "type": "string",
+        "method": "generate",
+        "description": "A detailed description of the screenshot or UI image, focusing on: what screen/page is shown, key UI elements visible, any highlighted or annotated areas, navigation steps illustrated, and any text visible in the image."
+      },
+      "UIElements": {
+        "type": "array",
+        "method": "generate",
+        "description": "List of key UI elements visible in the image (buttons, menus, fields, labels)",
+        "items": { "type": "string" }
+      },
+      "NavigationPath": {
+        "type": "string",
+        "method": "generate",
+        "description": "The navigation path shown in the image, e.g. 'Settings > Security > Manage user security'"
+      }
+    }
+  },
+  "models": {
+    "completion": "gpt-4.1"
+  }
+}
