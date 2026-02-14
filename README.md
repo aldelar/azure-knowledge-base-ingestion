@@ -71,4 +71,64 @@ Teams and organizations that:
 
 ## Getting Started
 
-See [docs/research/spike-content-understanding.md](docs/research/spike-content-understanding.md) for prerequisites, setup instructions, and usage details.
+### Prerequisites
+
+- **Python 3.11+** and **[UV](https://docs.astral.sh/uv/)** package manager
+- **Azure CLI** (`az`) — authenticated via `az login`
+- **Azure Developer CLI** (`azd`) — for provisioning infrastructure
+- **Azure Functions Core Tools** (`func`) — for future Azure deployment
+- An Azure subscription with access to AI Services, AI Search, and model deployments
+
+Run `make dev-doctor` to verify all tools are installed.
+
+### 1. Provision Azure Infrastructure
+
+```bash
+azd up                                       # Deploys all Azure resources
+azd env get-values > src/functions/.env       # Populate local env file
+make grant-dev-roles                         # Grant RBAC roles to your az login identity
+```
+
+### 2. Install Dependencies
+
+```bash
+cd src/functions && uv sync --extra dev      # Install Python packages
+```
+
+### 3. Deploy CU Analyzer
+
+```bash
+cd src/functions && uv run python manage_analyzers.py deploy
+```
+
+This sets up CU model defaults and deploys the custom `kb_image_analyzer`.
+
+### 4. Run the Pipeline
+
+```bash
+make convert      # Stage 1: HTML → Markdown + AI image descriptions (kb/staging → kb/serving)
+make index        # Stage 2: Markdown → chunks → embeddings → Azure AI Search index
+```
+
+### 5. Verify
+
+```bash
+make validate-infra   # Check Azure infrastructure readiness
+make test             # Run all 75 unit & integration tests
+```
+
+### Local Workflow Summary
+
+```
+make dev-doctor → make validate-infra → make convert → make index → make test
+```
+
+### Sample Articles
+
+The `kb/staging/` folder contains two sample articles (one DITA-generated HTML, one clean HTML5) used for development and testing. After running the pipeline, processed output appears in `kb/serving/` and chunks are searchable in the `kb-articles` AI Search index.
+
+## Documentation
+
+- [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema
+- [Infrastructure](docs/specs/azure-services.md) — Bicep modules, model deployments, RBAC
+- [Epic 001](docs/epics/001-local-pipeline-e2e.md) — local pipeline implementation stories and status
