@@ -161,31 +161,44 @@ Create a validation script/make target that confirms the deployed Azure infrastr
 
 ---
 
-### Story 3 — fn-convert: HTML Text Extraction ✱
+### Story 3 — fn-convert: HTML Text Extraction ✅
 
-> **Status:** Not Started
+> **Status:** Done
 
 Implement the CU text extraction module that sends HTML to `prebuilt-documentSearch` and returns clean Markdown.
 
+> **Implementation Note:** `prebuilt-documentSearch` requires both `text-embedding-3-large` AND `gpt-4.1-mini` deployed and registered as CU defaults. Without either, the SDK silently returns 0 contents — the actual error (`ResourceError: No deployment for model 'gpt-4.1-mini' was provided`) is only visible via the REST API polling response. The Python SDK `1.0.0b1` does not propagate CU inner errors. Both models were added to the Bicep template and `manage_analyzers.py MODEL_DEPLOYMENTS`.
+
 #### Deliverables
 
-- [ ] Implement `src/functions/fn_convert/cu_text.py`:
+- [x] Implement `src/functions/fn_convert/cu_text.py`:
   - Accepts HTML file path (local), reads content
   - Sends to CU `prebuilt-documentSearch` analyzer (content type `text/html`)
-  - Returns the extracted Markdown string and the Summary field
+  - Returns `CuTextResult(markdown, summary)` dataclass
   - Handles CU API errors gracefully with clear logging
-- [ ] Implement `src/functions/shared/cu_client.py`:
-  - Factory function that creates an authenticated CU client using `DefaultAzureCredential`
-  - Reads endpoint from shared config
-- [ ] Unit test: `tests/test_convert/test_cu_text.py` — test with a sample HTML article from `kb/staging/`
-- [ ] Verify extracted Markdown quality against the spike results in `kb/3_md/`
+- [x] Implement `src/functions/shared/cu_client.py`:
+  - Singleton factory `get_cu_client()` with module-level caching
+  - Authenticated via `DefaultAzureCredential`, endpoint from `config.ai_services_endpoint`
+- [x] Unit test: `tests/test_convert/test_cu_text.py` — parametrized across both sample HTML articles
+- [x] Verify extracted Markdown quality against the spike results in `kb/3_md/`
+- [x] Deploy `text-embedding-3-large` and `gpt-4.1-mini` models (required by `prebuilt-documentSearch`)
+- [x] Add both models to Bicep template and `manage_analyzers.py`
+
+| File | Status |
+|------|--------|
+| `src/functions/fn_convert/cu_text.py` | ✅ |
+| `src/functions/shared/cu_client.py` | ✅ |
+| `src/functions/tests/test_convert/test_cu_text.py` | ✅ |
+| `infra/modules/ai-services.bicep` | ✅ (added `text-embedding-3-large` + `gpt-4.1-mini` deployments) |
+| `src/functions/manage_analyzers.py` | ✅ (added both models to `MODEL_DEPLOYMENTS`) |
+| `docs/specs/infrastructure.md` | ✅ (5 model deployments) |
 
 #### Definition of Done
 
-- [ ] `cu_text.py` produces Markdown from a sample KB article HTML
-- [ ] Output quality matches or exceeds spike results
-- [ ] CU client authenticates using managed identity / DefaultAzureCredential
-- [ ] Tests pass
+- [x] `cu_text.py` produces Markdown from a sample KB article HTML
+- [x] Output quality matches or exceeds spike results
+- [x] CU client authenticates using managed identity / DefaultAzureCredential
+- [x] Tests pass (9 tests: 2 articles × 4 assertions + 1 error case)
 
 ---
 

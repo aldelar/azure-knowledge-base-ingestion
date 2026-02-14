@@ -22,9 +22,13 @@ ANALYZER_DEF_PATH = Path(__file__).resolve().parent.parent.parent / "analyzers" 
 
 # Map CU model names → deployment names in our AI Services account.
 # CU completion models: gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano
+# NOTE: prebuilt-documentSearch requires text-embedding-3-large AND gpt-4.1-mini —
+#       silently returns 0 contents if either is not deployed and registered.
 MODEL_DEPLOYMENTS = {
     "gpt-4.1": "gpt-4.1",
+    "gpt-4.1-mini": "gpt-4.1-mini",
     "text-embedding-3-small": config.embedding_deployment_name,
+    "text-embedding-3-large": "text-embedding-3-large",
 }
 
 

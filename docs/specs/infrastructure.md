@@ -83,7 +83,7 @@ The module accepts an optional `contributorPrincipalId` parameter. When provided
 
 ### Azure AI Services (`ai-services.bicep`)
 
-A single **AIServices** (Foundry) resource hosting Content Understanding and two model deployments.
+A single **AIServices** (Foundry) resource hosting Content Understanding and five model deployments.
 
 | Setting | Value |
 |---------|-------|
@@ -98,8 +98,10 @@ A single **AIServices** (Foundry) resource hosting Content Understanding and two
 | Deployment | Model | SKU | Capacity | Purpose |
 |-----------|-------|-----|----------|---------|
 | `text-embedding-3-small` | OpenAI `text-embedding-3-small` v1 | GlobalStandard | 120K TPM | Vector embeddings for fn-index (1536 dimensions) |
+| `text-embedding-3-large` | OpenAI `text-embedding-3-large` v1 | GlobalStandard | 120K TPM | Required by CU `prebuilt-documentSearch` for field extraction |
 | `gpt-5-mini` | OpenAI `gpt-5-mini` v2025-08-07 | GlobalStandard | 30K TPM | Future agent chat/reasoning |
 | `gpt-4.1` | OpenAI `gpt-4.1` v2025-04-14 | GlobalStandard | 30K TPM | Content Understanding custom analyzer completion model |
+| `gpt-4.1-mini` | OpenAI `gpt-4.1-mini` v2025-04-14 | GlobalStandard | 30K TPM | Required by CU `prebuilt-documentSearch` for document analysis |
 
 Model deployments are serialized (`dependsOn`) to avoid Azure API conflicts.
 

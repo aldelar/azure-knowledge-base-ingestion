@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Module: ai-services.bicep
 // Deploys Azure AI Services (Foundry) account with model deployments
-// Used for: Content Understanding, Embeddings, Agent (GPT-5-mini), and CU completion (gpt-4.1)
+// Used for: Content Understanding, Embeddings (small + large), Agent (GPT-5-mini), and CU completion (gpt-4.1)
 // ---------------------------------------------------------------------------
 
 @description('Azure region for resources')
@@ -55,12 +55,34 @@ resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2
 }
 
 // ---------------------------------------------------------------------------
+// Model Deployment: text-embedding-3-large (required by CU prebuilt-documentSearch)
+// CU documentSearch internally uses text-embedding-3-large for field extraction;
+// silently returns 0 contents if this model is not deployed and registered.
+// ---------------------------------------------------------------------------
+resource embeddingLargeDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: aiServices
+  name: 'text-embedding-3-large'
+  dependsOn: [embeddingDeployment] // Serial deployment to avoid conflicts
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 120 // 120K tokens per minute
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'text-embedding-3-large'
+      version: '1'
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Model Deployment: gpt-5-mini (for future agent)
 // ---------------------------------------------------------------------------
 resource agentDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
   parent: aiServices
   name: 'gpt-5-mini'
-  dependsOn: [embeddingDeployment] // Serial deployment to avoid conflicts
+  dependsOn: [embeddingLargeDeployment] // Serial deployment to avoid conflicts
   sku: {
     name: 'GlobalStandard'
     capacity: 30 // 30K tokens per minute
@@ -91,6 +113,28 @@ resource cuCompletionDeployment 'Microsoft.CognitiveServices/accounts/deployment
     model: {
       format: 'OpenAI'
       name: 'gpt-4.1'
+      version: '2025-04-14'
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Model Deployment: gpt-4.1-mini (required by CU prebuilt-documentSearch)
+// prebuilt-documentSearch internally requires gpt-4.1-mini; fails with
+// "No deployment for model 'gpt-4.1-mini' was provided" if missing.
+// ---------------------------------------------------------------------------
+resource cuCompletionMiniDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: aiServices
+  name: 'gpt-4.1-mini'
+  dependsOn: [cuCompletionDeployment] // Serial deployment to avoid conflicts
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 30 // 30K tokens per minute
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4.1-mini'
       version: '2025-04-14'
     }
   }
