@@ -15,8 +15,11 @@ param tags object = {}
 @description('Container names to create in this account')
 param containerNames array = []
 
-@description('Principal ID to grant Storage Blob Data Contributor role')
+@description('Principal ID to grant Storage Blob Data Contributor role (service principal / managed identity)')
 param contributorPrincipalId string = ''
+
+@description('Principal ID of the deployer (human user) for blob access')
+param deployerPrincipalId string = ''
 
 // ---------------------------------------------------------------------------
 // Storage Account
@@ -35,6 +38,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
     allowSharedKeyAccess: false
+    publicNetworkAccess: 'Enabled'
   }
 }
 
@@ -68,6 +72,19 @@ resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
     principalId: contributorPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalType: 'ServicePrincipal'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role Assignment: Storage Blob Data Contributor for deployer (User)
+// ---------------------------------------------------------------------------
+resource deployerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(storageAccount.id, deployerPrincipalId, storageBlobDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    principalType: 'User'
   }
 }
 

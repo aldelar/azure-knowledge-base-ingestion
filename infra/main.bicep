@@ -32,6 +32,9 @@ param tags object = {}
 @allowed(['free', 'basic', 'standard'])
 param searchSkuName string = 'basic'
 
+@description('Principal ID of the deployer (human user). AZD populates this via AZURE_PRINCIPAL_ID.')
+param principalId string = ''
+
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -130,6 +133,7 @@ module functionApp 'modules/function-app.bicep' = {
     embeddingDeploymentName: aiServices.outputs.embeddingDeploymentName
     agentDeploymentName: aiServices.outputs.agentDeploymentName
     searchEndpoint: search.outputs.searchEndpoint
+    deployerPrincipalId: principalId
   }
 }
 
@@ -137,7 +141,7 @@ module functionApp 'modules/function-app.bicep' = {
 // Post-deploy: Grant Function App managed identity access to all services
 // ---------------------------------------------------------------------------
 
-// Staging storage: Blob Data Contributor
+// Staging storage: Blob Data Contributor (Function App MI)
 module stagingStorageRole 'modules/storage.bicep' = {
   name: 'staging-storage-role'
   params: {
@@ -146,10 +150,11 @@ module stagingStorageRole 'modules/storage.bicep' = {
     tags: defaultTags
     containerNames: ['staging']
     contributorPrincipalId: functionApp.outputs.functionAppPrincipalId
+    deployerPrincipalId: principalId
   }
 }
 
-// Serving storage: Blob Data Contributor
+// Serving storage: Blob Data Contributor (Function App MI)
 module servingStorageRole 'modules/storage.bicep' = {
   name: 'serving-storage-role'
   params: {
@@ -158,6 +163,7 @@ module servingStorageRole 'modules/storage.bicep' = {
     tags: defaultTags
     containerNames: ['serving']
     contributorPrincipalId: functionApp.outputs.functionAppPrincipalId
+    deployerPrincipalId: principalId
   }
 }
 
@@ -169,6 +175,7 @@ module aiServicesRole 'modules/ai-services.bicep' = {
     baseName: baseName
     tags: defaultTags
     cognitiveServicesUserPrincipalId: functionApp.outputs.functionAppPrincipalId
+    deployerPrincipalId: principalId
   }
 }
 
@@ -181,6 +188,7 @@ module searchRole 'modules/search.bicep' = {
     tags: defaultTags
     skuName: searchSkuName
     indexContributorPrincipalId: functionApp.outputs.functionAppPrincipalId
+    deployerPrincipalId: principalId
   }
 }
 

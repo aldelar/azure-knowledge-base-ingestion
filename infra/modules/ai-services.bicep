@@ -13,8 +13,11 @@ param baseName string
 @description('Tags to apply to all resources')
 param tags object = {}
 
-@description('Principal ID to grant Cognitive Services roles')
+@description('Principal ID to grant Cognitive Services roles (service principal / managed identity)')
 param cognitiveServicesUserPrincipalId string = ''
+
+@description('Principal ID of the deployer (human user) for Cognitive Services access')
+param deployerPrincipalId string = ''
 
 // ---------------------------------------------------------------------------
 // Azure AI Services Account (Foundry resource)
@@ -167,6 +170,29 @@ resource cogServicesUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01
     principalId: cognitiveServicesUserPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUserRoleId)
     principalType: 'ServicePrincipal'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role Assignments for deployer (User principal type)
+// ---------------------------------------------------------------------------
+resource deployerOpenAIUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(aiServices.id, deployerPrincipalId, cognitiveServicesOpenAIUserRoleId)
+  scope: aiServices
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
+    principalType: 'User'
+  }
+}
+
+resource deployerCogServicesUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(aiServices.id, deployerPrincipalId, cognitiveServicesUserRoleId)
+  scope: aiServices
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUserRoleId)
+    principalType: 'User'
   }
 }
 

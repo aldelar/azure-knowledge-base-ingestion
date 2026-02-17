@@ -16,8 +16,11 @@ param tags object = {}
 @allowed(['free', 'basic', 'standard'])
 param skuName string = 'basic'
 
-@description('Principal ID to grant Search Index Data Contributor role')
+@description('Principal ID to grant Search Index Data Contributor role (service principal / managed identity)')
 param indexContributorPrincipalId string = ''
+
+@description('Principal ID of the deployer (human user) for Search access')
+param deployerPrincipalId string = ''
 
 // ---------------------------------------------------------------------------
 // Azure AI Search
@@ -72,6 +75,29 @@ resource searchServiceContributorRole 'Microsoft.Authorization/roleAssignments@2
     principalId: indexContributorPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchServiceContributorRoleId)
     principalType: 'ServicePrincipal'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role Assignments for deployer (User principal type)
+// ---------------------------------------------------------------------------
+resource deployerSearchIndexContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(search.id, deployerPrincipalId, searchIndexDataContributorRoleId)
+  scope: search
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataContributorRoleId)
+    principalType: 'User'
+  }
+}
+
+resource deployerSearchServiceContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(search.id, deployerPrincipalId, searchServiceContributorRoleId)
+  scope: search
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchServiceContributorRoleId)
+    principalType: 'User'
   }
 }
 

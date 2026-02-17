@@ -82,26 +82,16 @@ index: ## Run fn-index locally (kb/serving → Azure AI Search)
 # ------------------------------------------------------------------------------
 .PHONY: grant-dev-roles
 
-grant-dev-roles: ## Grant developer RBAC roles on AI Services & AI Search
-	@echo "Granting developer RBAC roles..."
+grant-dev-roles: ## Verify developer RBAC roles (provisioned via Bicep)
+	@echo "Developer RBAC roles are now managed declaratively via Bicep (infra/)."
+	@echo "Run 'make azure-provision' to apply. Checking current assignments..."
+	@echo ""
 	@set -a && . src/functions/.env && set +a && \
 	USER_OID=$$(az ad signed-in-user show --query id -o tsv) && \
 	echo "  User: $$USER_OID" && \
-	echo "  AI Services: $$AI_SERVICES_NAME" && \
-	echo "  AI Search:   $$SEARCH_SERVICE_NAME" && \
 	echo "" && \
-	AI_SCOPE="/subscriptions/$$AZURE_SUBSCRIPTION_ID/resourceGroups/$$RESOURCE_GROUP/providers/Microsoft.CognitiveServices/accounts/$$AI_SERVICES_NAME" && \
-	SEARCH_SCOPE="/subscriptions/$$AZURE_SUBSCRIPTION_ID/resourceGroups/$$RESOURCE_GROUP/providers/Microsoft.Search/searchServices/$$SEARCH_SERVICE_NAME" && \
-	for role in "Cognitive Services OpenAI User" "Cognitive Services User"; do \
-		echo "  Assigning '$$role' on AI Services..."; \
-		az role assignment create --assignee $$USER_OID --role "$$role" --scope "$$AI_SCOPE" -o none 2>/dev/null && echo "    ✔ Done" || echo "    ⚠ Already assigned or failed"; \
-	done && \
-	for role in "Search Index Data Contributor" "Search Service Contributor"; do \
-		echo "  Assigning '$$role' on AI Search..."; \
-		az role assignment create --assignee $$USER_OID --role "$$role" --scope "$$SEARCH_SCOPE" -o none 2>/dev/null && echo "    ✔ Done" || echo "    ⚠ Already assigned or failed"; \
-	done && \
-	echo "" && \
-	echo "Done. Run 'make validate-infra' to verify."
+	echo "  Roles are assigned during 'azd provision' via the principalId parameter." && \
+	echo "  If missing, run: make azure-provision"
 
 # ------------------------------------------------------------------------------
 # Azure — Provision & Deploy
@@ -119,16 +109,44 @@ azure-deploy: ## Deploy functions, search index, and CU analyzer (azd deploy)
 # ------------------------------------------------------------------------------
 # Azure — Run Pipeline
 # ------------------------------------------------------------------------------
-.PHONY: azure-convert azure-index
+.PHONY: azure-upload-staging azure-convert azure-index
+
+azure-upload-staging: ## Upload local kb/staging articles to Azure staging blob
+	@echo "Uploading kb/staging/ to Azure staging blob container..."
+	@ACCOUNT=$$(azd env get-value STAGING_STORAGE_ACCOUNT) && \
+	for dir in kb/staging/*/; do \
+		ARTICLE=$$(basename "$$dir") && \
+		echo "  ↑ $$ARTICLE" && \
+		az storage blob upload-batch \
+			--destination staging \
+			--source "$$dir" \
+			--destination-path "$$ARTICLE" \
+			--account-name "$$ACCOUNT" \
+			--auth-mode login \
+			--overwrite \
+			--only-show-errors; \
+	done
+	@echo "Done."
 
 azure-convert: ## Trigger fn-convert in Azure (processes staging → serving)
 	@echo "Triggering fn-convert Azure Function..."
-	func azure functionapp publish $$(azd env get-value FUNCTION_APP_NAME) 2>/dev/null || true
-	@echo "TODO: invoke fn-convert HTTP trigger endpoint"
+	@APP_NAME=$$(azd env get-value FUNCTION_APP_NAME) && \
+	RG=$$(azd env get-value RESOURCE_GROUP) && \
+	KEY=$$(az functionapp keys list --name $$APP_NAME --resource-group $$RG --query "functionKeys.default" -o tsv) && \
+	ENDPOINT="https://$$APP_NAME.azurewebsites.net/api/convert?code=$$KEY" && \
+	echo "  POST $$ENDPOINT" && \
+	curl -sf -X POST "$$ENDPOINT" -H "Content-Type: application/json" -d '{}' | python3 -m json.tool
+	@echo ""
 
 azure-index: ## Trigger fn-index in Azure (processes serving → AI Search)
 	@echo "Triggering fn-index Azure Function..."
-	@echo "TODO: invoke fn-index HTTP trigger endpoint"
+	@APP_NAME=$$(azd env get-value FUNCTION_APP_NAME) && \
+	RG=$$(azd env get-value RESOURCE_GROUP) && \
+	KEY=$$(az functionapp keys list --name $$APP_NAME --resource-group $$RG --query "functionKeys.default" -o tsv) && \
+	ENDPOINT="https://$$APP_NAME.azurewebsites.net/api/index?code=$$KEY" && \
+	echo "  POST $$ENDPOINT" && \
+	curl -sf -X POST "$$ENDPOINT" -H "Content-Type: application/json" -d '{}' | python3 -m json.tool
+	@echo ""
 
 azure-index-summarize: ## Show AI Search index contents summary
 	@cd src/functions && uv run python ../../scripts/functions/display-index-summary.py
@@ -153,12 +171,13 @@ azure-clean-storage: ## Empty staging and serving blob containers in Azure
 
 azure-clean-index: ## Delete the AI Search index
 	@echo "Deleting kb-articles index..."
-	az search index delete \
-		--name kb-articles \
-		--service-name $$(azd env get-value SEARCH_SERVICE_NAME) \
-		--resource-group $$(azd env get-value RESOURCE_GROUP) \
-		--yes
-	@echo "Done."
+	@cd src/functions && uv run python -c "\
+	from shared.config import config; \
+	from azure.search.documents.indexes import SearchIndexClient; \
+	from azure.identity import DefaultAzureCredential; \
+	c = SearchIndexClient(config.search_endpoint, DefaultAzureCredential()); \
+	c.delete_index('kb-articles'); \
+	print('  Index deleted.')" 2>/dev/null || echo "  Index did not exist."
 
 azure-clean: azure-clean-storage azure-clean-index ## Clean all Azure data (storage + index + analyzer)
 	@echo "Deleting kb-image-analyzer..."

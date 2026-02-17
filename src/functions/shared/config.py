@@ -43,7 +43,11 @@ class Config:
     search_endpoint: str
     search_index_name: str
 
-    # Local paths (for Epic 1 — local file I/O mode)
+    # Azure Blob Storage endpoints (set when running in Azure or via .env)
+    staging_blob_endpoint: str = ""
+    serving_blob_endpoint: str = ""
+
+    # Local paths (for local file I/O mode)
     project_root: Path = field(default_factory=lambda: Path(__file__).resolve().parent.parent.parent.parent)
 
     @property
@@ -53,6 +57,11 @@ class Config:
     @property
     def serving_path(self) -> Path:
         return self.project_root / "kb" / "serving"
+
+    @property
+    def is_azure_mode(self) -> bool:
+        """True when blob storage endpoints are configured (running in Azure)."""
+        return bool(self.staging_blob_endpoint and self.serving_blob_endpoint)
 
 
 def _load_config() -> Config:
@@ -81,6 +90,8 @@ def _load_config() -> Config:
         agent_deployment_name=os.environ.get("AGENT_DEPLOYMENT_NAME", "gpt-5-mini"),
         search_endpoint=os.environ["SEARCH_ENDPOINT"],
         search_index_name=os.environ.get("SEARCH_INDEX_NAME", "kb-articles"),
+        staging_blob_endpoint=os.environ.get("STAGING_BLOB_ENDPOINT", ""),
+        serving_blob_endpoint=os.environ.get("SERVING_BLOB_ENDPOINT", ""),
     )
 
 

@@ -8,8 +8,24 @@ infra:
   path: infra
   module: main
 
+hooks:
+  preprovision:
+    shell: sh
+    run: |
+      # Ensure AZURE_PRINCIPAL_ID is set for deployer RBAC role assignments.
+      # AZD uses this to grant the logged-in user access to deploy + interact with resources.
+      if [ -z "$(azd env get-value AZURE_PRINCIPAL_ID 2>/dev/null)" ]; then
+        PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null)
+        if [ -n "$PRINCIPAL_ID" ]; then
+          azd env set AZURE_PRINCIPAL_ID "$PRINCIPAL_ID"
+          echo "Set AZURE_PRINCIPAL_ID=$PRINCIPAL_ID"
+        else
+          echo "WARNING: Could not determine signed-in user principal ID. Deployer RBAC roles will be skipped."
+        fi
+      fi
+
 services:
   functions:
-    project: ./src
+    project: ./src/functions
     language: python
     host: function

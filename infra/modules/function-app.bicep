@@ -40,6 +40,9 @@ param searchEndpoint string
 @description('Azure AI Search index name')
 param searchIndexName string = 'kb-articles'
 
+@description('Principal ID of the deployer (human user) for deployment blob access')
+param deployerPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Flex Consumption Plan
 // ---------------------------------------------------------------------------
@@ -73,6 +76,7 @@ resource functionsStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     supportsHttpsTrafficOnly: true
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
+    publicNetworkAccess: 'Enabled'
   }
 }
 
@@ -181,6 +185,20 @@ resource funcStorageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022
     principalId: functionApp.identity.principalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwnerRoleId)
     principalType: 'ServicePrincipal'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role: Storage Blob Data Contributor for the deployer (human user)
+// Required so azd deploy can upload zip to the deployments container
+// ---------------------------------------------------------------------------
+resource deployerStorageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(functionsStorage.id, deployerPrincipalId, storageBlobDataOwnerRoleId)
+  scope: functionsStorage
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwnerRoleId)
+    principalType: 'User'
   }
 }
 
