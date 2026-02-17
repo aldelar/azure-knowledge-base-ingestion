@@ -106,6 +106,44 @@ For full pipeline details, index schema, and stage-level design, see [Architectu
 
 For details about the Azure services supporting this architecture, their configuration, security, RBAC roles, and deployment details, see [Infrastructure](docs/specs/infrastructure.md).
 
+### Search Index Structure
+
+Each chunk in the `kb-articles` index carries the text content, its embedding vector, and references to any images that appeared in that section of the source article:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | String | Unique chunk ID (`{article_id}_{chunk_index}`) |
+| `article_id` | String | Source article identifier |
+| `chunk_index` | Int32 | Position of this chunk within the article |
+| `title` | String | Article title |
+| `section_header` | String | Heading hierarchy for this chunk |
+| `content` | String | Markdown text of the chunk |
+| `content_vector` | Vector | Embedding (text-embedding-3-small, 1536d) |
+| `image_urls` | String[] | Blob paths to images referenced in this chunk |
+| `source_url` | String | Original source URL |
+| `key_topics` | String[] | Extracted key topics |
+
+**Example document** (retrieved from the live index):
+
+```json
+{
+  "id": "agentic-retrieval-overview-html_en-us_2",
+  "article_id": "agentic-retrieval-overview-html_en-us",
+  "title": "Agentic retrieval in Azure AI Search",
+  "section_header": "Agentic retrieval in Azure AI Search > Why use agentic retrieval",
+  "chunk_index": 2,
+  "content": "### Why use agentic retrieval\n\nThere are two use cases for agentic retrieval. First, it's the basis of the Foundry IQ experience in the Microsoft Foundry portal. It provides the knowledge layer for agent solutions in Microsoft Foundry. Second, it's the basis for custom agentic solutions that you create using the Azure AI Search APIs...",
+  "content_vector": [0.012, -0.034, "... (1536 dimensions)"],
+  "image_urls": [
+    "images/agentric-retrieval-example.png"
+  ],
+  "source_url": "...",
+  "key_topics": ["agentic retrieval", "Azure AI Search", "Foundry IQ"]
+}
+```
+
+The `image_urls` array lets AI agents retrieve the actual source images alongside the text, enabling visual grounding in agent responses.
+
 ## Makefile Targets
 
 Run `make help` to see all targets. Here is the full list:
