@@ -69,66 +69,165 @@ Teams and organizations that:
 └── README.md
 ```
 
-## Getting Started
+## Architecture
+
+The solution is a two-stage Azure Functions pipeline backed by the following Azure services:
+
+```mermaid
+flowchart LR
+    subgraph Storage["Azure Storage Accounts"]
+        direction TB
+        SA1["<b>Staging Account</b><br/>Source articles<br/>(HTML + images)"]
+        SA2["<b>Serving Account</b><br/>Processed articles<br/>(MD + images)"]
+    end
+
+    subgraph Compute["Azure Functions App"]
+        direction TB
+        FN1["<b>fn-convert</b><br/>Manual trigger<br/>Source → MD + images"]
+        FN2["<b>fn-index</b><br/>Manual trigger<br/>MD → chunks → index"]
+    end
+
+    subgraph AI["Azure AI Services"]
+        direction TB
+        CU["<b>Content Understanding</b><br/>HTML analysis<br/>Image analysis"]
+        AF["<b>AI Foundry</b><br/>Embedding model<br/>(text-embedding-3-small)"]
+        AIS["<b>AI Search</b><br/>kb-articles index<br/>Vector + full-text"]
+    end
+
+    SA1 --> FN1
+    FN1 --> CU
+    FN1 --> SA2
+    SA2 --> FN2
+    FN2 --> AF
+    FN2 --> AIS
+```
+
+For full pipeline details, index schema, and stage-level design, see [Architecture](docs/specs/architecture.md).
+
+For details about the Azure services supporting this architecture, their configuration, security, RBAC roles, and deployment details, see [Infrastructure](docs/specs/infrastructure.md).
+
+## Makefile Targets
+
+Run `make help` to see all targets. Here is the full list:
+
+| Target | Description |
+|---|---|
+| **Local Development** | |
+| `make help` | Show available targets |
+| `make dev-doctor` | Check if required dev tools are installed |
+| `make dev-setup` | Install required dev tools and Python dependencies |
+| `make dev-setup-env` | Populate src/functions/.env from AZD environment |
+| `make convert` | Run fn-convert locally (kb/staging → kb/serving) |
+| `make index` | Run fn-index locally (kb/serving → Azure AI Search) |
+| `make test` | Run unit tests (pytest) |
+| `make validate-infra` | Validate Azure infra is ready for local dev |
+| `make grant-dev-roles` | Verify developer RBAC roles (provisioned via Bicep) |
+| **Azure Operations** | |
+| `make azure-provision` | Provision all Azure resources (azd provision) |
+| `make azure-deploy` | Deploy functions, search index, and CU analyzer (azd deploy) |
+| `make azure-upload-staging` | Upload local kb/staging articles to Azure staging blob |
+| `make azure-convert` | Trigger fn-convert in Azure (processes staging → serving) |
+| `make azure-index` | Trigger fn-index in Azure (processes serving → AI Search) |
+| `make azure-index-summarize` | Show AI Search index contents summary |
+| `make azure-clean-storage` | Empty staging and serving blob containers in Azure |
+| `make azure-clean-index` | Delete the AI Search index |
+| `make azure-clean` | Clean all Azure data (storage + index + analyzer) |
+
+---
+
+## 1. Local Environment Setup
 
 ### Prerequisites
 
 - **Python 3.11+** and **[UV](https://docs.astral.sh/uv/)** package manager
 - **Azure CLI** (`az`) — authenticated via `az login`
 - **Azure Developer CLI** (`azd`) — for provisioning infrastructure
-- **Azure Functions Core Tools** (`func`) — for future Azure deployment
+- **Azure Functions Core Tools** (`func`) — for Azure deployment
 - An Azure subscription with access to AI Services, AI Search, and model deployments
 
-Run `make dev-doctor` to verify all tools are installed.
-
-### 1. Provision Azure Infrastructure
+### Steps
 
 ```bash
-azd up                                       # Deploys all Azure resources
-azd env get-values > src/functions/.env       # Populate local env file
-make grant-dev-roles                         # Grant RBAC roles to your az login identity
+# 1. Check that all required tools are installed
+make dev-doctor
+
+# 2. Install any missing tools and Python dependencies
+make dev-setup
+
+# 3. Provision Azure infrastructure (required even for local runs — CU & Search are cloud services)
+make azure-provision
+
+# 4. Populate the local .env file from AZD environment values
+make dev-setup-env
+
+# 5. Deploy the CU analyzer and search index definition
+make azure-deploy
+
+# 6. Validate that Azure infrastructure is reachable and properly configured
+make validate-infra
 ```
 
-### 2. Install Dependencies
+---
+
+## 2. Run Pipeline End-to-End — Local
+
+In local mode, the pipeline reads source articles from `kb/staging/` on disk, calls Azure AI services for processing, and writes output to `kb/serving/`. The search index is populated in Azure AI Search.
 
 ```bash
-cd src/functions && uv sync --extra dev      # Install Python packages
+# Stage 1: Convert HTML articles to Markdown with AI-generated image descriptions
+make convert
+
+# Stage 2: Chunk Markdown, generate embeddings, and index into Azure AI Search
+make index
+
+# Verify: run the test suite
+make test
+
+# Optional: inspect the search index contents
+make azure-index-summarize
 ```
 
-### 3. Deploy CU Analyzer
+**Flow:** `kb/staging/` (HTML + images) → `make convert` → `kb/serving/` (Markdown + images) → `make index` → Azure AI Search index
+
+---
+
+## 3. Run Pipeline End-to-End — Azure
+
+In Azure mode, articles are uploaded to blob storage and the pipeline runs as deployed Azure Functions. Azure infrastructure and function code must be deployed first (see [Local Environment Setup](#1-local-environment-setup)).
 
 ```bash
-cd src/functions && uv run python manage_analyzers.py deploy
+# 1. Upload local source articles to Azure staging blob storage
+make azure-upload-staging
+
+# 2. Trigger fn-convert in Azure (staging blob → serving blob)
+make azure-convert
+
+# 3. Trigger fn-index in Azure (serving blob → AI Search index)
+make azure-index
+
+# 4. Inspect the search index contents
+make azure-index-summarize
 ```
 
-This sets up CU model defaults and deploys the custom `kb_image_analyzer`.
+**Flow:** `make azure-upload-staging` → `make azure-convert` → `make azure-index` → Azure AI Search index
 
-### 4. Run the Pipeline
+### Cleanup
 
 ```bash
-make convert      # Stage 1: HTML → Markdown + AI image descriptions (kb/staging → kb/serving)
-make index        # Stage 2: Markdown → chunks → embeddings → Azure AI Search index
+make azure-clean          # Clean all Azure data (storage + index + analyzer)
+# Or selectively:
+make azure-clean-storage  # Empty staging and serving blob containers
+make azure-clean-index    # Delete the AI Search index
 ```
 
-### 5. Verify
+---
 
-```bash
-make validate-infra   # Check Azure infrastructure readiness
-make test             # Run all 75 unit & integration tests
-```
+## Sample Articles
 
-### Local Workflow Summary
-
-```
-make dev-doctor → make validate-infra → make convert → make index → make test
-```
-
-### Sample Articles
-
-The `kb/staging/` folder contains two sample articles (one DITA-generated HTML, one clean HTML5) used for development and testing. After running the pipeline, processed output appears in `kb/serving/` and chunks are searchable in the `kb-articles` AI Search index.
+The `kb/staging/` folder contains sample articles (HTML + images) used for development and testing. After running the pipeline, processed output appears in `kb/serving/` and chunks are searchable in the `kb-articles` AI Search index.
 
 ## Documentation
 
 - [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema
-- [Infrastructure](docs/specs/azure-services.md) — Bicep modules, model deployments, RBAC
+- [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC
 - [Epic 001](docs/epics/001-local-pipeline-e2e.md) — local pipeline implementation stories and status

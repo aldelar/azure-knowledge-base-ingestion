@@ -31,7 +31,7 @@ help: ## Show available targets
 # ------------------------------------------------------------------------------
 # Local Development — Prerequisites
 # ------------------------------------------------------------------------------
-.PHONY: dev-doctor dev-setup
+.PHONY: dev-doctor dev-setup dev-setup-env
 
 dev-doctor: ## Check if required dev tools are installed
 	@echo "Checking development prerequisites...\n"
@@ -57,8 +57,17 @@ dev-doctor: ## Check if required dev tools are installed
 		echo "\033[31mSome tools are missing. Run 'make dev-setup' to install.\033[0m"; \
 	fi
 
-dev-setup: ## Install required dev tools (az, azd, uv, func)
+dev-setup: ## Install required dev tools and Python dependencies
 	@bash scripts/dev-setup.sh
+	@echo ""
+	@echo "Installing Python dependencies..."
+	@cd src/functions && uv sync --extra dev
+	@echo "Python dependencies installed."
+
+dev-setup-env: ## Populate src/functions/.env from AZD environment
+	@echo "Writing AZD environment values to src/functions/.env..."
+	@azd env get-values > src/functions/.env
+	@echo "Done. $(shell wc -l < src/functions/.env 2>/dev/null || echo 0) variables written."
 
 # ------------------------------------------------------------------------------
 # Local Development — Pipeline
