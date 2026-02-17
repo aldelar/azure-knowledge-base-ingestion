@@ -13,7 +13,7 @@ from config import load_config, get_credential
 
 def setup_defaults() -> None:
     config = load_config()
-    credential = get_credential(config)
+    credential = get_credential()
 
     # Setup defaults on the Content Understanding resource
     client = ContentUnderstandingClient(

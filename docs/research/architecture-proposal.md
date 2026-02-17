@@ -418,42 +418,101 @@ When an agent queries the index:
 
 ## Output Format — Example `article.md`
 
+Using the `agentic-retrieval-overview` article as an example, the converted `article.md` would look like this:
+
 ```markdown
-# Identifying RUN for Partners (Wholesale) User Roles in RUN
+# Agentic retrieval in Azure AI Search
 
-February 11, 2026
+> **Note:** This feature is currently in public preview. This preview is provided without a service-level agreement and isn't recommended for production workloads. Certain features might not be supported or might have constrained capabilities. For more information, see [Supplemental Terms of Use for Microsoft Azure Previews](https://azure.microsoft.com/support/legal/preview-supplemental-terms/).
 
-## Identifying Firm Users
+What is agentic retrieval? In Azure AI Search, *agentic retrieval* is a new multi-query pipeline designed for complex questions posed by users or agents in chat and copilot apps. It's intended for [Retrieval Augmented Generation (RAG)](https://learn.microsoft.com/en-us/azure/search/retrieval-augmented-generation-overview) patterns and agent-to-agent workflows.
 
-Follow the steps below to identify Firm User roles for R4P (Wholesale) accounts.
+Here's what it does:
 
-1. In RUN, go to Companies > Settings > Security > Manage user security.
-
-> **[Image: zzy1770827101433](images/zzy1770827101433.png)**
-> Screenshot of the RUN dashboard showing the left navigation menu with
-> Dashboard, Companies, Reports & tax forms, and Settings options.
-> The Companies menu item is highlighted with a green border.
-
-> **[Image: mnz1770827151034](images/mnz1770827151034.png)**
-> Screenshot showing the Settings submenu selected in the left navigation,
-> displaying the Companies list view with search and filter options.
-
-> **[Image: qvd1770827174448](images/qvd1770827174448.png)**
-> Screenshot of the Security settings panel showing three options:
-> Add users, Manage user security (highlighted), and Manage company groups.
-
-2. In the Role field, you can see the user's role. Refer to the table
-below to see the available user roles for Firm Users.
-
-| Users | Roles |
-|---|---|
-| Firm | Can access all payroll-related functions... |
-| Firm Limited PR & EE Entry | Limited access to multiple clients... |
+- Uses a large language model (LLM) to break down a complex query into smaller, focused subqueries for better coverage over your indexed content. Subqueries can include chat history for extra context.
+- Runs subqueries in parallel. Each subquery is semantically reranked to promote the most relevant matches.
+- Combines the best results into a unified response that an LLM can use to generate answers with your proprietary content.
+- The response is modular yet comprehensive in how it also includes a query plan and source documents.
 
 ...
 
-For more info, see [Adding or Changing RUN User Roles](https://kmsearch.adpcorp.com/#/Articles/taz1560436150553_en-us/index.html?doc_id=aef14f91-b06f-4c20-86e9-2bb4d08dc4cd%3A39894).
+> **[Image: agentric-retrieval-example](images/agentric-retrieval-example.png)**
+> Diagram illustrating a complex user query with implied context and an
+> intentional typo being processed by the agentic retrieval pipeline.
+> The query is decomposed into focused subqueries, each executed in parallel
+> against the search index, with results merged into a unified response.
+
+Agentic retrieval adds latency to query processing, but it makes up for it by adding these capabilities:
+
+- Reads in chat history as an input to the retrieval pipeline.
+- Deconstructs a complex query that contains multiple "asks" into component parts.
+- Rewrites an original query into multiple subqueries using synonym maps (optional) and LLM-generated paraphrasing.
+- Corrects spelling mistakes.
+- Executes all subqueries simultaneously.
+- Outputs a unified result as a single string.
+
+...
+
+## Architecture and workflow
+
+Agentic retrieval is designed for conversational search experiences that use an LLM to intelligently break down complex queries. The system coordinates multiple Azure services to deliver comprehensive search results.
+
+> **[Image: agentic-retrieval-architecture](images/agentic-retrieval-architecture.png)**
+> Diagram of the agentic retrieval workflow. Shows a user query entering a
+> Knowledge Base which sends it to an LLM for query planning. The LLM
+> produces multiple subqueries that fan out to Knowledge Sources (search
+> indexes). Results are semantically reranked, merged, and returned as a
+> three-part response: grounding data, source references, and activity plan.
+
+### How it works
+
+The agentic retrieval process works as follows:
+
+1. **Workflow initiation:** Your application calls a knowledge base with retrieve action that provides a query and conversation history.
+2. **Query planning:** A knowledge base sends your query and conversation history to an LLM, which analyzes the context and breaks down complex questions into focused subqueries.
+3. **Query execution:** The knowledge base sends the subqueries to your knowledge sources. All subqueries run simultaneously and can be keyword, vector, and hybrid search.
+4. **Result synthesis:** The system combines all results into a unified response with three parts: merged content, source references, and execution details.
+
+...
+
+### Required components
+
+| Component | Service | Role |
+|---|---|---|
+| **LLM** | Azure OpenAI | Creates subqueries from conversation context and later uses grounding data for answer generation |
+| **Knowledge base** | Azure AI Search | Orchestrates the pipeline, connecting to your LLM and managing query parameters |
+| **Knowledge source** | Azure AI Search | Wraps the search index with properties pertaining to knowledge base usage |
+| **Search index** | Azure AI Search | Stores your searchable content (text and vectors) with semantic configuration |
+| **Semantic ranker** | Azure AI Search | Required component that reranks results for relevance (L2 reranking) |
+
+...
 ```
+
+### What a chunk with an image looks like in the search index
+
+When the above `article.md` is chunked by headers, a chunk that contains an image would produce a search document like this:
+
+```json
+{
+  "id": "agentic-retrieval-overview-html_en-us__1",
+  "article_id": "agentic-retrieval-overview-html_en-us",
+  "chunk_index": 1,
+  "title": "Agentic retrieval in Azure AI Search",
+  "section_header": "Agentic retrieval in Azure AI Search",
+  "content": "What is agentic retrieval? In Azure AI Search, *agentic retrieval* is a new multi-query pipeline designed for complex questions posed by users or agents in chat and copilot apps. It's intended for Retrieval Augmented Generation (RAG) patterns and agent-to-agent workflows.\n\nHere's what it does:\n\n- Uses a large language model (LLM) to break down a complex query into smaller, focused subqueries...\n- Runs subqueries in parallel...\n- Combines the best results into a unified response...\n\n> **[Image: agentric-retrieval-example](images/agentric-retrieval-example.png)**\n> Diagram illustrating a complex user query with implied context and an intentional typo being processed by the agentic retrieval pipeline. The query is decomposed into focused subqueries, each executed in parallel against the search index, with results merged into a unified response.\n\nAgentic retrieval adds latency to query processing, but it makes up for it by adding these capabilities:\n\n- Reads in chat history as an input to the retrieval pipeline.\n- Deconstructs a complex query that contains multiple \"asks\" into component parts.\n- Rewrites an original query into multiple subqueries...\n- Corrects spelling mistakes.\n- Executes all subqueries simultaneously.\n- Outputs a unified result as a single string.",
+  "content_vector": [0.0123, -0.0456, "... 1536 floats ..."],
+  "image_urls": [
+    "https://<storage>.blob.core.windows.net/articles/agentic-retrieval-overview-html_en-us/images/agentric-retrieval-example.png"
+  ],
+  "source_url": "",
+  "key_topics": ["agentic retrieval", "Azure AI Search", "RAG", "subqueries"]
+}
+```
+
+Key points:
+- The image description (`> **[Image: ...]** ...`) is **inline in `content`** — it gets vectorized together with the surrounding text, so semantic search over the chunk naturally covers both the text and what the image depicts.
+- `image_urls` contains the Blob Storage URL(s) for the image(s) referenced in this chunk. An agent can surface these directly to the user.
+- A chunk with **no images** would have an empty `image_urls: []` array and no `> **[Image: ...]**` blocks in `content`.
 
 ---
 

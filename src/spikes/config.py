@@ -13,7 +13,6 @@ def load_config() -> dict[str, str]:
 
     required = ["CONTENTUNDERSTANDING_ENDPOINT", "MODELS_ENDPOINT"]
     optional = {
-        "CONTENTUNDERSTANDING_KEY": None,
         "GPT_4_1_DEPLOYMENT": "gpt-4.1",
         "GPT_4_1_MINI_DEPLOYMENT": "gpt-4.1-mini",
         "TEXT_EMBEDDING_3_SMALL_DEPLOYMENT": "text-embedding-3-small",
@@ -33,12 +32,7 @@ def load_config() -> dict[str, str]:
     return config
 
 
-def get_credential(config: dict[str, str]):
-    """Return AzureKeyCredential if key is set, otherwise DefaultAzureCredential."""
-    key = config.get("CONTENTUNDERSTANDING_KEY")
-    if key:
-        from azure.core.credentials import AzureKeyCredential
-        return AzureKeyCredential(key)
-    else:
-        from azure.identity import DefaultAzureCredential
-        return DefaultAzureCredential()
+def get_credential():
+    """Return DefaultAzureCredential for authentication."""
+    from azure.identity import DefaultAzureCredential
+    return DefaultAzureCredential()

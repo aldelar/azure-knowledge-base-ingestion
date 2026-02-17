@@ -34,7 +34,7 @@ def find_pdf_file(article_dir: Path) -> Path:
 def analyze(file_path: Path) -> AnalyzeResult:
     """Analyze a PDF file using prebuilt-documentSearch."""
     config = load_config()
-    credential = get_credential(config)
+    credential = get_credential()
 
     client = ContentUnderstandingClient(
         endpoint=config["CONTENTUNDERSTANDING_ENDPOINT"],

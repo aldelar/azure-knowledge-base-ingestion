@@ -38,7 +38,7 @@ def find_html_file(article_dir: Path) -> Path:
 def analyze_from_url(url: str) -> AnalyzeResult:
     """Analyze an HTML page by URL using prebuilt-documentSearch."""
     config = load_config()
-    credential = get_credential(config)
+    credential = get_credential()
 
     client = ContentUnderstandingClient(
         endpoint=config["CONTENTUNDERSTANDING_ENDPOINT"],
@@ -60,7 +60,7 @@ def analyze_from_url(url: str) -> AnalyzeResult:
 def analyze_from_file(file_path: Path) -> AnalyzeResult:
     """Analyze a local HTML file using prebuilt-documentSearch."""
     config = load_config()
-    credential = get_credential(config)
+    credential = get_credential()
 
     client = ContentUnderstandingClient(
         endpoint=config["CONTENTUNDERSTANDING_ENDPOINT"],

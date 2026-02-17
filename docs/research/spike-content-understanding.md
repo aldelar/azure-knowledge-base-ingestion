@@ -156,8 +156,7 @@ The converter handles articles with non-standard image references (e.g. absolute
 
 ## Authentication
 
-By default uses `DefaultAzureCredential` (i.e., `az login`).
-Set `CONTENTUNDERSTANDING_KEY` in `.env` to use API key auth instead.
+Uses `DefaultAzureCredential` (i.e., `az login`).
 
 ## References
 

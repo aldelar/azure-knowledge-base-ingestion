@@ -36,7 +36,7 @@ def find_html_file(article_dir: Path) -> Path:
 def analyze(file_path: Path) -> AnalyzeResult:
     """Analyze an HTML file using prebuilt-layout."""
     config = load_config()
-    credential = get_credential(config)
+    credential = get_credential()
 
     client = ContentUnderstandingClient(
         endpoint=config["CONTENTUNDERSTANDING_ENDPOINT"],
