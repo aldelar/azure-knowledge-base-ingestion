@@ -268,4 +268,3 @@ The `kb/staging/` folder contains sample articles (HTML + images) used for devel
 
 - [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema
 - [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC
-- [Epic 001](docs/epics/001-local-pipeline-e2e.md) — local pipeline implementation stories and status
