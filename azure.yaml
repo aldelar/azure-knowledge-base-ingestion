@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
-name: vision-grounded-knowledge-agent
+name: context-aware-vision-grounded-kb-agent
 metadata:
-  template: vision-grounded-knowledge-agent
+  template: context-aware-vision-grounded-kb-agent
 
 infra:
   provider: bicep

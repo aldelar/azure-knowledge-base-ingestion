@@ -88,7 +88,7 @@ flowchart LR
             AF["AI Foundry<br/>GPT-4.1 + Embeddings"]
             AIS["AI Search<br/>kb-articles index"]
         end
-        subgraph App["Vision-Grounded Knowledge Agent"]
+        subgraph App["Context Aware & Vision Grounded KB Agent"]
             direction TB
             PROXY["<b>Image Proxy</b><br/>/api/images/*"]
             VIS["<b>Vision Middleware</b><br/>Image injection"]
@@ -115,7 +115,7 @@ flowchart LR
     class left,right invisible;
 ```
 
-## Vision-Grounded Knowledge Agent
+## Context Aware & Vision Grounded KB Agent
 
 The agent is a conversational interface that consumes the `kb-articles` index via a **Microsoft Agent Framework** agent backed by a **Chainlit** chat UI. It runs locally against the same Azure services used by the ingestion pipeline.
 

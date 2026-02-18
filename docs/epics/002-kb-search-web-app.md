@@ -1,4 +1,4 @@
-# Epic 002 — Vision-Grounded Knowledge Agent (Chainlit + Agent Framework) ✅
+# Epic 002 — Context Aware & Vision Grounded KB Agent (Chainlit + Agent Framework) ✅
 
 > **Status:** Done
 > **Created:** February 17, 2026

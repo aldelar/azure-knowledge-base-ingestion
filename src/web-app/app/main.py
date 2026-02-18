@@ -1,4 +1,4 @@
-"""Vision-Grounded Knowledge Agent — Chainlit entry point."""
+"""Context Aware & Vision Grounded KB Agent — Chainlit entry point."""
 
 from __future__ import annotations
 

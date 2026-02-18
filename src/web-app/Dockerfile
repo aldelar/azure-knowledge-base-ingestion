@@ -1,5 +1,5 @@
 # ==============================================================================
-# Dockerfile — Vision-Grounded Knowledge Agent (Chainlit + Agent Framework)
+# Dockerfile — Context Aware & Vision Grounded KB Agent (Chainlit + Agent Framework)
 # ==============================================================================
 # Uses UV for fast, reproducible dependency installation.
 # ==============================================================================

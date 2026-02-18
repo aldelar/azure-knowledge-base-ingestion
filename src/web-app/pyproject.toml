@@ -1,7 +1,7 @@
 [project]
-name = "vision-grounded-knowledge-agent"
+name = "context-aware-vision-grounded-kb-agent"
 version = "0.1.0"
-description = "Vision-Grounded Knowledge Agent — conversational agent with image-aware search over Azure AI Search"
+description = "Context Aware & Vision Grounded KB Agent — conversational agent with structure-preserving chunking and image-aware search over Azure AI Search"
 requires-python = ">=3.11"
 dependencies = [
     "chainlit>=2.0",

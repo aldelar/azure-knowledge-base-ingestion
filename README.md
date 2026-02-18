@@ -1,4 +1,4 @@
-# Vision-Grounded Knowledge Agent
+# Context Aware & Vision Grounded KB Agent
 
 ## Overview
 
@@ -18,14 +18,15 @@ This accelerator provides an end-to-end pipeline that:
 
 3. **Produces image-aware Markdown** — the resulting Markdown preserves the full article structure with AI-generated image descriptions placed in context, each linking back to the original image file
 
-4. **Generates context-aware chunks** — splits the Markdown into semantically meaningful chunks (by section/heading), where each chunk carries references to 0–N related images
+4. **Generates context-aware chunks** — splits the Markdown by document structure (headings and sections), not by arbitrary token counts. Each chunk is a complete, coherent section — paragraphs are never split mid-sentence or mid-thought. Images that appear within a section (e.g., a screenshot illustrating a paragraph) stay co-located in the same chunk, with their AI-generated description embedded alongside the surrounding text. This means each chunk is a self-contained unit of meaning: the text, its structure, and its supporting visuals travel together.
 
 5. **Indexes into Azure AI Search** — embeds each chunk using Azure AI embedding models and indexes them with their associated image URLs into an AI Search index, enabling both text and image retrieval
 
 ## Key Outcomes
 
 - **Semantic search over KB content** — find answers based on meaning, not just keywords
-- **Image-aware results** — search results include links to the actual source images (stored in Azure Blob Storage) when they are relevant to the matched text
+- **Context-aware chunking** — chunks follow the document's natural structure (sections and headings), never splitting a paragraph or thought mid-way. Unlike token-based chunking, every chunk is a coherent, self-contained unit of information
+- **Image-aware results** — images that belong to a section stay in the same chunk as the text they illustrate. Search results include links to the actual source images (stored in Azure Blob Storage), so the visual context is never separated from the text it supports
 - **Agent-ready index** — the search index is designed for AI agents/copilots to consume, returning both answer text and supporting visuals to end users
 - **No manual content conversion** — the pipeline automates the transformation from raw HTML articles to a fully searchable index
 
@@ -63,7 +64,7 @@ Teams and organizations that:
 │   │   ├── fn_index/    Stage 2 — Markdown → AI Search index
 │   │   ├── shared/      Shared config, blob helpers, CU client
 │   │   └── tests/       pytest test suite
-│   ├── web-app/         Vision-Grounded Knowledge Agent (Chainlit + Agent Framework)
+│   ├── web-app/         Context Aware & Vision Grounded KB Agent (Chainlit + Agent Framework)
 │   │   ├── app/main.py  Chainlit entry point (streaming, image proxy, citations)
 │   │   ├── app/agent/   KB agent, search tool, image service, vision middleware
 │   │   └── tests/       pytest test suite
@@ -102,7 +103,7 @@ flowchart LR
             AF["AI Foundry<br/>GPT-4.1 + Embeddings"]
             AIS["AI Search<br/>kb-articles index"]
         end
-        subgraph App["Vision-Grounded Knowledge Agent"]
+        subgraph App["Context Aware & Vision Grounded KB Agent"]
             direction TB
             PROXY["<b>Image Proxy</b><br/>/api/images/*"]
             VIS["<b>Vision Middleware</b><br/>Image injection"]
@@ -172,7 +173,7 @@ The `image_urls` array lets AI agents retrieve the actual source images alongsid
 
 ### How the Web App Uses Image-Aware Chunks
 
-The Vision-Grounded Knowledge Agent demonstrates the full value of image-aware indexing. When a user asks a question:
+The Context Aware & Vision Grounded KB Agent demonstrates the full value of image-aware indexing. When a user asks a question:
 
 1. **Search** — The agent's `search_knowledge_base` tool performs hybrid search and returns chunks. Each chunk includes its `image_urls` array (e.g., `["images/architecture.png"]`). The tool converts these to proxy URLs (`/api/images/article-id/images/architecture.png`) in the JSON returned to the LLM.
 
@@ -184,7 +185,7 @@ The Vision-Grounded Knowledge Agent demonstrates the full value of image-aware i
 
 #### Example: Visual Reasoning in Action
 
-![Vision-Grounded Knowledge Agent — using an image from a search chunk to support its answer](docs/assets/app.png)
+![Context Aware & Vision Grounded KB Agent — using an image from a search chunk to support its answer](docs/assets/app.png)
 
 In this example, the agent retrieves a relevant chunk (Ref #5) and integrates an image from that chunk directly into its answer. The agent didn't just quote the text description of the image — it internalized the actual image through the vision middleware, reasoned over its visual content, and then used it as a supporting asset in the response. The text description of the image (generated during ingestion) plays a key role in *surfacing* the chunk as relevant during search — it's embedded alongside the surrounding paragraph text, boosting vector similarity for visual concepts. But once the chunk is retrieved, the LLM gets a detailed look at the source image itself, can leverage it for reasoning, and can include it inline when the visual adds value to the answer.
 
@@ -206,7 +207,7 @@ Run `make help` to see all targets. Here is the full list:
 | `make test` | Run unit tests (pytest) |
 | `make validate-infra` | Validate Azure infra is ready for local dev |
 | `make grant-dev-roles` | Verify developer RBAC roles (provisioned via Bicep) |
-| `make app` | Run Vision-Grounded Knowledge Agent locally (http://localhost:8080) |
+| `make app` | Run Context Aware & Vision Grounded KB Agent locally (http://localhost:8080) |
 | `make app-test` | Run web app unit tests |
 | **Azure Operations** | |
 | `make azure-provision` | Provision all Azure resources (azd provision) |
@@ -311,7 +312,7 @@ make azure-clean-index    # Delete the AI Search index
 
 ---
 
-## 4. Run Vision-Grounded Knowledge Agent
+## 4. Run Context Aware & Vision Grounded KB Agent
 
 The agent is a conversational interface that lets you search the `kb-articles` index using a Microsoft Agent Framework agent with vision capabilities. It runs locally against live Azure services.
 
@@ -344,7 +345,7 @@ make app-test
 
 ## 5. Deploy Web App to Azure
 
-The Vision-Grounded Knowledge Agent can be deployed to Azure Container Apps with Entra ID authentication (Easy Auth).
+The Context Aware & Vision Grounded KB Agent can be deployed to Azure Container Apps with Entra ID authentication (Easy Auth).
 
 ### Prerequisites
 

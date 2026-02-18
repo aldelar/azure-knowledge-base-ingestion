@@ -167,7 +167,7 @@ The Function App's own storage account gets **Storage Blob Data Owner** (role `b
 
 ### Container Registry (`container-registry.bicep`)
 
-Hosts Docker images for the Vision-Grounded Knowledge Agent container.
+Hosts Docker images for the Context Aware & Vision Grounded KB Agent container.
 
 | Setting | Value |
 |---------|-------|
@@ -179,7 +179,7 @@ The module accepts an optional `acrPullPrincipalId` parameter. When provided, it
 
 ### Container App (`container-app.bicep`)
 
-Hosts the Vision-Grounded Knowledge Agent as a containerized application with Entra ID Easy Auth.
+Hosts the Context Aware & Vision Grounded KB Agent as a containerized application with Entra ID Easy Auth.
 
 #### Container Apps Environment
 

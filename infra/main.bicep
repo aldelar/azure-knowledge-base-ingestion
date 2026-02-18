@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// main.bicep — Vision-Grounded Knowledge Agent
+// main.bicep — Context Aware & Vision Grounded KB Agent
 // ---------------------------------------------------------------------------
-// Provisions all Azure resources for the vision-grounded knowledge agent:
+// Provisions all Azure resources for the context-aware, vision-grounded KB agent:
 //   - Monitoring (Log Analytics + Application Insights)
 //   - Storage (Staging + Serving accounts)
 //   - Azure AI Services (Content Understanding + Embeddings + Agent model)
@@ -157,7 +157,7 @@ module containerRegistry 'modules/container-registry.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
-// Module: Container App (Vision-Grounded Knowledge Agent)
+// Module: Container App (Context Aware & Vision Grounded KB Agent)
 // ---------------------------------------------------------------------------
 module containerApp 'modules/container-app.bicep' = {
   name: 'container-app'
