@@ -183,20 +183,21 @@ Run `make help` to see all targets. Here is the full list:
 | **Local Development** | |
 | `make help` | Show available targets |
 | `make dev-doctor` | Check if required dev tools are installed |
-| `make dev-setup` | Install required dev tools and Python dependencies |
+| `make dev-setup` | Install required dev tools and Python dependencies (functions + web app) |
 | `make dev-setup-env` | Populate src/functions/.env from AZD environment |
 | `make convert` | Run fn-convert locally (kb/staging → kb/serving) |
 | `make index` | Run fn-index locally (kb/serving → Azure AI Search) |
 | `make test` | Run unit tests (pytest) |
 | `make validate-infra` | Validate Azure infra is ready for local dev |
 | `make grant-dev-roles` | Verify developer RBAC roles (provisioned via Bicep) |
-| **Web App** | |
-| `make web-app` | Run KB Search web app locally (http://localhost:8080) |
-| `make web-app-setup` | Install web app Python dependencies |
-| `make web-app-test` | Run web app unit tests |
+| `make app` | Run KB Search web app locally (http://localhost:8080) |
+| `make app-test` | Run web app unit tests |
 | **Azure Operations** | |
 | `make azure-provision` | Provision all Azure resources (azd provision) |
 | `make azure-deploy` | Deploy functions, search index, and CU analyzer (azd deploy) |
+| `make azure-deploy-app` | Build & deploy the web app to Azure Container Apps |
+| `make azure-app-url` | Print the deployed web app URL |
+| `make azure-app-logs` | Stream live logs from the deployed web app |
 | `make azure-upload-staging` | Upload local kb/staging articles to Azure staging blob |
 | `make azure-convert` | Trigger fn-convert in Azure (processes staging → serving) |
 | `make azure-index` | Trigger fn-index in Azure (processes serving → AI Search) |
@@ -309,20 +310,47 @@ The web app is a conversational interface that lets you search the `kb-articles`
 # 1. Populate the web app .env (reuses the same AZD environment values)
 azd env get-values > src/web-app/.env
 
-# 2. Install dependencies
-make web-app-setup
-
-# 3. Start the web app
-make web-app
+# 2. Start the web app
+make app
 ```
 
 Open `http://localhost:8080` — ask questions like "What is Azure Content Understanding?" or "How does search security work?" and get grounded answers with inline images and source citations.
 
+> **Note:** `make dev-setup` installs dependencies for both the functions project and the web app. No separate setup step is needed.
+
 ### Run Tests
 
 ```bash
-make web-app-test
+make app-test
 ```
+
+---
+
+## 5. Deploy Web App to Azure
+
+The KB Search Web App can be deployed to Azure Container Apps with Entra ID authentication (Easy Auth).
+
+### Prerequisites
+
+- Azure infrastructure is provisioned (`make azure-provision` — this also creates the Entra App Registration)
+- The ingestion pipeline has been run at least once (articles indexed in AI Search)
+
+### Deploy
+
+```bash
+# Deploy the web app container to Azure Container Apps
+make azure-deploy-app
+
+# Get the deployed URL
+make azure-app-url
+
+# Stream live logs (optional)
+make azure-app-logs
+```
+
+The deployed app is protected by Entra ID — users must sign in with their organizational account. The container runs on Azure Container Apps (Consumption plan) with a system-assigned managed identity that has least-privilege RBAC access to AI Services, AI Search, and blob storage.
+
+The Docker image is built and pushed to Azure Container Registry automatically during `make azure-deploy-app` — no local Docker build step is needed.
 
 ---
 

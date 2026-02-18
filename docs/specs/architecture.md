@@ -84,12 +84,17 @@ flowchart LR
         AIS["<b>AI Search</b><br/>kb-articles index<br/>Vector + full-text"]
     end
 
-    subgraph WebApp["KB Search Web App"]
+    subgraph WebApp["KB Search Web App<br/>(Azure Container Apps)"]
         direction TB
+        EAUTH["<b>Easy Auth</b><br/>Entra ID (single-tenant)"]
         UI["<b>Chainlit Chat UI</b><br/>Streaming markdown<br/>Inline images + citations"]
         AGENT["<b>KB Agent</b><br/>Microsoft Agent Framework<br/>(ChatAgent + tools)"]
         VIS["<b>Vision Middleware</b><br/>Injects images into<br/>LLM conversation"]
         PROXY["<b>Image Proxy</b><br/>/api/images/* endpoint"]
+    end
+
+    subgraph Registry["Azure Container Registry"]
+        IMG["<b>ACR</b><br/>Docker images"]
     end
 
     SA1 --> FN1
@@ -99,6 +104,8 @@ flowchart LR
     FN2 --> AF
     FN2 --> AIS
 
+    EAUTH -->|Authenticate| UI
+    IMG -->|Pull image| WebApp
     UI -->|User question| AGENT
     AGENT -->|Tool call| AIS
     AGENT -->|Embed query| AF
@@ -187,6 +194,45 @@ Despite explicit system prompt instructions, LLMs generate image URLs in many cr
 | 6 | Chainlit | Purpose-built chat UI with native streaming, `cl.Text` side panels for citations, and markdown rendering. Single `chainlit run` command. |
 
 For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md).
+
+### Deployment
+
+The web app is deployed to **Azure Container Apps** with **Entra ID Easy Auth** (single-tenant). The deployment architecture enables zero-code authentication and managed identity access to all Azure services.
+
+#### Container Apps Hosting
+
+- **Container image** built from `src/web-app/Dockerfile` and pushed to **Azure Container Registry** (Basic SKU)
+- **Container App** runs on a Consumption-plan **Container Apps Environment** linked to Log Analytics
+- Single container: 0.5 vCPU / 1 GiB memory, scale 0–1 (scale-to-zero for cost savings)
+- Ingress: external, port 8080, HTTPS-only
+- Application settings (AI Services endpoint, Search endpoint, Blob endpoint, deployment names) injected as environment variables from Bicep outputs
+
+#### Authentication — Entra ID Easy Auth
+
+Container Apps Easy Auth is a platform-level sidecar that intercepts all HTTP requests before they reach the application container. No authentication code is needed in the Chainlit app.
+
+1. User navigates to the Container App URL
+2. Easy Auth intercepts the unauthenticated request
+3. User is auto-redirected to Microsoft Entra login
+4. After sign-in, Entra issues a token; Easy Auth validates it (single-tenant)
+5. Authenticated request reaches the Chainlit app transparently
+
+Only users in the Azure AD tenant can access the app. An **Entra App Registration** (single-tenant) defines the client ID, tenant ID, and redirect URIs.
+
+#### Managed Identity RBAC
+
+The Container App's **system-assigned managed identity** replaces the developer's `az login` credential. `DefaultAzureCredential` works transparently in both local and deployed environments.
+
+| Role | Resource | Purpose |
+|------|----------|---------|
+| Cognitive Services OpenAI User | AI Services | Call GPT-4.1 and embedding models |
+| Search Index Data Reader | AI Search | Query the `kb-articles` index |
+| Storage Blob Data Reader | Serving Storage | Download article images via proxy |
+| AcrPull | Container Registry | Pull Docker images |
+
+> The web app only **reads** from the index and blob storage — it does not need Contributor roles.
+
+For infrastructure details, see [Infrastructure](../specs/infrastructure.md). For deployment epic, see [Epic 003](../epics/003-web-app-azure-deployment.md).
 
 ---
 

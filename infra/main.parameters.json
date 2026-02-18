@@ -13,6 +13,12 @@
     },
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "entraClientId": {
+      "value": "${ENTRA_CLIENT_ID}"
+    },
+    "entraClientSecret": {
+      "value": "${ENTRA_CLIENT_SECRET}"
     }
   }
 }
