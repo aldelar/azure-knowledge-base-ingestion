@@ -334,4 +334,3 @@ The `kb/staging/` folder contains sample articles (HTML + images) used for devel
 
 - [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema
 - [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC
-- [Epic 002](docs/epics/002-kb-search-web-app.md) — KB Search Web App (Agent + Chainlit)
