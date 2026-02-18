@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** Draft — February 13, 2026
+> **Status:** Updated — February 17, 2026
 
 ## Overview
 
@@ -80,8 +80,16 @@ flowchart LR
     subgraph AI["Azure AI Services"]
         direction TB
         CU["<b>Content Understanding</b><br/>HTML analysis<br/>Image analysis"]
-        AF["<b>AI Foundry</b><br/>Embedding model<br/>(text-embedding-3-small)"]
+        AF["<b>AI Foundry</b><br/>Embedding model<br/>(text-embedding-3-small)<br/>+ Agent model (gpt-4.1)"]
         AIS["<b>AI Search</b><br/>kb-articles index<br/>Vector + full-text"]
+    end
+
+    subgraph WebApp["KB Search Web App"]
+        direction TB
+        UI["<b>Chainlit Chat UI</b><br/>Streaming markdown<br/>Inline images + citations"]
+        AGENT["<b>KB Agent</b><br/>Microsoft Agent Framework<br/>(ChatAgent + tools)"]
+        VIS["<b>Vision Middleware</b><br/>Injects images into<br/>LLM conversation"]
+        PROXY["<b>Image Proxy</b><br/>/api/images/* endpoint"]
     end
 
     SA1 --> FN1
@@ -90,7 +98,95 @@ flowchart LR
     SA2 --> FN2
     FN2 --> AF
     FN2 --> AIS
+
+    UI -->|User question| AGENT
+    AGENT -->|Tool call| AIS
+    AGENT -->|Embed query| AF
+    AGENT -->|Reasoning| AF
+    VIS -->|Download images| SA2
+    VIS -->|Inject into LLM context| AGENT
+    PROXY -->|Serve to browser| SA2
+    AGENT -->|Streamed answer + citations| UI
 ```
+
+---
+
+## KB Search Web App
+
+The web app is a conversational interface that consumes the `kb-articles` index via a **Microsoft Agent Framework** agent backed by a **Chainlit** chat UI. It runs locally against the same Azure services used by the ingestion pipeline.
+
+### Components
+
+- **KB Agent** — A `ChatAgent` (from `agent-framework-core` + `agent-framework-azure-ai`) with a single tool: `search_knowledge_base`. The agent uses `gpt-4.1` for reasoning and calls the tool to perform hybrid search (vector + keyword) against the index.
+- **Search Tool** — Embeds the agent's query with `text-embedding-3-small`, performs hybrid search via `azure-search-documents`, and returns ranked chunks with image references.
+- **Vision Middleware** — A `ChatMiddleware` on the Azure OpenAI chat client that intercepts tool results, detects image URLs in the search response JSON, downloads the images from blob storage, and injects them into the LLM conversation as `DataContent` (base64 image payloads). This enables GPT-4.1's vision capabilities — the LLM can **see** the actual images (diagrams, screenshots, architecture charts) and reason about their visual content when composing answers.
+- **Image Proxy** — A FastAPI endpoint (`/api/images/{article_id}/{image_path}`) that downloads images from the serving blob account on demand. Chainlit renders standard `![alt](/api/images/...)` markdown natively, and the browser fetches images from this same-origin proxy.
+- **Image Normaliser** — Post-processing step that normalises all `![alt](url)` references in the LLM output to clean `/api/images/...` proxy URLs. Handles the variety of URL formats the LLM may generate (hallucinated domains, missing leading slashes, `attachment:` schemes) via pattern matching and filename-to-citation lookup.
+- **Chainlit Chat UI** — Streaming chat interface with real-time token display, native Markdown rendering (including inline images via the proxy), clickable `[Ref #N]` citation links with side-panel detail views, and conversation history via `AgentThread`.
+
+### Image Flow: From Index to Browser
+
+The image-aware chunks created by the ingestion pipeline (Epic 001) are the foundation of the web app's visual capabilities. Here is the end-to-end flow:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Chainlit as Chainlit UI
+    participant Agent as KB Agent (gpt-4.1)
+    participant Search as AI Search
+    participant VisionMW as Vision Middleware
+    participant Blob as Serving Blob Storage
+    participant Proxy as Image Proxy
+
+    User->>Chainlit: Ask question
+    Chainlit->>Agent: chat_stream(question)
+    Agent->>Search: search_knowledge_base(query)
+    Search-->>Agent: chunks with image_urls[]
+
+    Note over VisionMW: Middleware intercepts tool result
+    VisionMW->>Blob: Download images referenced in chunks
+    Blob-->>VisionMW: Image bytes (PNG)
+    VisionMW->>Agent: Append DataContent (base64 images) to conversation
+
+    Note over Agent: LLM sees actual images + text chunks
+    Agent-->>Chainlit: Stream tokens with ![alt](/api/images/...)
+    Chainlit-->>User: Render markdown (images load via proxy)
+
+    User->>Proxy: Browser GETs /api/images/article/images/file.png
+    Proxy->>Blob: Download blob
+    Blob-->>Proxy: Image bytes
+    Proxy-->>User: Serve image
+```
+
+**Key insight:** Each search chunk carries an `image_urls` array of blob paths. This is used twice:
+1. **Vision middleware** downloads the images and injects them as base64 `DataContent` into the LLM conversation — the LLM can *see* diagrams and screenshots.
+2. **Search tool** converts the blob paths to `/api/images/...` proxy URLs in the tool result JSON — the LLM copies these URLs into its markdown output for the browser to render.
+
+### Image URL Normalisation
+
+Despite explicit system prompt instructions, LLMs generate image URLs in many creative formats. The post-processing normaliser handles all observed patterns:
+
+| LLM Output | Normalised To |
+|---|---|
+| `/api/images/article/images/file.png` | `/api/images/article/images/file.png` (already correct) |
+| `api/images/article/images/file.png` | `/api/images/article/images/file.png` (add leading `/`) |
+| `https://learn.microsoft.com/api/images/article/images/file.png` | `/api/images/article/images/file.png` (strip domain) |
+| `attachment:/api/images/article/images/file.png` | `/api/images/article/images/file.png` (strip prefix) |
+| `attachment:file.png` | `/api/images/article/images/file.png` (filename lookup from citations) |
+| `https://learn.microsoft.com/en-us/azure/.../file.png` | `/api/images/article/images/file.png` (filename lookup from citations) |
+
+### Key Design Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | Microsoft Agent Framework | Provides `ChatAgent` with built-in tool calling, conversation threading, and Azure OpenAI integration — avoids manual Responses API loop management. |
+| 2 | Vision middleware for image injection | `ChatMiddleware` intercepts tool results and injects images as `DataContent`. The framework auto-converts to OpenAI's vision format. The LLM can reason about visual content (diagrams, architecture charts) not just text descriptions — producing higher-fidelity answers. |
+| 3 | Same-origin image proxy | Avoids SAS URL complexity (token expiry, CORS). Chainlit renders `![alt](/api/images/...)` as native markdown; browser fetches from same origin. Images persist across `msg.update()` re-renders. |
+| 4 | Post-processing normalisation (not base64 `<img>`) | Chainlit strips HTML `<img>` tags on `msg.update()`, causing grey boxes. Native markdown `![alt](url)` survives re-rendering. The normaliser ensures all URLs point to the proxy. |
+| 5 | Hybrid search | Best relevance — combines vector similarity and keyword matching. |
+| 6 | Chainlit | Purpose-built chat UI with native streaming, `cl.Text` side panels for citations, and markdown rendering. Single `chainlit run` command. |
+
+For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md).
 
 ---
 

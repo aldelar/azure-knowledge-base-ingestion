@@ -11,12 +11,13 @@ for local dev.
 from __future__ import annotations
 
 import logging
+import mimetypes
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
 from azure.identity import DefaultAzureCredential
-from azure.storage.blob import ContainerClient
+from azure.storage.blob import ContainerClient, ContentSettings
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +139,12 @@ def upload_article(
         blob_name = f"{article_id}/{rel_path}"
 
         blob_client = client.get_blob_client(blob_name)
+        content_type, _ = mimetypes.guess_type(str(local_path))
+        kwargs: dict = {"overwrite": True}
+        if content_type:
+            kwargs["content_settings"] = ContentSettings(content_type=content_type)
         with open(local_path, "rb") as f:
-            blob_client.upload_blob(f, overwrite=True)
+            blob_client.upload_blob(f, **kwargs)
         count += 1
 
     logger.info(

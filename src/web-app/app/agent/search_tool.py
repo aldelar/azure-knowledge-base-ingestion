@@ -1,0 +1,137 @@
+"""AI Search hybrid query tool — vector + keyword search against kb-articles index.
+
+Embeds the user query with ``text-embedding-3-small`` and performs a hybrid search
+(vector similarity on ``content_vector`` + keyword search on ``content``).
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+
+from azure.ai.inference import EmbeddingsClient
+from azure.identity import DefaultAzureCredential
+from azure.search.documents import SearchClient
+from azure.search.documents.models import VectorizedQuery
+
+from app.config import config
+
+logger = logging.getLogger(__name__)
+
+VECTOR_DIMENSIONS = 1536
+
+
+@dataclass
+class SearchResult:
+    """A single search result from the kb-articles index."""
+
+    id: str
+    article_id: str
+    chunk_index: int
+    content: str
+    title: str
+    section_header: str
+    image_urls: list[str] = field(default_factory=list)
+    score: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Lazy singleton clients
+# ---------------------------------------------------------------------------
+
+_embeddings_client: EmbeddingsClient | None = None
+_search_client: SearchClient | None = None
+
+
+def _get_embeddings_client() -> EmbeddingsClient:
+    """Lazy singleton for the embeddings client."""
+    global _embeddings_client
+    if _embeddings_client is None:
+        endpoint = config.ai_services_endpoint.rstrip("/")
+        model_endpoint = f"{endpoint}/openai/deployments/{config.embedding_deployment_name}"
+        _embeddings_client = EmbeddingsClient(
+            endpoint=model_endpoint,
+            credential=DefaultAzureCredential(),
+            credential_scopes=["https://cognitiveservices.azure.com/.default"],
+        )
+    return _embeddings_client
+
+
+def _get_search_client() -> SearchClient:
+    """Lazy singleton for the AI Search client."""
+    global _search_client
+    if _search_client is None:
+        _search_client = SearchClient(
+            endpoint=config.search_endpoint,
+            index_name=config.search_index_name,
+            credential=DefaultAzureCredential(),
+        )
+    return _search_client
+
+
+def _embed_query(query: str) -> list[float]:
+    """Embed a query string. Returns a 1536-dimension vector."""
+    client = _get_embeddings_client()
+    response = client.embed(input=[query])
+    vector = response.data[0].embedding
+    logger.debug("Embedded query (%d chars) → %d-dim vector", len(query), len(vector))
+    return vector
+
+
+def search_kb(query: str, top: int = 5) -> list[SearchResult]:
+    """Perform hybrid search (vector + keyword) against the kb-articles index.
+
+    Parameters
+    ----------
+    query:
+        Natural language search query.
+    top:
+        Maximum number of results to return.
+
+    Returns
+    -------
+    list[SearchResult]
+        Ordered by relevance score (descending).
+    """
+    if not query.strip():
+        return []
+
+    # Embed the query for vector search
+    query_vector = _embed_query(query)
+
+    vector_query = VectorizedQuery(
+        vector=query_vector,
+        k_nearest_neighbors=top,
+        fields="content_vector",
+    )
+
+    client = _get_search_client()
+    results = client.search(
+        search_text=query,
+        vector_queries=[vector_query],
+        select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls"],
+        top=top,
+    )
+
+    search_results: list[SearchResult] = []
+    for result in results:
+        search_results.append(
+            SearchResult(
+                id=result["id"],
+                article_id=result["article_id"],
+                chunk_index=result.get("chunk_index", 0),
+                content=result["content"],
+                title=result.get("title", ""),
+                section_header=result.get("section_header", ""),
+                image_urls=result.get("image_urls") or [],
+                score=result.get("@search.score", 0.0),
+            )
+        )
+
+    logger.info(
+        "Hybrid search for '%s' → %d results (top=%d)",
+        query[:80],
+        len(search_results),
+        top,
+    )
+    return search_results

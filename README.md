@@ -63,6 +63,10 @@ Teams and organizations that:
 │   │   ├── fn_index/    Stage 2 — Markdown → AI Search index
 │   │   ├── shared/      Shared config, blob helpers, CU client
 │   │   └── tests/       pytest test suite
+│   ├── web-app/         KB Search Web App (Agent + Chainlit)
+│   │   ├── app/main.py  Chainlit entry point (streaming, image proxy, citations)
+│   │   ├── app/agent/   KB agent, search tool, image service, vision middleware
+│   │   └── tests/       pytest test suite
 │   └── spikes/          Spike/prototype scripts (research, not production)
 ├── analyzers/           CU custom analyzer definitions (kb-image-analyzer.json)
 ├── Makefile             Dev workflow targets (local + Azure)
@@ -71,7 +75,7 @@ Teams and organizations that:
 
 ## Architecture
 
-The solution is a two-stage Azure Functions pipeline backed by the following Azure services:
+The solution has two layers: a **two-stage ingestion pipeline** (Azure Functions) that builds an image-aware search index, and a **conversational web app** that consumes it with an AI agent that can see and reason about the actual images.
 
 ```mermaid
 flowchart LR
@@ -90,8 +94,14 @@ flowchart LR
     subgraph AI["Azure AI Services"]
         direction TB
         CU["<b>Content Understanding</b><br/>HTML analysis<br/>Image analysis"]
-        AF["<b>AI Foundry</b><br/>Embedding model<br/>(text-embedding-3-small)"]
+        AF["<b>AI Foundry</b><br/>Embedding model<br/>(text-embedding-3-small)<br/>+ Agent model (gpt-4.1)"]
         AIS["<b>AI Search</b><br/>kb-articles index<br/>Vector + full-text"]
+    end
+
+    subgraph WebApp["KB Search Web App"]
+        direction TB
+        UI["<b>Chainlit Chat UI</b><br/>Streaming markdown<br/>Inline images + citations"]
+        AGENT["<b>KB Agent</b><br/>Microsoft Agent Framework<br/>(ChatAgent + vision)"]
     end
 
     SA1 --> FN1
@@ -100,6 +110,12 @@ flowchart LR
     SA2 --> FN2
     FN2 --> AF
     FN2 --> AIS
+
+    UI -->|User question| AGENT
+    AGENT -->|Tool call + embed| AIS
+    AGENT -->|Reasoning| AF
+    AGENT -->|Images for vision + proxy| SA2
+    AGENT -->|Streamed answer + citations| UI
 ```
 
 For full pipeline details, index schema, and stage-level design, see [Architecture](docs/specs/architecture.md).
@@ -144,6 +160,20 @@ Each chunk in the `kb-articles` index carries the text content, its embedding ve
 
 The `image_urls` array lets AI agents retrieve the actual source images alongside the text, enabling visual grounding in agent responses.
 
+### How the Web App Uses Image-Aware Chunks
+
+The KB Search Web App demonstrates the full value of image-aware indexing. When a user asks a question:
+
+1. **Search** — The agent's `search_knowledge_base` tool performs hybrid search and returns chunks. Each chunk includes its `image_urls` array (e.g., `["images/architecture.png"]`). The tool converts these to proxy URLs (`/api/images/article-id/images/architecture.png`) in the JSON returned to the LLM.
+
+2. **Vision injection** — A `VisionImageMiddleware` intercepts the tool result, downloads the referenced images from blob storage, and injects them into the LLM conversation as base64 `DataContent`. GPT-4.1's vision capabilities let it **see** the actual diagrams and screenshots — not just the text descriptions from the index.
+
+3. **Visual reasoning** — The LLM reasons over both the text chunks and the actual images. When an image adds value to the answer (e.g., an architecture diagram for "how does agentic retrieval work?"), the LLM embeds it inline using `![description](/api/images/...)` markdown.
+
+4. **Browser rendering** — Chainlit renders the markdown natively. The browser fetches images from the same-origin `/api/images/` proxy endpoint, which downloads from blob storage on demand.
+
+This means the images produced by the ingestion pipeline serve a **dual purpose**: they ground the LLM's visual reasoning (via the vision middleware) *and* appear inline in the user-facing answer (via the image proxy).
+
 ## Makefile Targets
 
 Run `make help` to see all targets. Here is the full list:
@@ -160,6 +190,10 @@ Run `make help` to see all targets. Here is the full list:
 | `make test` | Run unit tests (pytest) |
 | `make validate-infra` | Validate Azure infra is ready for local dev |
 | `make grant-dev-roles` | Verify developer RBAC roles (provisioned via Bicep) |
+| **Web App** | |
+| `make web-app` | Run KB Search web app locally (http://localhost:8080) |
+| `make web-app-setup` | Install web app Python dependencies |
+| `make web-app-test` | Run web app unit tests |
 | **Azure Operations** | |
 | `make azure-provision` | Provision all Azure resources (azd provision) |
 | `make azure-deploy` | Deploy functions, search index, and CU analyzer (azd deploy) |
@@ -260,6 +294,38 @@ make azure-clean-index    # Delete the AI Search index
 
 ---
 
+## 4. Run KB Search Web App
+
+The web app is a conversational interface that lets you search the `kb-articles` index using a Microsoft Agent Framework agent. It runs locally against live Azure services.
+
+### Prerequisites
+
+- The ingestion pipeline has been run at least once (articles indexed in AI Search)
+- Your `az login` identity has the **Storage Blob Delegator** role on the serving storage account (in addition to the roles provisioned by Bicep). This is required for generating user delegation SAS URLs for article images.
+
+### Setup & Run
+
+```bash
+# 1. Populate the web app .env (reuses the same AZD environment values)
+azd env get-values > src/web-app/.env
+
+# 2. Install dependencies
+make web-app-setup
+
+# 3. Start the web app
+make web-app
+```
+
+Open `http://localhost:8080` — ask questions like "What is Azure Content Understanding?" or "How does search security work?" and get grounded answers with inline images and source citations.
+
+### Run Tests
+
+```bash
+make web-app-test
+```
+
+---
+
 ## Sample Articles
 
 The `kb/staging/` folder contains sample articles (HTML + images) used for development and testing. After running the pipeline, processed output appears in `kb/serving/` and chunks are searchable in the `kb-articles` AI Search index.
@@ -269,3 +335,4 @@ The `kb/staging/` folder contains sample articles (HTML + images) used for devel
 - [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema
 - [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC
 - [Epic 001](docs/epics/001-local-pipeline-e2e.md) — local pipeline implementation stories and status
+- [Epic 002](docs/epics/002-kb-search-web-app.md) — KB Search Web App (Agent + Chainlit)

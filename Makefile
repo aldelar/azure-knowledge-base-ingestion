@@ -22,6 +22,11 @@ help: ## Show available targets
 	@grep -E '^(dev-|convert|index|test|validate|grant)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
+	@echo "  App"
+	@echo "  ─────────────────"
+	@grep -E '^app[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
+	@echo ""
 	@echo "  Azure Operations"
 	@echo "  ─────────────────"
 	@grep -E '^azure-[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -85,6 +90,20 @@ convert: ## Run fn-convert locally (kb/staging → kb/serving)
 
 index: ## Run fn-index locally (kb/serving → Azure AI Search)
 	@bash scripts/functions/index.sh
+
+# ------------------------------------------------------------------------------
+# App
+# ------------------------------------------------------------------------------
+.PHONY: app app-setup app-test
+
+app: ## Run KB Search web app locally (http://localhost:8080)
+	@cd src/web-app && uv run chainlit run app/main.py -w --port 8080
+
+app-setup: ## Install web app Python dependencies
+	@cd src/web-app && uv sync --extra dev
+
+app-test: ## Run web app unit tests
+	@cd src/web-app && uv run pytest tests/ -v || test $$? -eq 5
 
 # ------------------------------------------------------------------------------
 # Local Development — RBAC
