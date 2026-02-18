@@ -127,7 +127,7 @@
             "title": "Settings panel",
             "customize": "Customize your chat settings here"
         },
-        "watermark": "LLMs can make mistakes. Check important info."
+        "watermark": "AI assisted answers. Double check sources for accuracy."
     },
     "threadHistory": {
         "sidebar": {
