@@ -1,4 +1,4 @@
-# Epic 002 — KB Search Web App (Agent + Chainlit) ✅
+# Epic 002 — Vision-Grounded Knowledge Agent (Chainlit + Agent Framework) ✅
 
 > **Status:** Done
 > **Created:** February 17, 2026

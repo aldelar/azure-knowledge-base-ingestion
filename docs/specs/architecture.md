@@ -88,7 +88,7 @@ flowchart LR
             AF["AI Foundry<br/>GPT-4.1 + Embeddings"]
             AIS["AI Search<br/>kb-articles index"]
         end
-        subgraph App["KB Search Web App"]
+        subgraph App["Vision-Grounded Knowledge Agent"]
             direction TB
             PROXY["<b>Image Proxy</b><br/>/api/images/*"]
             VIS["<b>Vision Middleware</b><br/>Image injection"]
@@ -115,9 +115,9 @@ flowchart LR
     class left,right invisible;
 ```
 
-## KB Search Web App
+## Vision-Grounded Knowledge Agent
 
-The web app is a conversational interface that consumes the `kb-articles` index via a **Microsoft Agent Framework** agent backed by a **Chainlit** chat UI. It runs locally against the same Azure services used by the ingestion pipeline.
+The agent is a conversational interface that consumes the `kb-articles` index via a **Microsoft Agent Framework** agent backed by a **Chainlit** chat UI. It runs locally against the same Azure services used by the ingestion pipeline.
 
 ### Components
 

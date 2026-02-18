@@ -6,7 +6,7 @@
 
 ## Objective
 
-Deploy the KB Search Web App (currently local-only) to **Azure Container Apps** with **Entra ID authentication** (Easy Auth, single-tenant). The deployed app uses the same Azure services as local development (AI Search, AI Foundry, Blob Storage) — authenticated via managed identity instead of the developer's `az login` credential.
+Deploy the Vision-Grounded Knowledge Agent (currently local-only) to **Azure Container Apps** with **Entra ID authentication** (Easy Auth, single-tenant). The deployed app uses the same Azure services as local development (AI Search, AI Foundry, Blob Storage) — authenticated via managed identity instead of the developer's `az login` credential.
 
 ## Success Criteria
 
@@ -30,7 +30,7 @@ flowchart LR
 
     subgraph ACA["Azure Container Apps"]
         AUTH["<b>Easy Auth</b><br/>Entra ID<br/>(single-tenant)"]
-        APP["<b>KB Search Web App</b><br/>Chainlit + KB Agent<br/>(Container App)"]
+        APP["<b>Vision-Grounded Knowledge Agent</b><br/>Chainlit + KB Agent<br/>(Container App)"]
     end
 
     subgraph Registry["Azure Container Registry"]
@@ -110,7 +110,7 @@ Update the architecture and infrastructure specs to document the Container Apps 
 
 - [x] Update `docs/specs/architecture.md`:
   - Add Container Apps to the Azure Services Map diagram
-  - Add a "Deployment" subsection to the KB Search Web App section
+  - Add a "Deployment" subsection to the Vision-Grounded Knowledge Agent section
   - Document Easy Auth flow and managed identity RBAC
 - [x] Update `docs/specs/infrastructure.md`:
   - Add Container Registry, Container Apps Environment, and Container App to the Resource Inventory table
