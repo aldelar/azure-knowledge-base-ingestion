@@ -66,10 +66,13 @@ dev-setup: ## Install required dev tools and Python dependencies
 	@cd src/web-app && uv sync --extra dev
 	@echo "Python dependencies installed."
 
-dev-setup-env: ## Populate src/functions/.env from AZD environment
+dev-setup-env: ## Populate .env files from AZD environment (functions + web app)
 	@echo "Writing AZD environment values to src/functions/.env..."
 	@azd env get-values > src/functions/.env
 	@echo "Done. $(shell wc -l < src/functions/.env 2>/dev/null || echo 0) variables written."
+	@echo "Writing AZD environment values to src/web-app/.env..."
+	@azd env get-values > src/web-app/.env
+	@echo "Done. $(shell wc -l < src/web-app/.env 2>/dev/null || echo 0) variables written."
 
 # ------------------------------------------------------------------------------
 # Local Development — Pipeline

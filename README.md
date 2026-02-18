@@ -324,8 +324,8 @@ The agent is a conversational interface that lets you search the `kb-articles` i
 ### Setup & Run
 
 ```bash
-# 1. Populate the web app .env (reuses the same AZD environment values)
-azd env get-values > src/web-app/.env
+# 1. Populate .env files from AZD environment (functions + web app)
+make dev-setup-env
 
 # 2. Start the web app
 make app
