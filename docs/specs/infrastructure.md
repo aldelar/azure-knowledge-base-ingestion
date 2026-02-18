@@ -25,6 +25,10 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | Azure AI Search | `search.bicep` | `srch-kbidx-{env}` | Free, 1 partition, 1 replica |
 | Function App | `function-app.bicep` | `func-kbidx-{env}` | Flex Consumption (FC1), Python 3.11, Linux |
 | App Service Plan | `function-app.bicep` | `plan-kbidx-{env}` | FlexConsumption / FC1 |
+| Container Registry | `container-registry.bicep` | `crkbidx{env}` | Basic |
+| Container Apps Environment | `container-app.bicep` | `cae-kbidx-{env}` | Consumption |
+| Container App (Web App) | `container-app.bicep` | `webapp-kbidx-{env}` | 0.5 vCPU, 1 GiB |
+| Entra App Registration | Pre-provision hook | `webapp-kbidx-{env}` | — |
 
 > `{env}` is the AZD environment name (e.g., `dev`, `staging`, `prod`).
 
@@ -39,7 +43,9 @@ infra/
     ├── storage.bicep            # Reusable storage account with containers + RBAC
     ├── ai-services.bicep        # AI Services account + model deployments + RBAC
     ├── search.bicep             # AI Search service + RBAC
-    └── function-app.bicep       # Flex Consumption plan + Function App + runtime storage
+    ├── function-app.bicep       # Flex Consumption plan + Function App + runtime storage
+    ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC
+    └── container-app.bicep      # Container Apps Environment + Container App + Easy Auth
 ```
 
 ---
@@ -159,17 +165,77 @@ The search index (`kb-articles`) is created by application code at runtime, not 
 
 The Function App's own storage account gets **Storage Blob Data Owner** (role `b7e6dc6d-f1e8-4753-8033-0f276bb0955b`) granted to the Function App identity — required for Flex Consumption deployment and `AzureWebJobsStorage` access.
 
+### Container Registry (`container-registry.bicep`)
+
+Hosts Docker images for the KB Search Web App container.
+
+| Setting | Value |
+|---------|-------|
+| SKU | Basic |
+| Admin User | Disabled (managed identity pull) |
+| Public Network | Enabled |
+
+The module accepts an optional `acrPullPrincipalId` parameter. When provided, it grants the **AcrPull** role to that principal (used to give the Container App access to pull images).
+
+### Container App (`container-app.bicep`)
+
+Hosts the KB Search Web App as a containerized application with Entra ID Easy Auth.
+
+#### Container Apps Environment
+
+| Setting | Value |
+|---------|-------|
+| Type | Consumption (Consumption + Dedicated plan) |
+| Logging | Linked to Log Analytics workspace |
+
+#### Container App
+
+| Setting | Value |
+|---------|-------|
+| Identity | System-assigned managed identity |
+| Container | Single container from ACR |
+| CPU / Memory | 0.5 vCPU / 1 GiB |
+| Ingress | External, port 8080, HTTPS-only |
+| Scale | Min 0, Max 1 (scale-to-zero for cost savings) |
+
+**Application Settings:**
+
+| Setting | Source | Purpose |
+|---------|--------|---------|
+| `AI_SERVICES_ENDPOINT` | AI Services endpoint | Azure AI Foundry (GPT-4.1 + embeddings) |
+| `AGENT_MODEL_DEPLOYMENT_NAME` | `gpt-4.1` | Agent reasoning model |
+| `EMBEDDING_DEPLOYMENT_NAME` | `text-embedding-3-small` | Query embedding model |
+| `SEARCH_ENDPOINT` | AI Search endpoint | Query the kb-articles index |
+| `SEARCH_INDEX_NAME` | `kb-articles` | Target search index |
+| `SERVING_BLOB_ENDPOINT` | Serving storage blob endpoint | Article images for proxy + vision |
+| `SERVING_CONTAINER_NAME` | `serving` | Blob container name |
+
+#### Entra ID Easy Auth
+
+Authentication is configured as a platform-level sidecar on the Container App — no code changes needed in the Chainlit application.
+
+| Setting | Value |
+|---------|-------|
+| Provider | Microsoft Entra ID (v2) |
+| Tenant Mode | Single-tenant |
+| Unauthenticated Action | Redirect to login (return HTTP 302) |
+| App Registration | Created via AZD pre-provision hook |
+| Redirect URI | `https://<container-app-fqdn>/.auth/login/aad/callback` |
+
+The Entra App Registration is created by the AZD `preprovision` hook script using `az ad app create`. The client ID and secret are stored as AZD environment variables and passed to the Bicep template as parameters.
+
 ---
 
 ## Security Model
 
 ### Zero-Secret Architecture
 
-No keys, connection strings, or secrets appear in application settings or configuration. All service-to-service communication is authenticated via the Function App's **system-assigned managed identity**.
+No keys, connection strings, or secrets appear in application settings or configuration. All service-to-service communication is authenticated via **system-assigned managed identity** — both the Function App and the Container App use this pattern.
 
 ```mermaid
 flowchart LR
     FA["Function App<br/><i>System Managed Identity</i>"]
+    CA["Container App<br/><i>System Managed Identity</i>"]
 
     FA -->|"Storage Blob Data<br/>Contributor"| ST["Staging Storage"]
     FA -->|"Storage Blob Data<br/>Contributor"| SV["Serving Storage"]
@@ -178,7 +244,16 @@ flowchart LR
     FA -->|"Cognitive Services<br/>User"| AI
     FA -->|"Search Index Data<br/>Contributor"| SR["AI Search"]
     FA -->|"Search Service<br/>Contributor"| SR
+
+    CA -->|"Cognitive Services<br/>OpenAI User"| AI
+    CA -->|"Search Index Data<br/>Reader"| SR
+    CA -->|"Storage Blob Data<br/>Reader"| SV
+    CA -->|"AcrPull"| ACR["Container Registry"]
 ```
+
+### Entra ID Authentication
+
+The Container App uses **Easy Auth** (platform-level) with an **Entra App Registration** (single-tenant). The app registration is created via an AZD pre-provision hook script (`az ad app create`) and its client ID / secret are passed to the Container App's auth configuration. Only users in the Azure AD tenant can access the web app. Unauthenticated requests are automatically redirected to the Microsoft login page.
 
 ### Key Security Settings
 
@@ -201,6 +276,10 @@ flowchart LR
 | Function App | AI Services | Cognitive Services User |
 | Function App | AI Search | Search Index Data Contributor |
 | Function App | AI Search | Search Service Contributor |
+| Container App | AI Services | Cognitive Services OpenAI User |
+| Container App | AI Search | Search Index Data Reader |
+| Container App | Serving Storage | Storage Blob Data Reader |
+| Container App | Container Registry | AcrPull |
 
 ---
 
@@ -267,6 +346,10 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `FUNCTION_APP_NAME` | `func-kbidx-dev` |
 | `FUNCTION_APP_HOSTNAME` | `func-kbidx-dev.azurewebsites.net` |
 | `APPINSIGHTS_NAME` | `appi-kbidx-dev` |
+| `CONTAINER_REGISTRY_NAME` | `crkbidxdev` |
+| `CONTAINER_REGISTRY_LOGIN_SERVER` | `crkbidxdev.azurecr.io` |
+| `WEBAPP_NAME` | `webapp-kbidx-dev` |
+| `WEBAPP_URL` | `https://webapp-kbidx-dev.<region>.azurecontainerapps.io` |
 
 ---
 

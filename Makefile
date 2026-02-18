@@ -19,12 +19,7 @@ help: ## Show available targets
 	@echo ""
 	@echo "  Local Development"
 	@echo "  ─────────────────"
-	@grep -E '^(dev-|convert|index|test|validate|grant)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
-	@echo ""
-	@echo "  App"
-	@echo "  ─────────────────"
-	@grep -E '^app[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^(dev-|convert|index|test|validate|grant|app)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  Azure Operations"
@@ -65,8 +60,10 @@ dev-doctor: ## Check if required dev tools are installed
 dev-setup: ## Install required dev tools and Python dependencies
 	@bash scripts/dev-setup.sh
 	@echo ""
-	@echo "Installing Python dependencies..."
+	@echo "Installing Python dependencies (functions)..."
 	@cd src/functions && uv sync --extra dev
+	@echo "Installing Python dependencies (web app)..."
+	@cd src/web-app && uv sync --extra dev
 	@echo "Python dependencies installed."
 
 dev-setup-env: ## Populate src/functions/.env from AZD environment
@@ -92,15 +89,12 @@ index: ## Run fn-index locally (kb/serving → Azure AI Search)
 	@bash scripts/functions/index.sh
 
 # ------------------------------------------------------------------------------
-# App
+# Local Development — Web App
 # ------------------------------------------------------------------------------
-.PHONY: app app-setup app-test
+.PHONY: app app-test
 
 app: ## Run KB Search web app locally (http://localhost:8080)
 	@cd src/web-app && uv run chainlit run app/main.py -w --port 8080
-
-app-setup: ## Install web app Python dependencies
-	@cd src/web-app && uv sync --extra dev
 
 app-test: ## Run web app unit tests
 	@cd src/web-app && uv run pytest tests/ -v || test $$? -eq 5
@@ -178,6 +172,22 @@ azure-index: ## Trigger fn-index in Azure (processes serving → AI Search)
 
 azure-index-summarize: ## Show AI Search index contents summary
 	@cd src/functions && uv run python ../../scripts/functions/display-index-summary.py
+
+# ------------------------------------------------------------------------------
+# Azure — Web App
+# ------------------------------------------------------------------------------
+.PHONY: azure-deploy-app azure-app-url azure-app-logs
+
+azure-deploy-app: ## Build & deploy the web app to Azure Container Apps
+	azd deploy --service web-app
+
+azure-app-url: ## Print the deployed web app URL
+	@echo "https://$$(azd env get-value WEBAPP_URL)"
+
+azure-app-logs: ## Stream live logs from the deployed web app
+	@APP=$$(azd env get-value WEBAPP_NAME) && \
+	RG=$$(azd env get-value RESOURCE_GROUP) && \
+	az containerapp logs show --name $$APP --resource-group $$RG --type console --follow
 
 # ------------------------------------------------------------------------------
 # Azure — Cleanup

@@ -21,6 +21,9 @@ param contributorPrincipalId string = ''
 @description('Principal ID of the deployer (human user) for blob access')
 param deployerPrincipalId string = ''
 
+@description('Principal ID to grant Storage Blob Data Reader role (e.g., Container App MI for read-only access)')
+param readerPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Storage Account
 // ---------------------------------------------------------------------------
@@ -85,6 +88,21 @@ resource deployerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04
     principalId: deployerPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalType: 'User'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role Assignment: Storage Blob Data Reader (read-only, e.g., Container App MI)
+// ---------------------------------------------------------------------------
+var storageBlobDataReaderRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+
+resource readerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(readerPrincipalId)) {
+  name: guid(storageAccount.id, readerPrincipalId, storageBlobDataReaderRoleId)
+  scope: storageAccount
+  properties: {
+    principalId: readerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataReaderRoleId)
+    principalType: 'ServicePrincipal'
   }
 }
 

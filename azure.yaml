@@ -24,8 +24,32 @@ hooks:
         fi
       fi
 
+      # Set up Entra App Registration for web app Easy Auth
+      bash scripts/setup-entra-auth.sh
+
+  postprovision:
+    shell: sh
+    run: |
+      # Update the Entra App Registration redirect URI with the actual Container App URL
+      CLIENT_ID=$(azd env get-value ENTRA_CLIENT_ID 2>/dev/null || echo "")
+      WEBAPP_URL=$(azd env get-value WEBAPP_URL 2>/dev/null || echo "")
+      if [ -n "$CLIENT_ID" ] && [ -n "$WEBAPP_URL" ]; then
+        REDIRECT_URI="${WEBAPP_URL}/.auth/login/aad/callback"
+        echo "Setting redirect URI: $REDIRECT_URI"
+        az ad app update --id "$CLIENT_ID" --web-redirect-uris "$REDIRECT_URI"
+        echo "Entra App Registration redirect URI updated."
+      else
+        echo "WARNING: ENTRA_CLIENT_ID or WEBAPP_URL not set. Skipping redirect URI update."
+      fi
+
 services:
   functions:
     project: ./src/functions
     language: python
     host: function
+  web-app:
+    project: ./src/web-app
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile

@@ -35,6 +35,13 @@ param searchSkuName string = 'basic'
 @description('Principal ID of the deployer (human user). AZD populates this via AZURE_PRINCIPAL_ID.')
 param principalId string = ''
 
+@description('Entra App Registration client ID for web app Easy Auth')
+param entraClientId string = ''
+
+@description('Entra App Registration client secret for web app Easy Auth')
+@secure()
+param entraClientSecret string = ''
+
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -138,6 +145,38 @@ module functionApp 'modules/function-app.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
+// Module: Container Registry
+// ---------------------------------------------------------------------------
+module containerRegistry 'modules/container-registry.bicep' = {
+  name: 'container-registry'
+  params: {
+    location: location
+    baseName: environmentName
+    tags: defaultTags
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module: Container App (KB Search Web App)
+// ---------------------------------------------------------------------------
+module containerApp 'modules/container-app.bicep' = {
+  name: 'container-app'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+    acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
+    aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
+    embeddingDeploymentName: aiServices.outputs.embeddingDeploymentName
+    searchEndpoint: search.outputs.searchEndpoint
+    servingBlobEndpoint: servingStorage.outputs.blobEndpoint
+    entraClientId: entraClientId
+    entraClientSecret: entraClientSecret
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Post-deploy: Grant Function App managed identity access to all services
 // ---------------------------------------------------------------------------
 
@@ -193,6 +232,56 @@ module searchRole 'modules/search.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
+// Post-deploy: Grant Container App managed identity access to services
+// ---------------------------------------------------------------------------
+
+// ACR: AcrPull (Container App MI)
+module containerRegistryRole 'modules/container-registry.bicep' = {
+  name: 'container-registry-role'
+  params: {
+    location: location
+    baseName: environmentName
+    tags: defaultTags
+    acrPullPrincipalId: containerApp.outputs.containerAppPrincipalId
+  }
+}
+
+// Serving storage: Blob Data Reader (Container App MI — read-only for image proxy)
+module servingStorageReaderRole 'modules/storage.bicep' = {
+  name: 'serving-storage-reader-role'
+  params: {
+    location: location
+    storageAccountName: servingStorageName
+    tags: defaultTags
+    containerNames: ['serving']
+    readerPrincipalId: containerApp.outputs.containerAppPrincipalId
+  }
+}
+
+// AI Services: Cognitive Services OpenAI User (Container App MI — OpenAI only, no CU)
+module aiServicesWebAppRole 'modules/ai-services.bicep' = {
+  name: 'ai-services-webapp-role'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    openAIOnlyUserPrincipalId: containerApp.outputs.containerAppPrincipalId
+  }
+}
+
+// AI Search: Search Index Data Reader (Container App MI — read-only for querying)
+module searchWebAppRole 'modules/search.bicep' = {
+  name: 'search-webapp-role'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    skuName: searchSkuName
+    indexReaderPrincipalId: containerApp.outputs.containerAppPrincipalId
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs — consumed by AZD and application code
 // ---------------------------------------------------------------------------
 output AZURE_LOCATION string = location
@@ -221,3 +310,12 @@ output FUNCTION_APP_HOSTNAME string = functionApp.outputs.functionAppDefaultHost
 
 // Monitoring
 output APPINSIGHTS_NAME string = monitoring.outputs.appInsightsName
+
+// Container Registry
+output CONTAINER_REGISTRY_NAME string = containerRegistry.outputs.containerRegistryName
+output CONTAINER_REGISTRY_LOGIN_SERVER string = containerRegistry.outputs.containerRegistryLoginServer
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.containerRegistryLoginServer
+
+// Web App (Container App)
+output WEBAPP_NAME string = containerApp.outputs.containerAppName
+output WEBAPP_URL string = containerApp.outputs.containerAppUrl

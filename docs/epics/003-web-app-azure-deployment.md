@@ -1,8 +1,8 @@
 # Epic 003 — Web App Azure Deployment (Container Apps + Entra Auth)
 
-> **Status:** Not Started
+> **Status:** Done
 > **Created:** February 18, 2026
-> **Updated:** February 18, 2026
+> **Updated:** February 19, 2026
 
 ## Objective
 
@@ -10,13 +10,13 @@ Deploy the KB Search Web App (currently local-only) to **Azure Container Apps** 
 
 ## Success Criteria
 
-- [ ] `azd provision` creates Container Apps Environment, ACR, Container App, and Entra App Registration
-- [ ] `azd deploy` builds the Docker image, pushes to ACR, and deploys to Container Apps
-- [ ] The web app is accessible at its Container Apps URL with Entra ID authentication enforced
-- [ ] Only users in the Azure AD tenant can access the app (single-tenant)
-- [ ] Unauthenticated requests auto-redirect to Microsoft login (no custom login page)
-- [ ] The deployed app can search, stream answers, and serve inline images — identical to local
-- [ ] All existing local workflows (`make app`, `make app-test`) continue to work unchanged
+- [x] `azd provision` creates Container Apps Environment, ACR, Container App, and Entra App Registration
+- [x] `azd deploy` builds the Docker image, pushes to ACR, and deploys to Container Apps
+- [x] The web app is accessible at its Container Apps URL with Entra ID authentication enforced
+- [x] Only users in the Azure AD tenant can access the app (single-tenant)
+- [x] Unauthenticated requests auto-redirect to Microsoft login (no custom login page)
+- [x] The deployed app can search, stream answers, and serve inline images — identical to local
+- [x] All existing local workflows (`make app`, `make app-test`) continue to work unchanged
 
 ---
 
@@ -100,19 +100,19 @@ The Container App's system-assigned managed identity needs the same roles as the
 
 ---
 
-### Story 1 — Architecture & Infrastructure Documentation
+### Story 1 — Architecture & Infrastructure Documentation ✅
 
-> **Status:** Not Started
+> **Status:** Done
 
 Update the architecture and infrastructure specs to document the Container Apps deployment, ACR, Entra Auth, and the new RBAC model.
 
 #### Deliverables
 
-- [ ] Update `docs/specs/architecture.md`:
+- [x] Update `docs/specs/architecture.md`:
   - Add Container Apps to the Azure Services Map diagram
   - Add a "Deployment" subsection to the KB Search Web App section
   - Document Easy Auth flow and managed identity RBAC
-- [ ] Update `docs/specs/infrastructure.md`:
+- [x] Update `docs/specs/infrastructure.md`:
   - Add Container Registry, Container Apps Environment, and Container App to the Resource Inventory table
   - Add new Bicep module descriptions (container-registry, container-app)
   - Add Entra App Registration to the Security Model section
@@ -122,31 +122,31 @@ Update the architecture and infrastructure specs to document the Container Apps 
 
 | File | Status |
 |------|--------|
-| `docs/specs/architecture.md` | |
-| `docs/specs/infrastructure.md` | |
+| `docs/specs/architecture.md` | ✅ |
+| `docs/specs/infrastructure.md` | ✅ |
 
 #### Definition of Done
 
-- [ ] Architecture diagram includes Container Apps and ACR
-- [ ] Infrastructure doc has full configuration details for all new resources
-- [ ] RBAC model documented for Container App managed identity
-- [ ] Easy Auth authentication flow documented
+- [x] Architecture diagram includes Container Apps and ACR
+- [x] Infrastructure doc has full configuration details for all new resources
+- [x] RBAC model documented for Container App managed identity
+- [x] Easy Auth authentication flow documented
 
 ---
 
-### Story 2 — Bicep Infrastructure (ACR + Container Apps + Entra Auth)
+### Story 2 — Bicep Infrastructure (ACR + Container Apps + Entra Auth) ✅
 
-> **Status:** Not Started
+> **Status:** Done
 
 Add Bicep modules for Azure Container Registry, Container Apps Environment, Container App with Easy Auth, and the required RBAC role assignments.
 
 #### Deliverables
 
-- [ ] Create `infra/modules/container-registry.bicep`:
+- [x] Create `infra/modules/container-registry.bicep`:
   - Basic SKU ACR
   - Admin user disabled (managed identity pull)
   - Optional `acrPullPrincipalId` param for AcrPull role assignment
-- [ ] Create `infra/modules/container-app.bicep`:
+- [x] Create `infra/modules/container-app.bicep`:
   - Container Apps Environment (Consumption plan, linked to Log Analytics)
   - Container App with:
     - System-assigned managed identity
@@ -155,45 +155,45 @@ Add Bicep modules for Azure Container Registry, Container Apps Environment, Cont
     - Environment variables (same as local `.env` — AI Services endpoint, Search endpoint, Blob endpoint, deployment names)
     - Easy Auth configuration: Entra ID provider, single-tenant, require authentication, redirect unauthenticated
   - Scale: min 0, max 1 (dev tier — scale-to-zero for cost savings)
-- [ ] Update `infra/main.bicep`:
+- [x] Update `infra/main.bicep`:
   - Add ACR module
   - Add Container App module
   - Wire outputs (ACR login server, Container App URL)
   - Add RBAC role assignments for Container App MI → AI Services, AI Search, Serving Storage
   - Add parameter or mechanism for Entra App Registration (client ID / tenant ID)
-- [ ] Update `infra/main.parameters.json` if new parameters are needed
-- [ ] Entra App Registration:
-  - Option A: Create via Bicep `Microsoft.Graph/applications` (if supported)
-  - Option B: Create via a pre-provision AZD hook script (`az ad app create`)
-  - Must be single-tenant, with redirect URI set to Container App's auth callback URL
-  - Document the chosen approach in the epic
+- [x] Update `infra/main.parameters.json` if new parameters are needed
+- [x] Entra App Registration:
+  - Option B chosen: Create via a pre-provision AZD hook script (`scripts/setup-entra-auth.sh`)
+  - Single-tenant, with redirect URI set post-provision to Container App's auth callback URL
+  - Pre-provision hook creates/reuses app registration and stores client ID/secret in AZD env
 
 | File | Status |
 |------|--------|
-| `infra/modules/container-registry.bicep` | |
-| `infra/modules/container-app.bicep` | |
-| `infra/main.bicep` | |
-| `infra/main.parameters.json` | |
+| `infra/modules/container-registry.bicep` | ✅ |
+| `infra/modules/container-app.bicep` | ✅ |
+| `infra/main.bicep` | ✅ |
+| `infra/main.parameters.json` | ✅ |
+| `scripts/setup-entra-auth.sh` | ✅ |
 
 #### Definition of Done
 
-- [ ] `azd provision` succeeds and creates ACR + Container Apps Environment + Container App
-- [ ] Container App has system-assigned managed identity with correct RBAC roles
-- [ ] Easy Auth is configured with Entra ID single-tenant provider
-- [ ] Unauthenticated requests to the Container App URL redirect to Microsoft login
-- [ ] `make validate-infra` still passes (or is updated to include new resources)
+- [x] `azd provision` succeeds and creates ACR + Container Apps Environment + Container App
+- [x] Container App has system-assigned managed identity with correct RBAC roles
+- [x] Easy Auth is configured with Entra ID single-tenant provider
+- [x] Unauthenticated requests to the Container App URL redirect to Microsoft login
+- [x] `make validate-infra` still passes (or is updated to include new resources)
 
 ---
 
-### Story 3 — Dockerfile & Container Build
+### Story 3 — Dockerfile & Container Build ✅
 
-> **Status:** Not Started
+> **Status:** Done
 
 Create a production Dockerfile for the web app and integrate it with the AZD deployment workflow.
 
 #### Deliverables
 
-- [ ] Create `src/web-app/Dockerfile`:
+- [x] Create `src/web-app/Dockerfile`:
   - Base: `python:3.11-slim`
   - Install UV, copy `pyproject.toml` and `uv.lock`, install production dependencies
   - Copy application code (`app/`, `public/`, `.chainlit/`)
@@ -201,89 +201,76 @@ Create a production Dockerfile for the web app and integrate it with the AZD dep
   - Entrypoint: `chainlit run app/main.py --host 0.0.0.0 --port 8080` (no `--watch`, production mode)
   - Multi-stage build if needed to keep image size small
   - `.dockerignore` to exclude tests, `__pycache__`, `.env`, etc.
-- [ ] Create `src/web-app/.dockerignore`
-- [ ] Test Docker build locally:
+- [x] Create `src/web-app/.dockerignore`
+- [x] Test Docker build locally:
   - `docker build -t webapp-kbidx .` succeeds
   - `docker run -p 8080:8080 --env-file .env webapp-kbidx` serves the app locally
-- [ ] Update `azure.yaml` to add the web-app service:
-  ```yaml
-  services:
-    functions:
-      project: ./src/functions
-      language: python
-      host: function
-    web-app:
-      project: ./src/web-app
-      language: python
-      host: containerapp
-      docker:
-        path: ./Dockerfile
-  ```
-- [ ] Add Makefile targets:
-  - `app-docker-build` — Build the Docker image locally
-  - `app-docker-run` — Run the Docker image locally with `.env`
+- [x] Update `azure.yaml` to add the web-app service
+- [x] Add Makefile targets:
+  - `docker-build` — Build the Docker image locally
+  - `docker-run` — Run the Docker image locally with `.env`
 
 | File | Status |
 |------|--------|
-| `src/web-app/Dockerfile` | |
-| `src/web-app/.dockerignore` | |
-| `azure.yaml` | |
-| `Makefile` | |
+| `src/web-app/Dockerfile` | ✅ |
+| `src/web-app/.dockerignore` | ✅ |
+| `azure.yaml` | ✅ |
+| `Makefile` | ✅ |
 
 #### Definition of Done
 
-- [ ] Docker image builds successfully from `src/web-app/`
-- [ ] Container runs locally and serves the Chainlit app on port 8080
-- [ ] Image size is reasonable (< 500 MB)
-- [ ] `azure.yaml` has the web-app service definition for AZD
+- [x] Docker image builds successfully from `src/web-app/`
+- [x] Container runs locally and serves the Chainlit app on port 8080
+- [x] Image size is reasonable (< 500 MB)
+- [x] `azure.yaml` has the web-app service definition for AZD
 
 ---
 
-### Story 4 — Deploy & E2E Validation
+### Story 4 — Deploy & E2E Validation ✅
 
-> **Status:** Not Started
+> **Status:** Done
 
 Deploy the web app to Azure Container Apps via AZD and validate the full end-to-end flow in the cloud.
 
 #### Deliverables
 
-- [ ] Run `azd deploy` (or `azd up`) and verify:
+- [x] Run `azd deploy` (or `azd up`) and verify:
   - Docker image is built and pushed to ACR
   - Container App is updated with the new image
   - App starts successfully (check container logs)
-- [ ] Validate authentication:
+- [x] Validate authentication:
   - Unauthenticated browser request → redirected to Microsoft login
   - After sign-in → app loads with chat UI
   - User from outside tenant → access denied
-- [ ] Validate full functionality:
+- [x] Validate full functionality:
   - Ask "What is Azure Content Understanding?" → grounded answer with inline image
   - Ask "How does agentic retrieval work?" → answer with architecture diagram
   - Ask "What are the network security options?" → answer with security diagrams
   - Images load correctly via the image proxy (Container App → Blob Storage)
   - Citations show as clickable [Ref #N] with side panels
   - Multi-turn conversation works
-- [ ] Add Makefile targets:
+- [x] Add Makefile targets:
   - `azure-deploy-app` — Deploy web app to Container Apps
   - `azure-app-logs` — Tail container app logs
   - `azure-app-url` — Print the deployed app URL
-- [ ] Update documentation:
+- [x] Update documentation:
   - Update `README.md` with deployed app section (URL, auth, how to access)
   - Update `docs/specs/infrastructure.md` output table with Container App URL
 
 | File | Status |
 |------|--------|
-| `Makefile` | |
-| `README.md` | |
-| `docs/specs/infrastructure.md` | |
+| `Makefile` | ✅ |
+| `README.md` | ✅ |
+| `docs/specs/infrastructure.md` | ✅ |
 
 #### Definition of Done
 
-- [ ] `azd deploy` builds, pushes, and deploys the web app container successfully
-- [ ] App is accessible at its Container Apps URL with Entra ID auth enforced
-- [ ] All 3 sample questions return streamed answers with inline images and citations
-- [ ] Container logs show no errors
-- [ ] Local workflows (`make app`, `make app-test`) still work unchanged
-- [ ] README has deployment instructions
+- [x] `azd deploy` builds, pushes, and deploys the web app container successfully
+- [x] App is accessible at its Container Apps URL with Entra ID auth enforced
+- [x] All 3 sample questions return streamed answers with inline images and citations
+- [x] Container logs show no errors
+- [x] Local workflows (`make app`, `make app-test`) still work unchanged
+- [x] README has deployment instructions
 
 ---
 

@@ -19,6 +19,9 @@ param cognitiveServicesUserPrincipalId string = ''
 @description('Principal ID of the deployer (human user) for Cognitive Services access')
 param deployerPrincipalId string = ''
 
+@description('Principal ID to grant Cognitive Services OpenAI User role only (e.g., Container App MI)')
+param openAIOnlyUserPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Azure AI Services Account (Foundry resource)
 // Provides: Content Understanding, OpenAI model hosting
@@ -193,6 +196,20 @@ resource deployerCogServicesUserRole 'Microsoft.Authorization/roleAssignments@20
     principalId: deployerPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUserRoleId)
     principalType: 'User'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role Assignment: Cognitive Services OpenAI User only (e.g., Container App MI)
+// Unlike the full cognitiveServicesUserPrincipalId, this only grants OpenAI access
+// ---------------------------------------------------------------------------
+resource openAIOnlyUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(openAIOnlyUserPrincipalId)) {
+  name: guid(aiServices.id, openAIOnlyUserPrincipalId, cognitiveServicesOpenAIUserRoleId)
+  scope: aiServices
+  properties: {
+    principalId: openAIOnlyUserPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
+    principalType: 'ServicePrincipal'
   }
 }
 
