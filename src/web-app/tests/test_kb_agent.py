@@ -83,9 +83,9 @@ class TestSearchKnowledgeBaseTool:
         _pending_citations.clear()
         _pending_images.clear()
 
-    @patch("app.agent.kb_agent.resolve_image_urls")
+    @patch("app.agent.kb_agent.get_image_url")
     @patch("app.agent.kb_agent.search_kb")
-    def test_returns_json_results(self, mock_search: MagicMock, mock_resolve: MagicMock) -> None:
+    def test_returns_json_results(self, mock_search: MagicMock, mock_get_url: MagicMock) -> None:
         mock_search.return_value = [
             SearchResult(
                 id="article_0",
@@ -98,7 +98,7 @@ class TestSearchKnowledgeBaseTool:
                 score=0.9,
             )
         ]
-        mock_resolve.return_value = []
+        mock_get_url.return_value = "/api/images/article/images/fig.png"
 
         result = search_knowledge_base("test query")
         parsed = json.loads(result)
@@ -107,9 +107,9 @@ class TestSearchKnowledgeBaseTool:
         assert parsed[0]["title"] == "Test Article"
         assert parsed[0]["content"] == "Test content"
 
-    @patch("app.agent.kb_agent.resolve_image_urls")
+    @patch("app.agent.kb_agent.get_image_url")
     @patch("app.agent.kb_agent.search_kb")
-    def test_populates_citations(self, mock_search: MagicMock, mock_resolve: MagicMock) -> None:
+    def test_populates_citations(self, mock_search: MagicMock, mock_get_url: MagicMock) -> None:
         mock_search.return_value = [
             SearchResult(
                 id="a_0", article_id="a", chunk_index=0,
@@ -117,16 +117,16 @@ class TestSearchKnowledgeBaseTool:
                 image_urls=[], score=0.5,
             )
         ]
-        mock_resolve.return_value = []
+        mock_get_url.return_value = "/api/images/a/images/fig.png"
 
         search_knowledge_base("query")
 
         assert len(_pending_citations) == 1
         assert _pending_citations[0].article_id == "a"
 
-    @patch("app.agent.kb_agent.resolve_image_urls")
+    @patch("app.agent.kb_agent.get_image_url")
     @patch("app.agent.kb_agent.search_kb")
-    def test_resolves_images(self, mock_search: MagicMock, mock_resolve: MagicMock) -> None:
+    def test_resolves_images(self, mock_search: MagicMock, mock_get_url: MagicMock) -> None:
         mock_search.return_value = [
             SearchResult(
                 id="a_0", article_id="article", chunk_index=0,
@@ -134,12 +134,13 @@ class TestSearchKnowledgeBaseTool:
                 image_urls=["images/fig.png"], score=0.5,
             )
         ]
-        mock_resolve.return_value = ["https://blob/article/images/fig.png?sas"]
+        mock_get_url.return_value = "/api/images/article/images/fig.png"
 
-        search_knowledge_base("query")
+        result = search_knowledge_base("query")
+        parsed = json.loads(result)
 
-        assert len(_pending_images) == 1
-        assert "fig.png" in _pending_images[0]
+        assert len(parsed[0]["images"]) == 1
+        assert "fig.png" in parsed[0]["images"][0]["url"]
 
     @patch("app.agent.kb_agent.search_kb")
     def test_handles_search_error(self, mock_search: MagicMock) -> None:
