@@ -18,7 +18,7 @@ from azure.identity import DefaultAzureCredential
 from shared.config import config
 
 ANALYZER_ID = "kb_image_analyzer"
-ANALYZER_DEF_PATH = Path(__file__).resolve().parent.parent.parent / "analyzers" / "kb-image-analyzer.json"
+ANALYZER_DEF_PATH = Path(__file__).resolve().parent.parent / "analyzers" / "kb-image-analyzer.json"
 
 # Map CU model names → deployment names in our AI Services account.
 # CU completion models: gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano

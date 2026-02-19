@@ -139,8 +139,8 @@ Create a validation script/make target that confirms the deployed Azure infrastr
   - Local `kb/serving/` folder exists (may be empty)
   - Developer's `az login` identity has the required RBAC roles (Cognitive Services OpenAI User, Cognitive Services User on AI Services; Search Index Data Contributor, Search Service Contributor on AI Search)
 - [x] Add `make validate-infra` target to Makefile
-- [x] Implement `src/functions/manage_analyzers.py` — CLI with `setup`, `deploy`, `delete`, and `status` subcommands for the `kb_image_analyzer` (reads definition from `analyzers/kb-image-analyzer.json`)
-- [x] Create `analyzers/kb-image-analyzer.json` with the analyzer definition from architecture.md (+ `models.completion: gpt-4.1`)
+- [x] Implement `src/functions/manage_analyzers.py` — CLI with `setup`, `deploy`, `delete`, and `status` subcommands for the `kb_image_analyzer` (reads definition from `src/analyzers/kb-image-analyzer.json`)
+- [x] Create `src/analyzers/kb-image-analyzer.json` with the analyzer definition from architecture.md (+ `models.completion: gpt-4.1`)
 - [x] Validation script prints clear pass/fail per check with actionable error messages
 - [x] Add a `make grant-dev-roles` target that assigns the developer's identity the same RBAC roles the Function App has on AI Services and AI Search (uses `az role assignment create`)
 
@@ -149,7 +149,7 @@ Create a validation script/make target that confirms the deployed Azure infrastr
 | `src/functions/manage_analyzers.py` | ✅ |
 | `src/functions/shared/config.py` | ✅ (added `agent_deployment_name`) |
 | `scripts/functions/validate-infra.sh` | ✅ |
-| `analyzers/kb-image-analyzer.json` | ✅ |
+| `src/analyzers/kb-image-analyzer.json` | ✅ |
 | `Makefile` | ✅ (added `grant-dev-roles`, updated `azure-deploy`) |
 
 #### Definition of Done

@@ -299,7 +299,7 @@ Each image is analyzed individually through a **custom Content Understanding ana
 
 The custom analyzer produces richer, more contextual descriptions than the generic `prebuilt-documentSearch` — each image gets dedicated analysis with a prompt tuned for UI screenshots. The extracted `UIElements` and `NavigationPath` fields further enrich the Markdown output and improve search relevance.
 
-The analyzer definition is stored in `analyzers/kb-image-analyzer.json` and managed via `src/functions/manage_analyzers.py`. It must be created once in the Content Understanding resource before running the pipeline (deployed via `make azure-deploy`). Note: CU requires model defaults to be set via `manage_analyzers.py setup` — the `deploy` command auto-runs this. CU forbids hyphens in analyzer IDs, so the actual ID is `kb_image_analyzer`.
+The analyzer definition is stored in `src/analyzers/kb-image-analyzer.json` and managed via `src/functions/manage_analyzers.py`. It must be created once in the Content Understanding resource before running the pipeline (deployed via `make azure-deploy`). Note: CU requires model defaults to be set via `manage_analyzers.py setup` — the `deploy` command auto-runs this. CU forbids hyphens in analyzer IDs, so the actual ID is `kb_image_analyzer`.
 
 ### Output Format
 
@@ -429,12 +429,93 @@ The `{article-id}` folder name is preserved from the source and stored as `artic
 
 ## Custom Analyzer Lifecycle
 
-The `kb-image-analyzer` must exist in the Content Understanding resource before the pipeline can process images. It is managed as part of the standard deployment and cleanup flow:
+The custom `kb-image-analyzer` is not deployed by Bicep infrastructure — it is an **application-level resource** managed by `src/functions/manage_analyzers.py`. The analyzer must exist in the Content Understanding resource before `fn-convert` can process images.
 
-- **`make azure-deploy`** — creates or updates the analyzer (alongside functions and search index)
-- **`make azure-clean`** — deletes the analyzer (alongside storage data and search index)
+### What Needs to Happen
 
-The analyzer definition lives in `analyzers/kb-image-analyzer.json` and is versioned alongside the rest of the codebase.
+Content Understanding custom analyzers require a two-step setup:
+
+1. **Register CU model defaults** — CU needs to know which model deployments in your AI Services account map to its internal model references. This is a one-time configuration per AI Services resource. Without it, custom analyzers fail to create and prebuilt analyzers (like `prebuilt-documentSearch`) silently return empty results.
+
+2. **Create the analyzer** — Submit the analyzer JSON definition to the CU resource. CU validates the field schema, links the completion model (`gpt-4.1`), and makes the analyzer available for image analysis. The analyzer is an async resource: creation returns a poller that must be polled until `status: "succeeded"`.
+
+Both steps are handled automatically by `manage_analyzers.py deploy`.
+
+### Prerequisites
+
+| Prerequisite | Why |
+|---|---|
+| **Azure AI Services resource** provisioned (`azd provision`) | Hosts both Content Understanding and the model deployments |
+| **`gpt-4.1` model deployed** | Completion model used by `kb-image-analyzer` to generate image descriptions |
+| **`gpt-4.1-mini` + `text-embedding-3-large` models deployed** | Required by `prebuilt-documentSearch` (HTML text extraction). Without either, CU silently returns 0 contents |
+| **Cognitive Services User role** on the developer's identity | Required to call CU management APIs via `DefaultAzureCredential` |
+| **`.env` configured** with `AI_SERVICES_ENDPOINT` | Points `manage_analyzers.py` to the correct CU resource |
+
+All model deployments are defined in `infra/modules/ai-services.bicep` and provisioned via `azd provision`.
+
+### Analyzer Definition
+
+The analyzer JSON is version-controlled at `src/analyzers/kb-image-analyzer.json`. It defines:
+
+- **Base analyzer:** `prebuilt-image` (CU's image analysis foundation)
+- **Completion model:** `gpt-4.1` (generates field values from image content)
+- **Field schema:** Three `method: "generate"` fields — `Description`, `UIElements`, `NavigationPath`
+
+> **ID constraint:** CU forbids hyphens in analyzer IDs. The file is named `kb-image-analyzer.json` but the actual analyzer ID registered in CU is `kb_image_analyzer`.
+
+### Management Commands
+
+The CLI (`src/functions/manage_analyzers.py`) provides four subcommands:
+
+| Command | What It Does |
+|---|---|
+| `python -m manage_analyzers setup` | Registers model deployment mappings as CU defaults. Uses JSON Merge Patch to add new mappings and remove stale ones. Idempotent. |
+| `python -m manage_analyzers deploy` | **Auto-runs `setup` first**, then creates or updates the analyzer from `src/analyzers/kb-image-analyzer.json`. Uses `allow_replace=True` so re-running is safe. |
+| `python -m manage_analyzers status` | Checks if the analyzer exists and prints its status and field names. |
+| `python -m manage_analyzers delete` | Deletes the analyzer from CU. No-ops if already deleted. |
+
+All commands run from `src/functions/` and authenticate via `DefaultAzureCredential` (i.e., `az login`).
+
+### Makefile Integration
+
+The analyzer lifecycle is wired into the standard deployment and cleanup flow:
+
+```
+make azure-deploy    # Runs azd deploy, then manage_analyzers deploy (setup + create/update)
+make azure-clean     # Deletes storage data, search index, and the analyzer
+```
+
+For first-time setup or manual management:
+
+```
+cd src/functions
+uv run python -m manage_analyzers deploy   # Deploy (or update) the analyzer
+uv run python -m manage_analyzers status   # Verify it exists and is ready
+uv run python -m manage_analyzers delete   # Remove it from CU
+```
+
+### Updating the Analyzer
+
+To change the analyzer (e.g., modify field descriptions, add new fields, or switch the completion model):
+
+1. Edit `src/analyzers/kb-image-analyzer.json`
+2. Run `make azure-deploy` (or `python -m manage_analyzers deploy` directly)
+3. Re-run `make convert` (or `make azure-convert`) to re-process articles with the updated analyzer
+
+The `deploy` command uses `allow_replace=True`, so it overwrites the existing analyzer definition in-place.
+
+### Model Defaults Registered
+
+`manage_analyzers.py setup` registers these mappings so CU knows which deployments to use:
+
+| CU Model Reference | AI Services Deployment |
+|---|---|
+| `gpt-4.1` | `gpt-4.1` |
+| `gpt-4.1-mini` | `gpt-4.1-mini` |
+| `text-embedding-3-small` | `text-embedding-3-small` |
+| `text-embedding-3-large` | `text-embedding-3-large` |
+
+Stale mappings (from previously deployed models that no longer exist) are automatically removed to prevent CU errors.
 
 ## Design Principles
 

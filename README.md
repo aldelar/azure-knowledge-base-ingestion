@@ -68,8 +68,8 @@ Teams and organizations that:
 │   │   ├── app/main.py  Chainlit entry point (streaming, image proxy, citations)
 │   │   ├── app/agent/   KB agent, search tool, image service, vision middleware
 │   │   └── tests/       pytest test suite
+│   ├── analyzers/       CU custom analyzer definitions (kb-image-analyzer.json)
 │   └── spikes/          Spike/prototype scripts (research, not production)
-├── analyzers/           CU custom analyzer definitions (kb-image-analyzer.json)
 ├── Makefile             Dev workflow targets (local + Azure)
 └── README.md
 ```
