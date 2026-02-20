@@ -26,8 +26,8 @@ This spike answers the open questions from the research doc (§8) with empirical
 - No changes to existing `fn-convert`, `fn-index`, infra Bicep, or the web app
 - No Azure Function deployment — scripts only
 - No search indexing — just produce the serving output for comparison
-- No production readiness — spike code lives in `src/spikes/002-mistral-pipeline/`
-- **No code changes outside `src/spikes/002-mistral-pipeline/`** — no Makefile, no `scripts/`, no infra
+- No production readiness — spike code lives in `src/spikes/002-mistral-document-ai/`
+- **No code changes outside `src/spikes/002-mistral-document-ai/`** — no Makefile, no `scripts/`, no infra
 
 ---
 
@@ -77,7 +77,7 @@ flowchart LR
 ## File Structure
 
 ```
-src/spikes/002-mistral-pipeline/
+src/spikes/002-mistral-document-ai/
 ├── pyproject.toml
 ├── Makefile
 ├── deploy-model.bicep
@@ -216,7 +216,7 @@ The `article.md` format must match the CU convention:
 All commands from the spike folder via the local Makefile:
 
 ```bash
-cd src/spikes/002-mistral-pipeline
+cd src/spikes/002-mistral-document-ai
 
 # 1. Install deps + Playwright browsers
 make install
@@ -268,7 +268,7 @@ Individual commands can also be run directly with `uv run python run.py` and `uv
 
 ## Definition of Done
 
-- [x] `src/spikes/002-mistral-pipeline/` contains all scripts listed above
+- [x] `src/spikes/002-mistral-document-ai/` contains all scripts listed above
 - [x] `deploy-model.bicep` deploys the model via `az deployment group create`
 - [x] `uv run python run.py` processes all 3 staging articles without errors
 - [x] `kb/serving-spike-002/` contains `article.md` + `images/` for all 3 articles

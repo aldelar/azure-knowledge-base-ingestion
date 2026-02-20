@@ -1,5 +1,5 @@
 [project]
-name = "spike-002-mistral-pipeline"
+name = "spike-002-mistral-document-ai"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [

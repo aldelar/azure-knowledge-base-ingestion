@@ -1,7 +1,7 @@
 """Orchestrator: process all KB articles through the Mistral Document AI pipeline.
 
 Usage:
-    cd src/spikes/002-mistral-pipeline
+    cd src/spikes/002-mistral-document-ai
     uv run python run.py
 """
 
