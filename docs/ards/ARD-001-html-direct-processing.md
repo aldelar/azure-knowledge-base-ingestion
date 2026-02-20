@@ -65,7 +65,7 @@ Pass a publicly accessible URL to CU so it can resolve `<img src>` references by
 
 ## Evidence
 
-Empirical testing documented in [architecture-research.md](../research/architecture-research.md) and [architecture-proposal.md](../research/architecture-proposal.md):
+Empirical testing documented in [architecture-research.md](../research/002-architecture-research.md) and [architecture-proposal.md](../research/004-architecture-proposal.md):
 
 | Feature | HTML → CU | PDF → CU |
 |---------|-----------|----------|
@@ -78,6 +78,6 @@ Empirical testing documented in [architecture-research.md](../research/architect
 
 ## References
 
-- [Architecture Proposal — Option 1: HTML-Direct Pipeline](../research/architecture-proposal.md)
-- [Architecture Research — Dropping the PDF Conversion Step](../research/architecture-research.md)
-- [Analyzer Options Research](../research/analyzer-options.md)
+- [Architecture Proposal — Option 1: HTML-Direct Pipeline](../research/004-architecture-proposal.md)
+- [Architecture Research — Dropping the PDF Conversion Step](../research/002-architecture-research.md)
+- [Analyzer Options Research](../research/001-analyzer-options.md)

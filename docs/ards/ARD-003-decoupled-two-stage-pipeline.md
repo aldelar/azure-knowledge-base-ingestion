@@ -89,4 +89,4 @@ Use Durable Functions to orchestrate convert → index as a workflow with fan-ou
 
 - [Architecture Spec — Pipeline Flow](../specs/architecture.md)
 - [Architecture Spec — Blob Storage Layout](../specs/architecture.md)
-- [Architecture Proposal — Option 1: HTML-Direct Pipeline](../research/architecture-proposal.md)
+- [Architecture Proposal — Option 1: HTML-Direct Pipeline](../research/004-architecture-proposal.md)

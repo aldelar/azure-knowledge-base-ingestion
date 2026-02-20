@@ -49,4 +49,4 @@ All `<img>` tags use absolute server paths. The filename portion maps 1:1 to loc
 3. Analyze each image individually through CU
 4. Merge all results into the final markdown
 
-See [architecture-proposal.md](architecture-proposal.md) for the full pipeline design (Option 1: HTML-Direct Pipeline).
+See [architecture-proposal.md](004-architecture-proposal.md) for the full pipeline design (Option 1: HTML-Direct Pipeline).

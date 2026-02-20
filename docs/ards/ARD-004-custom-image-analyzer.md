@@ -96,7 +96,7 @@ Convert HTML → PDF, let CU detect figures via bounding polygons, crop them fro
 
 ## Evidence
 
-From the [analyzer options research](../research/analyzer-options.md):
+From the [analyzer options research](../research/001-analyzer-options.md):
 
 - `prebuilt-image` requires a custom analyzer with `fieldSchema` — not runnable standalone
 - `prebuilt-documentSearch` on a single PNG works but produces generic captions
@@ -113,7 +113,7 @@ From production output, a typical image description block:
 
 ## References
 
-- [Analyzer Options Research](../research/analyzer-options.md)
+- [Analyzer Options Research](../research/001-analyzer-options.md)
 - [Architecture Spec — Image Analysis Custom Analyzer](../specs/architecture.md)
 - [Analyzer Definition](../../src/analyzers/kb-image-analyzer.json)
-- [Spike: Content Understanding](../research/spike-content-understanding.md)
+- [Spike: Content Understanding](../research/003-content-understanding.md)
