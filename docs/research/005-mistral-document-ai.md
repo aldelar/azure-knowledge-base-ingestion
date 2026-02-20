@@ -1,7 +1,7 @@
 # Research: Mistral Document AI as Alternative to Azure Content Understanding
 
 > **Date:** 2026-02-20
-> **Status:** Draft
+> **Status:** Complete (validated via [Spike 002](../spikes/002-mistral-document-ai.md))
 > **Model reviewed:** `mistral-document-ai-2512` (Mistral OCR 3, released December 18, 2025)
 
 ---
@@ -47,7 +47,7 @@ Mistral OCR 3 replaces the now-retired `Mistral-OCR-2503` model (retirement date
 | **Tool calling** | No |
 | **Image extraction** | Yes — detects embedded images, returns bounding boxes and optional base64 |
 | **Table extraction** | Yes — configurable as `null` (inline), `markdown`, or `html` (with colspan/rowspan) |
-| **Hyperlink extraction** | Yes — returns hyperlinks when available |
+| **Hyperlink extraction** | Returned in response `hyperlinks` field, but **not injected into markdown**. PDFs don't carry `href` URLs from the original HTML — hyperlinks must be recovered separately from the source HTML. |
 | **Header/footer extraction** | Yes (new in 2512) — via `extract_header` / `extract_footer` parameters |
 | **Structured output** | Via "Annotations" feature — extract typed fields with JSON schema |
 | **Batch processing** | Supported via Mistral Batch Inference service |
@@ -64,7 +64,9 @@ Mistral OCR 3 replaces the now-retired `Mistral-OCR-2503` model (retirement date
 ### API Endpoint
 
 On Mistral's platform: `POST /v1/ocr` with the `mistralai` Python SDK.
-On Azure Foundry: deployed as a serverless endpoint with the same `/v1/ocr` path.
+On Azure Foundry: the endpoint path is **`/providers/mistral/azure/ocr`** on the `services.ai.azure.com` host (not the `/v1/ocr` path from the Mistral SDK). The host must be derived from the Cognitive Services endpoint by replacing `cognitiveservices.azure.com` with `services.ai.azure.com`.
+
+> **Spike finding:** Neither the Azure docs nor the Mistral SDK document this path. It was discovered empirically after systematic testing of 50+ URL combinations.
 
 ---
 
@@ -93,12 +95,18 @@ ocr_response = client.ocr.process(
 
 ### Azure Foundry Usage
 
-On Azure, the model is deployed as a serverless API and called via REST:
+On Azure, the model is deployed via Bicep (model format `Mistral AI`, SKU `GlobalStandard`) and called via REST. Auth uses **Entra ID bearer tokens** (not API keys) via `DefaultAzureCredential` with scope `https://cognitiveservices.azure.com/.default`:
 
 ```bash
+# Derive the Foundry endpoint from the Cognitive Services endpoint
+# e.g. https://ai-kbidx-dev.cognitiveservices.azure.com/
+#    → https://ai-kbidx-dev.services.ai.azure.com/
+
+TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
+
 curl --request POST \
-  --url https://<your-endpoint>/v1/ocr \
-  --header 'Authorization: Bearer <api-key>' \
+  --url https://<account>.services.ai.azure.com/providers/mistral/azure/ocr \
+  --header "Authorization: Bearer $TOKEN" \
   --header 'Content-Type: application/json' \
   --data '{
     "model": "mistral-document-ai-2512",
@@ -111,6 +119,8 @@ curl --request POST \
 ```
 
 > **Azure limitation:** The Azure deployment requires **base64-encoded data** for the `document_url` parameter. Direct HTTP URLs to PDFs are not supported on Azure — only the Mistral platform supports fetching from URLs.
+>
+> **Deployment note:** CLI deployment via `az cognitiveservices account deployment create` fails for Mistral models. Use **Bicep** with `format: 'Mistral AI'` (API version `2024-04-01-preview`) instead.
 
 ### Response Structure
 
@@ -200,7 +210,7 @@ Mistral offers three services under the Document AI umbrella, all accessible via
 
 4. **No summary field** — CU's `prebuilt-documentSearch` generates a summary automatically. With Mistral, there is no built-in equivalent. However, this is **not a gap in practice** — our `fn-index` pipeline never reads or indexes the summary; it only consumes `article.md`. The `summary.txt` file is a dead artifact. No replacement needed.
 
-5. **Hyperlinks returned from PDF** — Mistral extracts hyperlinks from PDFs (returned in the `hyperlinks` field). This could solve the problem we had with CU dropping hyperlinks from HTML input.
+5. **Hyperlinks NOT embedded in markdown** — Mistral returns a `hyperlinks` field in the response, but hyperlinks from the original HTML are **not preserved through PDF rendering** — PDFs don't carry `href` URLs. In practice, hyperlinks must be recovered by scanning the source HTML for `<a>` tags and re-injecting them into the OCR markdown via text matching. This is the same approach used by the CU pipeline.
 
 ---
 
@@ -262,22 +272,23 @@ kb/serving/<article>/
 
 We want a strategy that is **simple and deterministic** — no complex image comparison or LLM processing.
 
-#### Recommended: Inject Visible Text Markers Before Each Image
+#### Implemented: Replace `<img>` Tags with Visible Text Markers
 
-Before rendering HTML → PDF with Playwright, pre-process the HTML to inject a small visible text marker immediately before each `<img>` tag that references a source image in our folder.
+Before rendering HTML → PDF with Playwright, pre-process the HTML to **replace** each `<img>` tag (and any wrapping `<a>` lightbox link) with a visible text marker `[[IMG:<filename>]]`. The actual image is removed from the PDF entirely — we don't need Mistral to detect it since we have the source files in the staging directory.
+
+The marker is rendered in normal-sized text (14px) so OCR reliably preserves it.
 
 **Before injection:**
 ```html
 <p>The architecture is shown below:</p>
-<img src="images/architecture-diagram.png" alt="Architecture">
+<a href="images/architecture-diagram.png"><img src="images/architecture-diagram.png" alt="Architecture"></a>
 <p>As you can see, the pipeline has three stages.</p>
 ```
 
 **After injection:**
 ```html
 <p>The architecture is shown below:</p>
-<div style="font-size: 6px; color: #aaa; margin: 0; padding: 0; line-height: 1;">⟦IMG:architecture-diagram.png⟧</div>
-<img src="images/architecture-diagram.png" alt="Architecture">
+<p style="margin:0.4em 0;font-size:14px;">[[IMG:architecture-diagram.png]]</p>
 <p>As you can see, the pipeline has three stages.</p>
 ```
 
@@ -285,88 +296,80 @@ When Playwright renders this to PDF and Mistral OCR processes it, the output mar
 ```markdown
 The architecture is shown below:
 
-⟦IMG:architecture-diagram.png⟧
-
-![img-0.jpeg](img-0.jpeg)
+[[IMG:architecture-diagram.png]]
 
 As you can see, the pipeline has three stages.
 ```
 
-**Mapping is now trivial:** scan the markdown for `⟦IMG:<filename>⟧` markers, then associate the next `![img-N.jpeg](img-N.jpeg)` placeholder with that source file.
+**Mapping is now trivial:** scan the markdown for `[[IMG:<filename>]]` markers. Each marker self-identifies its source file. No positional correlation with Mistral's `img-N.jpeg` references is needed — the markers **are** the image placeholders.
 
-#### Implementation Sketch
+> **Spike finding:** The original research proposed 6px gray `⟦IMG:⟧` markers (using Unicode mathematical angle brackets) placed *before* the `<img>` tag, relying on OCR to read the tiny text and then correlating with the next `img-N.jpeg` placeholder. This failed — 6px text was too small for OCR to reliably preserve. Increasing to 14px and **replacing** the image entirely proved far more robust: the markers always survive OCR, and the approach handles edge cases like the same image appearing multiple times in a document (each occurrence gets its own marker).
+
+#### Implementation
 
 ```python
 import re
 from pathlib import Path
 
 
-def inject_image_markers(html: str) -> str:
-    """Inject source-filename markers before each <img> tag in the HTML.
+def _replace_images_with_markers(html: str) -> str:
+    """Replace each <img> (and its wrapping <a> if present) with a
+    visible [[IMG:<filename>]] text marker."""
 
-    The markers are small visible text that Mistral OCR will read and include
-    in the output markdown, enabling deterministic image-to-source mapping.
-    """
-    def _add_marker(match: re.Match) -> str:
-        img_tag = match.group(0)
-        src_match = re.search(r'src=["\']([^"\']+)["\']', img_tag)
-        if src_match:
-            filename = Path(src_match.group(1)).name
-            marker = (
-                f'<div style="font-size:6px;color:#aaa;margin:0;padding:0;'
-                f'line-height:1;">\u27e6IMG:{filename}\u27e7</div>'
-            )
-            return marker + img_tag
-        return img_tag
+    def _img_to_marker(match: re.Match) -> str:
+        tag = match.group(0)
+        src_match = re.search(r'src=["\']([^"\']+)["\']', tag)
+        if not src_match:
+            return tag
+        filename = Path(src_match.group(1)).name
+        return (
+            f'<p style="margin:0.4em 0;font-size:14px;">'
+            f'[[IMG:{filename}]]</p>'
+        )
 
-    return re.sub(r'<img\b[^>]*/?>', _add_marker, html)
+    # First, unwrap <a> tags that wrap <img> tags (lightbox links)
+    html = re.sub(
+        r'<a\b[^>]*>\s*(<img\b[^>]*>)\s*</a>',
+        r'\1',
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # Then replace each <img> with a marker
+    return re.sub(r'<img\b[^>]*>', _img_to_marker, html, flags=re.IGNORECASE)
 
 
-def map_images_from_markdown(markdown: str) -> dict[str, str]:
-    """Parse Mistral OCR markdown to map img-N placeholders to source filenames.
-
-    Returns dict like {"img-0.jpeg": "architecture-diagram.png", ...}
-    """
-    mapping: dict[str, str] = {}
-    lines = markdown.split('\n')
-    pending_source: str | None = None
-
-    for line in lines:
-        # Look for our injected marker
-        marker_match = re.search(r'\u27e6IMG:(.+?)\u27e7', line)
-        if marker_match:
-            pending_source = marker_match.group(1)
-            continue
-        # Look for Mistral image placeholder
-        img_match = re.search(r'!\[([^\]]*)\]\(([^)]+)\)', line)
-        if img_match and pending_source:
-            placeholder_id = img_match.group(2)  # e.g. "img-0.jpeg"
-            mapping[placeholder_id] = pending_source
-            pending_source = None
-
-    return mapping
+def find_image_markers(pages_markdown: list[str]) -> tuple[str, list[str]]:
+    """Scan OCR markdown for [[IMG:...]] markers and return source filenames."""
+    import re
+    MARKER_RE = re.compile(r"\[\[IMG:([^\]]+?)\]\]")
+    full_markdown = "\n\n".join(pages_markdown)
+    source_filenames = [m.group(1).strip() for m in MARKER_RE.finditer(full_markdown)]
+    return full_markdown, source_filenames
 ```
 
 #### Why This Works
 
 | Property | Assessment |
 |---|---|
-| **OCR readability** | 6px text is small but visible; OCR models excel at reading text — this will be captured |
-| **Deterministic** | Direct filename → placeholder mapping via text, no probabilistic matching |
+| **OCR readability** | 14px text in a normal `<p>` — OCR reads it perfectly every time |
+| **Deterministic** | Each marker carries its own filename — no positional correlation needed |
+| **Handles duplicates** | Same image used twice in a document → two markers, both found |
 | **No image processing** | No perceptual hashing, pixel comparison, or embedding similarity needed |
-| **Robust to quality loss** | Works regardless of PDF rendering quality or JPEG compression |
-| **Low complexity** | ~30 lines of Python for injection + parsing |
-| **Marker uniqueness** | `⟦IMG:...⟧` uses Unicode mathematical angle brackets — unlikely to appear in source HTML |
+| **Robust to quality loss** | Images aren't even in the PDF — no quality concerns |
+| **Low complexity** | ~30 lines of Python for injection + scanning |
+| **Marker format** | `[[IMG:...]]` uses ASCII brackets — simple, unlikely to appear in source HTML |
 
-#### Alternative Strategies Considered
+#### Alternative Strategies Considered (and Tested)
 
 | Strategy | Pros | Cons | Verdict |
 |---|---|---|---|
-| **Sequential correlation** (img-0 = first `<img>`, img-1 = second, etc.) | Zero setup | Fragile — CSS reordering, missing images, decorators can break mapping | Fallback only |
+| **6px gray markers before `<img>`** (original proposal) | Minimal visual impact | OCR failed to read 6px text — markers silently dropped | **Rejected (tested)** |
+| **Positional matching** (img-0 = first `<img>`, etc.) | Works when marker OCR fails | Fails when same image appears twice; breaks if OCR merges/drops images | **Rejected (tested)** — worked for 2 of 3 articles but failed for duplicate-image edge case |
+| **14px markers replacing `<img>`** (final approach) | OCR reads perfectly; handles duplicates; simple | Images not in PDF (not needed — we use source files) | **Implemented ✅** |
 | **Perceptual hashing** (pHash/dHash comparing extracted vs source) | Handles reordering | PDF rendering degrades quality; needs `imagehash` + Pillow deps; may have false positives | Over-engineered |
 | **Visual embedding similarity** (encode both images with a vision model) | Robust matching | Expensive (LLM call per image pair); overkill | Rejected |
-| **Alt-text enrichment** (inject filename into `alt` attribute) | No visual impact | Mistral may or may not include alt text in output; unreliable | Rejected |
-| **Hidden text** (`font-size: 0` or `display: none`) | No visual impact | OCR may not detect invisible text; CSS hidden text often ignored by renderers | Rejected |
+| **Alt-text enrichment** (inject filename into `alt` attribute) | No visual impact | OCR may or may not include alt text in output; unreliable | Rejected |
+| **Hidden text** (`font-size: 0` or `display: none`) | No visual impact | OCR does not detect invisible text; CSS hidden text ignored by renderers | Rejected |
 
 #### Validation Plan for Spike
 
@@ -498,52 +501,66 @@ The **two-step approach** (text separately, images separately) would only make s
 
 ---
 
-## 8. Open Questions for Spike
+## 8. Open Questions — Answered by Spike
 
-If we proceed with a spike to evaluate Mistral Document AI, the following questions need empirical testing:
+All questions below were answered empirically by [Spike 002](../spikes/002-mistral-document-ai.md).
 
-1. **PDF image extraction quality** — When Mistral extracts images from a PDF rendered from our HTML, what quality are the base64 images vs the original source PNGs? Is there noticeable quality loss from the PDF rendering step?
+1. **PDF image extraction quality** — **Not applicable.** Our final implementation removes images from the PDF entirely and replaces them with text markers. Source images are used directly from the staging directory, so there is zero quality loss.
 
-2. **Image-to-source mapping** — Does the HTML marker injection strategy (§5a) work reliably? Does Mistral OCR faithfully read the injected marker text from the rendered PDF? Are markers correctly positioned adjacent to each image placeholder in the output markdown?
+2. **Image-to-source mapping** — **Works reliably.** The initial 6px gray `⟦IMG:⟧` marker approach failed (OCR dropped the tiny text). The final solution — replacing `<img>` tags with 14px `[[IMG:filename]]` markers — works perfectly. Markers survive OCR 100% of the time across all test articles, including edge cases where the same image appears multiple times.
 
-3. **Hyperlink fidelity** — Do hyperlinks from the original HTML survive the Playwright rendering and get extracted by Mistral? (CU failed at this from HTML input but succeeded from PDF.)
+3. **Hyperlink fidelity** — **Hyperlinks do NOT survive PDF rendering.** PDFs don't carry `href` URLs from the original HTML. Mistral's `hyperlinks` field returns limited data. Solution: extract `<a>` tags from the source HTML and re-inject links into the OCR markdown via word-boundary text matching. This matches CU's behavior — both pipelines recover links the same way.
 
-4. **Azure endpoint limitations** — The Azure deployment limits to 30 pages / 30MB. Are our articles within these limits? (Our current articles are single-page HTML, so this should be fine.)
+4. **Azure endpoint limitations** — **30 pages / 30MB is not a concern.** Our KB articles render to 4–9 PDF pages. Well within limits.
 
-5. **Markdown quality comparison** — Side-by-side comparison of Mistral OCR markdown vs CU `prebuilt-documentSearch` markdown for the same rendered PDF. Which produces better structure, heading hierarchy, table formatting?
+5. **Markdown quality comparison** — **Comparable.** Mistral OCR produces clean markdown with good heading hierarchy and table formatting. Character counts are within ~3% of CU output. Minor differences in whitespace and line breaks, but semantically equivalent.
 
-6. **LLM image description quality** — Using GPT-4.1 directly for image descriptions vs CU's custom `kb-image-analyzer` — is quality comparable? Can we replicate the `Description`, `UIElements`, `NavigationPath` schema?
+6. **LLM image description quality** — **Comparable.** GPT-4.1 vision produces descriptions following the same `Description`, `UIElements`, `NavigationPath` schema as CU's `kb-image-analyzer`. Quality is at least as good since both use GPT-4.1 under the hood.
 
-7. **Azure API compatibility** — Does the Azure-deployed `mistral-document-ai-2512` support all features (table_format, extract_header, include_image_base64) or is it a subset?
+7. **Azure API compatibility** — **Partially.** The `include_image_base64` parameter works. `table_format`, `extract_header`, and `extract_footer` were not tested (not needed for our pipeline). The key discovery was the non-obvious endpoint path: `/providers/mistral/azure/ocr` on the `services.ai.azure.com` host.
 
-8. **End-to-end latency** — Playwright render + Mistral OCR + N×GPT-4.1 image calls vs CU HTML + N×CU image calls. Which is faster?
+8. **End-to-end latency** — **Comparable.** Processing 3 articles takes ~45 seconds total (Playwright render + OCR + GPT-4.1 descriptions). The OCR step itself is fast (~4s per article). GPT-4.1 image description calls dominate latency in both pipelines.
 
 ---
 
-## 9. Recommendation
+## 9. Conclusion
 
-### Verdict: Worth Spiking, Not a Clear Win
+### Verdict: Spike Successful — Viable LLM-Centric Alternative to CU
 
-Mistral Document AI is a strong OCR model with excellent PDF→markdown capabilities, competitive pricing, and clean image extraction. However, for our specific pipeline:
+Mistral Document AI is a **proven alternative** to Azure Content Understanding for our KB article conversion pipeline. [Spike 002](../spikes/002-mistral-document-ai.md) demonstrated a fully working 5-step pipeline that produces output matching CU's quality:
 
-- **It reintroduces the Playwright/PDF dependency** we specifically eliminated in ARD-001
-- **It lacks native HTML support**, which CU provides
-- **It doesn't generate image descriptions** — we'd need GPT-4.1 vision calls, adding a dependency
-- ~~Summary not generated~~ — not actually needed; `fn-index` never uses it
+| Metric | CU Pipeline | Mistral Pipeline |
+|---|---|---|
+| **Images detected** | 2, 2, 2 | 2, 2, 2 |
+| **Hyperlinks recovered** | 30, 8, 82 | 30, 8, 82 |
+| **Markdown quality** | Baseline | Comparable (~3% character count variance) |
+| **Image descriptions** | GPT-4.1 via CU analyzer | GPT-4.1 direct — same model |
+| **Output format** | `article.md` + `images/` | Identical structure |
 
-The most compelling reason to explore it would be:
-1. **Better image extraction from PDFs** — Mistral returns clean base64 images vs CU's bounding polygon approach that requires PyMuPDF cropping
-2. **Hyperlink extraction from PDFs** — if Mistral reliably extracts hyperlinks from the rendered PDF, it solves a gap we had with CU on HTML
-3. **Pricing transparency** — $2/1,000 pages is simple and potentially cheaper than CU
-4. **Multi-cloud flexibility** — available on Azure, Mistral platform, and self-hosted
+### Key Learnings
 
-### Suggested Next Step
+1. **Marker-based image mapping works** — Replacing `<img>` tags with visible `[[IMG:filename]]` text markers is simple, deterministic, and handles all edge cases including duplicate images.
 
-Run a focused spike comparing the same KB article processed through both pipelines:
-1. **Current:** HTML → CU (text) + images → CU (descriptions) → merged MD
-2. **Proposed:** HTML → PDF (Playwright) → Mistral OCR → image mapping via markers → GPT-4.1 (descriptions) → merged MD
+2. **Hyperlinks must be recovered from HTML** — Neither CU nor Mistral reliably extracts hyperlinks from HTML→PDF rendering. Both pipelines need a post-processing step that scans the source HTML for `<a>` tags and re-injects links via text matching.
 
-Compare: markdown quality, image mapping accuracy, hyperlink preservation, end-to-end latency, and cost.
+3. **Azure deployment is non-trivial** — CLI deployment fails for Mistral models; Bicep with `format: 'Mistral AI'` is required. The OCR endpoint path (`/providers/mistral/azure/ocr` on `services.ai.azure.com`) is undocumented and was discovered empirically.
+
+4. **No SDK needed** — Raw REST calls via `httpx` with Entra ID bearer tokens work well. The `mistralai` Python SDK is unnecessary on Azure.
+
+5. **Playwright dependency returns** — The pipeline requires HTML→PDF rendering, reintroducing the Playwright/Chromium dependency that ARD-001 eliminated. This is acceptable for a spike but should be weighed for production adoption.
+
+### When to Choose This Pipeline
+
+- **LLM-centric architecture** — When you want the document processing pipeline to be fully LLM-driven rather than dependent on a single Azure service
+- **Multi-cloud flexibility** — Mistral is available on Azure, Mistral's own platform, and self-hosted
+- **DOCX/PPTX support** — If KB sources expand beyond HTML to include Office formats that CU doesn't support
+- **Cost optimization at scale** — Mistral batch pricing ($1/1,000 pages) may be advantageous for large-scale ingestion
+
+### When to Stay with CU
+
+- **Native HTML support** — CU processes HTML directly without the PDF rendering step, which is simpler
+- **Integrated image analysis** — CU's `kb-image-analyzer` is a single service call vs. separate GPT-4.1 calls
+- **No Playwright dependency** — CU avoids the headless browser requirement in production
 
 ---
 
