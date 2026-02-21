@@ -22,6 +22,9 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | → Embedding Deployment | `ai-services.bicep` | `text-embedding-3-small` | GlobalStandard, 120K TPM |
 | → Agent Deployment | `ai-services.bicep` | `gpt-5-mini` | GlobalStandard, 30K TPM |
 | → CU Completion Deployment | `ai-services.bicep` | `gpt-4.1` | GlobalStandard, 30K TPM |
+| → CU Internal: Embedding † | `ai-services.bicep` | `text-embedding-3-large` | GlobalStandard, 120K TPM |
+| → CU Internal: Analysis † | `ai-services.bicep` | `gpt-4.1-mini` | GlobalStandard, 30K TPM |
+| → Mistral OCR Deployment | `ai-services.bicep` | `mistral-document-ai-2512` | GlobalStandard, capacity 1 |
 | Azure AI Search | `search.bicep` | `srch-kbidx-{env}` | Free, 1 partition, 1 replica |
 | Function App | `function-app.bicep` | `func-kbidx-{env}` | Flex Consumption (FC1), Python 3.11, Linux |
 | App Service Plan | `function-app.bicep` | `plan-kbidx-{env}` | FlexConsumption / FC1 |
@@ -89,7 +92,7 @@ The module accepts an optional `contributorPrincipalId` parameter. When provided
 
 ### Azure AI Services (`ai-services.bicep`)
 
-A single **AIServices** (Foundry) resource hosting Content Understanding and five model deployments.
+A single **AIServices** (Foundry) resource hosting Content Understanding and six model deployments.
 
 | Setting | Value |
 |---------|-------|
@@ -104,10 +107,13 @@ A single **AIServices** (Foundry) resource hosting Content Understanding and fiv
 | Deployment | Model | SKU | Capacity | Purpose |
 |-----------|-------|-----|----------|---------|
 | `text-embedding-3-small` | OpenAI `text-embedding-3-small` v1 | GlobalStandard | 120K TPM | Vector embeddings for fn-index (1536 dimensions) |
-| `text-embedding-3-large` | OpenAI `text-embedding-3-large` v1 | GlobalStandard | 120K TPM | Required by CU `prebuilt-documentSearch` for field extraction |
+| `text-embedding-3-large` | OpenAI `text-embedding-3-large` v1 | GlobalStandard | 120K TPM | CU-internal † — required by `prebuilt-documentSearch` for field extraction |
 | `gpt-5-mini` | OpenAI `gpt-5-mini` v2025-08-07 | GlobalStandard | 30K TPM | Future agent chat/reasoning |
-| `gpt-4.1` | OpenAI `gpt-4.1` v2025-04-14 | GlobalStandard | 30K TPM | Content Understanding custom analyzer completion model |
-| `gpt-4.1-mini` | OpenAI `gpt-4.1-mini` v2025-04-14 | GlobalStandard | 30K TPM | Required by CU `prebuilt-documentSearch` for document analysis |
+| `gpt-4.1` | OpenAI `gpt-4.1` v2025-04-14 | GlobalStandard | 30K TPM | CU custom analyzer completion + Mistral pipeline image descriptions (GPT-4.1 vision) |
+| `gpt-4.1-mini` | OpenAI `gpt-4.1-mini` v2025-04-14 | GlobalStandard | 30K TPM | CU-internal † — required by `prebuilt-documentSearch` for document analysis |
+| `mistral-document-ai-2512` | Mistral AI `mistral-document-ai-2512` | GlobalStandard | 1 | Mistral Document AI OCR for `fn_convert_mistral` pipeline |
+
+> **†** `text-embedding-3-large` and `gpt-4.1-mini` are **not called by application code** — they are internal dependencies of CU's `prebuilt-documentSearch`. Without either deployed, CU silently returns 0 contents. These models are only needed when using the Content Understanding backend (`fn_convert_cu`).
 
 Model deployments are serialized (`dependsOn`) to avoid Azure API conflicts.
 
@@ -162,6 +168,7 @@ The search index (`kb-articles`) is created by application code at runtime, not 
 | `EMBEDDING_DEPLOYMENT_NAME` | `text-embedding-3-small` | Model deployment name for embeddings |
 | `SEARCH_ENDPOINT` | AI Search endpoint | Push chunks to search index |
 | `SEARCH_INDEX_NAME` | `kb-articles` (hardcoded default) | Target search index |
+| `MISTRAL_DEPLOYMENT_NAME` | `mistral-document-ai-2512` | Mistral Document AI OCR model for `fn_convert_mistral` |
 
 The Function App's own storage account gets **Storage Blob Data Owner** (role `b7e6dc6d-f1e8-4753-8033-0f276bb0955b`) granted to the Function App identity — required for Flex Consumption deployment and `AzureWebJobsStorage` access.
 
@@ -341,6 +348,7 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `EMBEDDING_DEPLOYMENT_NAME` | `text-embedding-3-small` |
 | `AGENT_DEPLOYMENT_NAME` | `gpt-5-mini` |
 | `CU_COMPLETION_DEPLOYMENT_NAME` | `gpt-4.1` |
+| `MISTRAL_DEPLOYMENT_NAME` | `mistral-document-ai-2512` |
 | `SEARCH_SERVICE_NAME` | `srch-kbidx-dev` |
 | `SEARCH_ENDPOINT` | `https://srch-kbidx-dev.search.windows.net` |
 | `FUNCTION_APP_NAME` | `func-kbidx-dev` |
@@ -359,9 +367,10 @@ The following values are exported by `main.bicep` and available as AZD environme
 |---|----------|-----------|
 | 1 | **Flex Consumption plan** over Consumption | Better cold-start performance, VNet support, instance memory control (2 GB). Ideal for AI workloads with moderate execution times. |
 | 2 | **Three separate storage accounts** | Staging, serving, and functions runtime are isolated for security, lifecycle management, and independent scaling. Shared key access is disabled on staging/serving. |
-| 3 | **AIServices kind** (Foundry) | Single resource hosts Content Understanding, OpenAI models (embeddings + agent), avoiding multiple Cognitive Services accounts. |
+| 3 | **AIServices kind** (Foundry) | Single resource hosts Content Understanding, OpenAI models (embeddings + agent), and Mistral models, avoiding multiple Cognitive Services accounts. |
 | 4 | **Free search tier** | Supports up to 3 indexes, 50 MB storage, vector search, and semantic search — sufficient for dev. Upgrade path to Basic/Standard is straightforward. |
 | 5 | **System-assigned managed identity** | Simplest identity model — lifecycle tied to the Function App. No credential rotation or secret management required. |
 | 6 | **East US 2 region** | Broadest model availability for the required services: Content Understanding (GA), text-embedding-3-small, gpt-5-mini, Flex Consumption, and AI Search. |
 | 7 | **Modular Bicep structure** | Each service is a self-contained module with optional RBAC parameters. Modules are re-deployed with role assignments after the Function App identity is available. |
 | 8 | **GlobalStandard model SKU** | Provides highest availability and regional flexibility for OpenAI model deployments. Uses Microsoft-managed capacity across Azure regions. |
+| 9 | **Mistral Document AI deployment** | `mistral-document-ai-2512` (format `Mistral AI`) is deployed alongside OpenAI models in the same AIServices resource. The `fn_convert_mistral` pipeline depends on this model plus GPT-4.1 for vision. Requires Playwright (headless Chromium) at runtime for HTML → PDF rendering. |

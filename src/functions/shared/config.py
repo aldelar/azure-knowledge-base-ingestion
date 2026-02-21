@@ -39,6 +39,9 @@ class Config:
     # Agent / completion model deployment name
     agent_deployment_name: str
 
+    # Mistral Document AI deployment name
+    mistral_deployment_name: str
+
     # Azure AI Search
     search_endpoint: str
     search_index_name: str
@@ -88,6 +91,7 @@ def _load_config() -> Config:
         ai_services_endpoint=os.environ["AI_SERVICES_ENDPOINT"],
         embedding_deployment_name=os.environ.get("EMBEDDING_DEPLOYMENT_NAME", "text-embedding-3-small"),
         agent_deployment_name=os.environ.get("AGENT_DEPLOYMENT_NAME", "gpt-5-mini"),
+        mistral_deployment_name=os.environ.get("MISTRAL_DEPLOYMENT_NAME", "mistral-document-ai-2512"),
         search_endpoint=os.environ["SEARCH_ENDPOINT"],
         search_index_name=os.environ.get("SEARCH_INDEX_NAME", "kb-articles"),
         staging_blob_endpoint=os.environ.get("STAGING_BLOB_ENDPOINT", ""),

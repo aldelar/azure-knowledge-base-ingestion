@@ -1,4 +1,4 @@
-"""Tests for fn_convert.html_parser — HTML DOM parsing for image/link maps.
+"""Tests for fn_convert_cu.html_parser — HTML DOM parsing for image/link maps.
 
 Pure-local tests (no Azure calls). Runs against the sample articles in
 ``kb/staging/`` and synthetic HTML fragments for edge cases.
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from fn_convert.html_parser import extract_image_map, extract_link_map
+from fn_convert_cu.html_parser import extract_image_map, extract_link_map
 
 # ---------------------------------------------------------------------------
 # Paths (computed once, no fixture dependency)

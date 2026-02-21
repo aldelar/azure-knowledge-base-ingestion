@@ -1,10 +1,32 @@
 #!/usr/bin/env bash
 # scripts/functions/convert.sh — Run fn-convert for each article in kb/staging/
+#
+# Usage:
+#   bash scripts/functions/convert.sh content-understanding
+#   bash scripts/functions/convert.sh mistral-doc-ai
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 STAGING_DIR="$REPO_ROOT/kb/staging"
 SERVING_DIR="$REPO_ROOT/kb/serving"
+
+# --- Determine which convert module to use ---
+ANALYZER="${1:-}"
+case "$ANALYZER" in
+    content-understanding)
+        MODULE="fn_convert_cu"
+        ;;
+    mistral-doc-ai)
+        MODULE="fn_convert_mistral"
+        ;;
+    *)
+        echo "Error: analyzer argument is required." >&2
+        echo "Usage:" >&2
+        echo "  bash $0 content-understanding" >&2
+        echo "  bash $0 mistral-doc-ai" >&2
+        exit 1
+        ;;
+esac
 
 if [ ! -d "$STAGING_DIR" ] || [ -z "$(ls -A "$STAGING_DIR" 2>/dev/null)" ]; then
     echo "No articles found in kb/staging/. Add article folders first."
@@ -14,13 +36,15 @@ fi
 # Ensure serving directory exists
 mkdir -p "$SERVING_DIR"
 
+echo "Using analyzer: $ANALYZER (module: $MODULE)"
+
 for article_dir in "$STAGING_DIR"/*/; do
     article_id="$(basename "$article_dir")"
     echo ""
-    echo "=== fn-convert: $article_id ==="
+    echo "=== fn-convert ($ANALYZER): $article_id ==="
     output_dir="$SERVING_DIR/$article_id"
     mkdir -p "$output_dir"
-    (cd "$REPO_ROOT/src/functions" && uv run python -m fn_convert "$article_dir" "$output_dir")
+    (cd "$REPO_ROOT/src/functions" && uv run python -m "$MODULE" "$article_dir" "$output_dir")
 done
 
 echo ""

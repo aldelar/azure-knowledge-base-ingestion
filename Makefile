@@ -20,12 +20,12 @@ help: ## Show available targets
 	@echo "  Local Development"
 	@echo "  ─────────────────"
 	@grep -E '^(dev-|convert|index|test|validate|grant|app)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-44s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  Azure Operations"
 	@echo "  ─────────────────"
 	@grep -E '^azure-[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-44s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
 # ------------------------------------------------------------------------------
@@ -85,8 +85,14 @@ test: ## Run unit tests (pytest)
 validate-infra: ## Validate Azure infra is ready for local dev
 	@bash scripts/functions/validate-infra.sh
 
-convert: ## Run fn-convert locally (kb/staging → kb/serving)
-	@bash scripts/functions/convert.sh
+convert: ## Run fn-convert locally (analyzer=content-understanding|mistral-doc-ai)
+ifndef analyzer
+	@echo "Error: analyzer is required. Usage:" >&2
+	@echo "  make convert analyzer=content-understanding" >&2
+	@echo "  make convert analyzer=mistral-doc-ai" >&2
+	@exit 1
+endif
+	@bash scripts/functions/convert.sh $(analyzer)
 
 index: ## Run fn-index locally (kb/serving → Azure AI Search)
 	@bash scripts/functions/index.sh
@@ -153,12 +159,19 @@ azure-upload-staging: ## Upload local kb/staging articles to Azure staging blob
 	done
 	@echo "Done."
 
-azure-convert: ## Trigger fn-convert in Azure (processes staging → serving)
-	@echo "Triggering fn-convert Azure Function..."
+azure-convert: ## Trigger fn-convert in Azure (analyzer=content-understanding|mistral-doc-ai)
+ifndef analyzer
+	@echo "Error: analyzer is required. Usage:" >&2
+	@echo "  make azure-convert analyzer=content-understanding" >&2
+	@echo "  make azure-convert analyzer=mistral-doc-ai" >&2
+	@exit 1
+endif
+	@echo "Triggering fn-convert Azure Function (analyzer=$(analyzer))..."
 	@APP_NAME=$$(azd env get-value FUNCTION_APP_NAME) && \
 	RG=$$(azd env get-value RESOURCE_GROUP) && \
 	KEY=$$(az functionapp keys list --name $$APP_NAME --resource-group $$RG --query "functionKeys.default" -o tsv) && \
-	ENDPOINT="https://$$APP_NAME.azurewebsites.net/api/convert?code=$$KEY" && \
+	ROUTE=$$(if [ "$(analyzer)" = "content-understanding" ]; then echo "convert"; else echo "convert-mistral"; fi) && \
+	ENDPOINT="https://$$APP_NAME.azurewebsites.net/api/$$ROUTE?code=$$KEY" && \
 	echo "  POST $$ENDPOINT" && \
 	curl -sf --max-time 600 -X POST "$$ENDPOINT" -H "Content-Type: application/json" -d '{}' | python3 -m json.tool
 	@echo ""

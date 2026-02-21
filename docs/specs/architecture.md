@@ -6,7 +6,7 @@
 
 The solution is a two-stage Azure Functions pipeline that transforms HTML knowledge base articles into an AI-searchable index with image support.
 
-- **Stage 1 (`fn-convert`)** — Converts source articles (HTML + images) into clean Markdown with AI-generated image descriptions, outputting to a normalized serving layer.
+- **Stage 1 (`fn-convert`)** — Converts source articles (HTML + images) into clean Markdown with AI-generated image descriptions, outputting to a normalized serving layer. Two interchangeable backends are available: **Content Understanding** (`fn_convert_cu`) and **Mistral Document AI** (`fn_convert_mistral`), selected at runtime via the `analyzer=` Makefile argument.
 - **Stage 2 (`fn-index`)** — Chunks the Markdown, embeds it, and pushes chunks + image references into Azure AI Search.
 
 The two stages are decoupled by a **serving layer** (Blob Storage), making `fn-index` source-format agnostic. Future source types (PDF, audio, PowerPoint) only require new `fn-convert` variants — `fn-index` stays unchanged.
@@ -26,9 +26,9 @@ flowchart LR
         C4["Merge MD + image descriptions"]
     end
 
-    subgraph CU["Azure Content<br/>Understanding"]
-        CU1["HTML → MD<br/>(prebuilt-documentSearch)"]
-        CU2["Image → Description<br/>(kb-image-analyzer)"]
+    subgraph Analyzer["Analyzer ✱"]
+        A1["HTML Analyzer<br/>HTML → Markdown"]
+        A2["Image Analyzer<br/>Image → Description"]
     end
 
     subgraph Serving["Serving Layer<br/><i>Azure Blob Storage</i>"]
@@ -53,13 +53,20 @@ flowchart LR
     SRC --> C1
     C1 --> C2 --> C4
     C1 --> C3 --> C4
-    C2 -.-> CU1
-    C3 -.-> CU2
+    C2 -.-> A1
+    C3 -.-> A2
     C4 --> OUT
     OUT --> I1 --> I2 --> I3 --> I4
     I3 -.-> EMB
     I4 -.-> IDX
 ```
+
+**✱ Analyzer** — two interchangeable backends, selected at runtime via `analyzer=`:
+
+| Component | Content Understanding (`fn_convert_cu`) | Mistral Document AI (`fn_convert_mistral`) |
+|---|---|---|
+| **HTML Analyzer** | CU `prebuilt-documentSearch` (HTML-direct) | Playwright HTML → PDF + Mistral OCR (`mistral-document-ai-2512`) |
+| **Image Analyzer** | Custom CU `kb-image-analyzer` (GPT-4.1) | GPT-4.1 vision (direct calls, same prompt schema) |
 
 ## Azure Services Map
 
@@ -76,7 +83,7 @@ flowchart LR
         subgraph Sources["Storage & Analysis"]
             direction TB
             SA1["Staging Storage<br/>Source articles"]
-            CU["Content Understanding<br/>HTML + image analysis"]
+            AN["Analyzer ✱<br/>HTML + image analysis"]
             SA2["Serving Storage<br/>Processed articles"]
         end
     end
@@ -98,7 +105,7 @@ flowchart LR
     end
 
     CONV -->|read| SA1
-    CONV -->|analyze| CU
+    CONV -->|analyze| AN
     CONV -->|write| SA2
     IDX -->|read| SA2
 
@@ -114,6 +121,8 @@ flowchart LR
     classDef invisible fill:none,stroke:none;
     class left,right invisible;
 ```
+
+**✱ Analyzer** — Content Understanding (`fn_convert_cu`) or Mistral Document AI + GPT-4.1 vision (`fn_convert_mistral`). See [Pipeline Flow](#pipeline-flow) legend for component details.
 
 ## Context Aware & Vision Grounded KB Agent
 
@@ -237,7 +246,24 @@ For infrastructure details, see [Infrastructure](../specs/infrastructure.md). Fo
 
 `fn-convert` transforms a source HTML article into a clean Markdown file with AI-generated image descriptions placed in their original document context, plus the source images renamed as PNGs.
 
-### Why HTML-Direct (No PDF Conversion)
+There are **two interchangeable backend implementations** that share the same input/output contract:
+
+| Backend | Module | Approach | Gateway-Compatible |
+|---------|--------|----------|--------------------|
+| **Content Understanding** | `fn_convert_cu` | HTML-direct text extraction via CU `prebuilt-documentSearch`, individual image analysis via custom `kb-image-analyzer` | No — CU's internal LLM calls are opaque |
+| **Mistral Document AI** | `fn_convert_mistral` | HTML → PDF rendering (Playwright) with `[[IMG:filename]]` markers, Mistral OCR for text extraction, GPT-4.1 vision for image descriptions | Yes — both OCR and GPT-4.1 are standard Foundry endpoints |
+
+Both backends produce the same output: `article.md` + `images/` folder in the serving layer. `fn-index` is completely unaware of which backend generated the content — the serving layer is the contract boundary.
+
+The backend is selected at runtime via the `analyzer=` Makefile argument:
+```bash
+make convert analyzer=content-understanding   # uses fn_convert_cu
+make convert analyzer=mistral-doc-ai          # uses fn_convert_mistral
+```
+
+### Content Understanding Backend (`fn_convert_cu`)
+
+#### Why HTML-Direct (No PDF Conversion)
 
 Content Understanding processes HTML directly for text extraction with high quality — headings, paragraphs, tables, and an AI-generated summary are all faithfully produced. However, CU does **not** detect figures or hyperlinks from HTML input (figure analysis is only supported for PDF and image file formats). Rather than converting HTML → PDF to unlock CU's figure detection — which adds complexity (Playwright/Chromium), degrades image quality (rasterize + re-crop), and introduces fragile bounding-polygon parsing — we process HTML for text and analyze each image individually through CU. This yields better image descriptions (each image gets dedicated analysis with a domain-tuned prompt) and preserves the original image quality.
 
@@ -329,6 +355,39 @@ Content Understanding is a [Foundry](https://learn.microsoft.com/en-us/azure/ai-
 ```
 
 Image descriptions are inline paragraphs — they stay with their surrounding text through chunking, so the vector embedding naturally captures both the textual context and the image semantics.
+
+### Mistral Document AI Backend (`fn_convert_mistral`)
+
+The Mistral variant takes a fundamentally different approach: instead of processing HTML directly with Content Understanding, it renders the HTML to PDF and uses Mistral Document AI for OCR-based text extraction. This trades CU's native HTML analysis for a pipeline built entirely on standard Foundry model endpoints.
+
+#### Pipeline Steps
+
+| Step | What Happens |
+|------|-------------|
+| **1. Render PDF** | Replace each `<img>` tag in the HTML with a text marker `[[IMG:filename]]`, inject CSS for clean rendering, then render to PDF via Playwright (headless Chromium). Markers survive the PDF rendering and appear in the OCR output. |
+| **2. Mistral OCR** | Send the PDF to Mistral Document AI (`mistral-document-ai-2512`) via the Foundry OCR endpoint. Returns Markdown with text, tables, and structure — plus the `[[IMG:...]]` markers embedded in the text flow. |
+| **3. Map image markers** | Scan the OCR Markdown for `[[IMG:filename]]` markers using regex. This maps each image's position in the document without relying on bounding boxes or figure detection. |
+| **4. Describe images** | Send each referenced image to GPT-4.1 vision with the same prompt schema used by the CU `kb-image-analyzer` (Description, UIElements, NavigationPath). Uses the OpenAI SDK against the Foundry endpoint. |
+| **5. Merge & reconstruct** | Replace each `[[IMG:filename]]` marker with an image description block (`> **[Image: ...](...)**`). Recover hyperlinks stripped during PDF rendering by regex-matching link labels from the original HTML. Copy images to `images/` subfolder. |
+
+#### Key Design Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | **Marker-based image tracking** | `[[IMG:filename]]` markers injected before PDF rendering survive OCR and provide precise image positioning without bounding-box parsing. Simpler and more reliable than figure detection. |
+| 2 | **Playwright for PDF rendering** | Required to convert HTML → PDF for Mistral OCR. Adds a binary dependency (Chromium) but produces high-quality PDF with consistent rendering. |
+| 3 | **Standard Foundry endpoints** | Both Mistral OCR and GPT-4.1 vision are standard model endpoints — they can be routed through Azure API Management or any API gateway for monitoring, rate limiting, and access control. |
+| 4 | **Same image prompt as CU** | Uses the identical Description/UIElements/NavigationPath schema so image descriptions are comparable across backends. Validated in [spike 002](../spikes/002-mistral-document-ai.md). |
+
+#### Quality Comparison
+
+The spike evaluation across all sample articles showed comparable output quality between the two backends. Key findings:
+- Text extraction quality is equivalent — both capture headings, paragraphs, tables, and structure faithfully
+- Image descriptions are comparable (both use GPT-4.1 with the same prompt schema)
+- Mistral OCR occasionally produces slightly different Markdown formatting (e.g., table alignment) but the semantic content is preserved
+- The Mistral variant adds a Playwright/Chromium dependency; the CU variant has no such requirement
+
+For full spike results, see [Spike 002 — Mistral Document AI](../spikes/002-mistral-document-ai.md).
 
 ---
 
@@ -530,20 +589,23 @@ Stale mappings (from previously deployed models that no longer exist) are automa
 | # | Decision Area | Resolution |
 |---|--------------|------------|
 | 1 | **Image hosting** | Azure Blob Storage (serving account). Original article images uploaded during conversion; `image_urls` stores Blob URLs. |
-| 2 | **Hyperlink recovery** | Parsed from HTML DOM directly (CU strips URLs from HTML). Re-injected into CU Markdown by text-matching link labels. |
-| 3 | **Image description quality** | Two-pass: CU for document text, separate CU calls per image via the custom `kb-image-analyzer` (domain-tuned for UI screenshots). |
+| 2 | **Hyperlink recovery** | Both backends recover hyperlinks from the HTML DOM (CU and Mistral OCR both strip URLs). Re-injected by text-matching link labels. |
+| 3 | **Image description quality** | Both backends use GPT-4.1 with the same prompt schema (Description, UIElements, NavigationPath). CU backend uses a custom analyzer; Mistral backend uses direct GPT-4.1 vision calls. |
 | 4 | **Chunk granularity** | One chunk = one header-delimited section. Image descriptions are inline paragraphs within their section. A chunk references 0–N images. |
-| 5 | **Table format** | Markdown tables. CU produces Markdown tables from HTML input natively. |
-| 6 | **No PDF conversion** | HTML is processed directly for text; images come from the article folder. Eliminates Playwright, PyMuPDF, and Pillow dependencies. |
+| 5 | **Table format** | Markdown tables. Both CU and Mistral OCR produce Markdown tables from HTML input natively. |
+| 6 | **Dual conversion backends** | CU backend processes HTML directly (no PDF); Mistral backend renders to PDF via Playwright for OCR. Both produce identical serving-layer output. The tradeoff is CU's deeper integration vs Mistral's API gateway compatibility. |
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `azure-ai-contentunderstanding` | Content Understanding SDK (HTML + image analysis) |
-| `azure-identity` | Azure authentication (DefaultAzureCredential) |
-| `azure-storage-blob` | Read from staging, write to serving blob containers |
-| `azure-search-documents` | Push chunks to AI Search index |
-| `azure-ai-inference` | Call Azure Foundry embedding model |
-| `beautifulsoup4` | HTML DOM parsing for image/link extraction |
-| `python-dotenv` | Environment configuration |
+| Package | Used By | Purpose |
+|---------|---------|---------|
+| `azure-ai-contentunderstanding` | `fn_convert_cu` | Content Understanding SDK (HTML + image analysis) |
+| `azure-identity` | All | Azure authentication (DefaultAzureCredential) |
+| `azure-storage-blob` | All | Read from staging, write to serving blob containers |
+| `azure-search-documents` | `fn_index` | Push chunks to AI Search index |
+| `azure-ai-inference` | `fn_index` | Call Azure Foundry embedding model |
+| `beautifulsoup4` | `fn_convert_cu`, `fn_convert_mistral` | HTML DOM parsing for image/link extraction |
+| `python-dotenv` | All | Environment configuration |
+| `playwright` | `fn_convert_mistral` | HTML → PDF rendering (headless Chromium) |
+| `httpx` | `fn_convert_mistral` | HTTP client for Mistral OCR endpoint |
+| `openai` | `fn_convert_mistral` | GPT-4.1 vision calls via Azure OpenAI SDK |

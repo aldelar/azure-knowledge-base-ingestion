@@ -1,9 +1,9 @@
-"""Allow ``python -m fn_convert article_dir output_dir``."""
+"""Allow ``python -m fn_convert_mistral article_dir output_dir``."""
 
 import logging
 import sys
 
-from fn_convert import run
+from fn_convert_mistral import run
 
 
 def main() -> None:
@@ -13,7 +13,7 @@ def main() -> None:
     )
 
     if len(sys.argv) != 3:
-        print("Usage: python -m fn_convert <article_dir> <output_dir>", file=sys.stderr)
+        print("Usage: python -m fn_convert_mistral <article_dir> <output_dir>", file=sys.stderr)
         sys.exit(1)
 
     run(sys.argv[1], sys.argv[2])

@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 
-from fn_convert.cu_images import ImageAnalysisResult
+from fn_convert_cu.cu_images import ImageAnalysisResult
 
 logger = logging.getLogger(__name__)
 

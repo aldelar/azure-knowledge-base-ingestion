@@ -34,6 +34,9 @@ param embeddingDeploymentName string
 @description('Agent / completion deployment name')
 param agentDeploymentName string
 
+@description('Mistral Document AI deployment name')
+param mistralDeploymentName string = 'mistral-document-ai-2512'
+
 @description('Azure AI Search endpoint')
 param searchEndpoint string
 
@@ -170,6 +173,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         {
           name: 'SEARCH_INDEX_NAME'
           value: searchIndexName
+        }
+        {
+          name: 'MISTRAL_DEPLOYMENT_NAME'
+          value: mistralDeploymentName
         }
       ]
     }

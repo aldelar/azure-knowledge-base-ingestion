@@ -147,6 +147,28 @@ resource cuCompletionMiniDeployment 'Microsoft.CognitiveServices/accounts/deploy
 }
 
 // ---------------------------------------------------------------------------
+// Model Deployment: mistral-document-ai-2512 (for fn_convert_mistral)
+// Used by the Mistral Document AI conversion backend for OCR.
+// Requires API version 2024-04-01-preview and Mistral AI format.
+// ---------------------------------------------------------------------------
+resource mistralDocAiDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
+  parent: aiServices
+  name: 'mistral-document-ai-2512'
+  dependsOn: [cuCompletionMiniDeployment] // Serial deployment to avoid conflicts
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 1
+  }
+  properties: {
+    model: {
+      format: 'Mistral AI'
+      name: 'mistral-document-ai-2512'
+      version: '1'
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Role Assignment: Cognitive Services OpenAI User
 // ---------------------------------------------------------------------------
 var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
@@ -222,3 +244,4 @@ output aiServicesEndpoint string = aiServices.properties.endpoint
 output embeddingDeploymentName string = embeddingDeployment.name
 output agentDeploymentName string = agentDeployment.name
 output cuCompletionDeploymentName string = cuCompletionDeployment.name
+output mistralDeploymentName string = mistralDocAiDeployment.name
