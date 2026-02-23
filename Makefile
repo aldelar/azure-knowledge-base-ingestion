@@ -75,6 +75,14 @@ dev-setup-env: ## Populate .env files from AZD environment (functions + web app)
 	@echo "Done. $(shell wc -l < src/web-app/.env 2>/dev/null || echo 0) variables written."
 
 # ------------------------------------------------------------------------------
+# Local Development — Storage Access
+# ------------------------------------------------------------------------------
+.PHONY: dev-enable-storage
+
+dev-enable-storage: ## Re-enable public access on storage accounts (disabled nightly)
+	@bash scripts/enable-storage-public-access.sh
+
+# ------------------------------------------------------------------------------
 # Local Development — Pipeline
 # ------------------------------------------------------------------------------
 .PHONY: convert index test validate-infra
