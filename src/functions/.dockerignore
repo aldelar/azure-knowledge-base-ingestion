@@ -1,0 +1,17 @@
+# Virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# Tests
+tests/
+
+# Dev / local files
+.env
+.env.sample
+.pytest_cache/
+.funcignore
+.gitignore
+
+# Lock file (we use pyproject.toml for installs)
+uv.lock

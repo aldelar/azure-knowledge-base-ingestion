@@ -175,21 +175,17 @@ ifndef analyzer
 	@exit 1
 endif
 	@echo "Triggering fn-convert Azure Function (analyzer=$(analyzer))..."
-	@APP_NAME=$$(azd env get-value FUNCTION_APP_NAME) && \
-	RG=$$(azd env get-value RESOURCE_GROUP) && \
-	KEY=$$(az functionapp keys list --name $$APP_NAME --resource-group $$RG --query "functionKeys.default" -o tsv) && \
+	@FUNC_URL=$$(azd env get-value FUNCTION_APP_URL) && \
 	ROUTE=$$(if [ "$(analyzer)" = "content-understanding" ]; then echo "convert"; else echo "convert-mistral"; fi) && \
-	ENDPOINT="https://$$APP_NAME.azurewebsites.net/api/$$ROUTE?code=$$KEY" && \
+	ENDPOINT="$$FUNC_URL/api/$$ROUTE" && \
 	echo "  POST $$ENDPOINT" && \
 	curl -sf --max-time 600 -X POST "$$ENDPOINT" -H "Content-Type: application/json" -d '{}' | python3 -m json.tool
 	@echo ""
 
 azure-index: ## Trigger fn-index in Azure (processes serving → AI Search)
 	@echo "Triggering fn-index Azure Function..."
-	@APP_NAME=$$(azd env get-value FUNCTION_APP_NAME) && \
-	RG=$$(azd env get-value RESOURCE_GROUP) && \
-	KEY=$$(az functionapp keys list --name $$APP_NAME --resource-group $$RG --query "functionKeys.default" -o tsv) && \
-	ENDPOINT="https://$$APP_NAME.azurewebsites.net/api/index?code=$$KEY" && \
+	@FUNC_URL=$$(azd env get-value FUNCTION_APP_URL) && \
+	ENDPOINT="$$FUNC_URL/api/index" && \
 	echo "  POST $$ENDPOINT" && \
 	curl -sf --max-time 600 -X POST "$$ENDPOINT" -H "Content-Type: application/json" -d '{}' | python3 -m json.tool
 	@echo ""

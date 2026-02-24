@@ -1,6 +1,6 @@
 # Infrastructure
 
-> **Status:** Draft — February 13, 2026
+> **Status:** Draft — February 24, 2026
 
 ## Overview
 
@@ -26,8 +26,7 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | → CU Internal: Analysis † | `ai-services.bicep` | `gpt-4.1-mini` | GlobalStandard, 30K TPM |
 | → Mistral OCR Deployment | `ai-services.bicep` | `mistral-document-ai-2512` | GlobalStandard, capacity 1 |
 | Azure AI Search | `search.bicep` | `srch-kbidx-{env}` | Free, 1 partition, 1 replica |
-| Function App | `function-app.bicep` | `func-kbidx-{env}` | Flex Consumption (FC1), Python 3.11, Linux |
-| App Service Plan | `function-app.bicep` | `plan-kbidx-{env}` | FlexConsumption / FC1 |
+| Function App (Container App) | `function-app.bicep` | `func-kbidx-{env}` | Container App, 1.0 vCPU / 2 GiB, Python 3.11 custom Docker |
 | Container Registry | `container-registry.bicep` | `crkbidx{env}` | Basic |
 | Container Apps Environment | `container-app.bicep` | `cae-kbidx-{env}` | Consumption |
 | Container App (Web App) | `container-app.bicep` | `webapp-kbidx-{env}` | 0.5 vCPU, 1 GiB |
@@ -46,8 +45,8 @@ infra/
     ├── storage.bicep            # Reusable storage account with containers + RBAC
     ├── ai-services.bicep        # AI Services account + model deployments + RBAC
     ├── search.bicep             # AI Search service + RBAC
-    ├── function-app.bicep       # Flex Consumption plan + Function App + runtime storage
-    ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC
+    ├── function-app.bicep       # Functions on Container Apps (custom Docker) + runtime storage + AcrPull RBAC
+    ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC (web app only)
     └── container-app.bicep      # Container Apps Environment + Container App + Easy Auth
 ```
 
@@ -182,7 +181,7 @@ Hosts Docker images for the Context Aware & Vision Grounded KB Agent container.
 | Admin User | Disabled (managed identity pull) |
 | Public Network | Enabled |
 
-The module accepts an optional `acrPullPrincipalId` parameter. When provided, it grants the **AcrPull** role to that principal (used to give the Container App access to pull images).
+The module accepts an optional `acrPullPrincipalId` parameter. When provided, it grants the **AcrPull** role to that principal (used to give the web app Container App access to pull images). The Function App's AcrPull role is managed separately in `function-app.bicep` — see [Technical Brief](#technical-brief-bicep-dependency-ordering-for-container-apps) for why.
 
 ### Container App (`container-app.bicep`)
 
@@ -247,6 +246,7 @@ flowchart LR
     FA -->|"Storage Blob Data<br/>Contributor"| ST["Staging Storage"]
     FA -->|"Storage Blob Data<br/>Contributor"| SV["Serving Storage"]
     FA -->|"Storage Blob Data<br/>Owner"| SF["Functions Storage"]
+    FA -->|"AcrPull"| ACR
     FA -->|"Cognitive Services<br/>OpenAI User"| AI["AI Services"]
     FA -->|"Cognitive Services<br/>User"| AI
     FA -->|"Search Index Data<br/>Contributor"| SR["AI Search"]
@@ -279,6 +279,7 @@ The Container App uses **Easy Auth** (platform-level) with an **Entra App Regist
 | Function App | Staging Storage | Storage Blob Data Contributor |
 | Function App | Serving Storage | Storage Blob Data Contributor |
 | Function App | Functions Storage | Storage Blob Data Owner |
+| Function App | Container Registry | AcrPull |
 | Function App | AI Services | Cognitive Services OpenAI User |
 | Function App | AI Services | Cognitive Services User |
 | Function App | AI Search | Search Index Data Contributor |
@@ -352,7 +353,7 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `SEARCH_SERVICE_NAME` | `srch-kbidx-dev` |
 | `SEARCH_ENDPOINT` | `https://srch-kbidx-dev.search.windows.net` |
 | `FUNCTION_APP_NAME` | `func-kbidx-dev` |
-| `FUNCTION_APP_HOSTNAME` | `func-kbidx-dev.azurewebsites.net` |
+| `FUNCTION_APP_URL` | `https://func-kbidx-dev.<hash>.<region>.azurecontainerapps.io` |
 | `APPINSIGHTS_NAME` | `appi-kbidx-dev` |
 | `CONTAINER_REGISTRY_NAME` | `crkbidxdev` |
 | `CONTAINER_REGISTRY_LOGIN_SERVER` | `crkbidxdev.azurecr.io` |
@@ -365,7 +366,7 @@ The following values are exported by `main.bicep` and available as AZD environme
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| 1 | **Flex Consumption plan** over Consumption | Better cold-start performance, VNet support, instance memory control (2 GB). Ideal for AI workloads with moderate execution times. |
+| 1 | **Functions on Container Apps** over Flex Consumption | Flex Consumption (FC1) does not support custom Docker containers, which are required for Playwright + headless Chromium (used by the Mistral converter for HTML → PDF rendering). Elastic Premium (EP1) was considered first but unavailable by a zero-VM quota in the subscription. Container Apps provides custom container support, scale-to-zero, and reuses the existing Container Apps Environment already hosting the web app. |
 | 2 | **Three separate storage accounts** | Staging, serving, and functions runtime are isolated for security, lifecycle management, and independent scaling. Shared key access is disabled on staging/serving. |
 | 3 | **AIServices kind** (Foundry) | Single resource hosts Content Understanding, OpenAI models (embeddings + agent), and Mistral models, avoiding multiple Cognitive Services accounts. |
 | 4 | **Free search tier** | Supports up to 3 indexes, 50 MB storage, vector search, and semantic search — sufficient for dev. Upgrade path to Basic/Standard is straightforward. |
@@ -374,3 +375,57 @@ The following values are exported by `main.bicep` and available as AZD environme
 | 7 | **Modular Bicep structure** | Each service is a self-contained module with optional RBAC parameters. Modules are re-deployed with role assignments after the Function App identity is available. |
 | 8 | **GlobalStandard model SKU** | Provides highest availability and regional flexibility for OpenAI model deployments. Uses Microsoft-managed capacity across Azure regions. |
 | 9 | **Mistral Document AI deployment** | `mistral-document-ai-2512` (format `Mistral AI`) is deployed alongside OpenAI models in the same AIServices resource. The `fn_convert_mistral` pipeline depends on this model plus GPT-4.1 for vision. Requires Playwright (headless Chromium) at runtime for HTML → PDF rendering. |
+| 10 | **Anonymous function auth** | Container Apps does not support Azure Functions host keys. All three HTTP-triggered functions (`fn_convert`, `fn_convert_mistral`, `fn_index`) use `AuthLevel.ANONYMOUS`. Access control relies on the Container App's built-in ingress authentication and network-level controls instead. |
+| 11 | **AcrPull role in function-app module** | The Function App's AcrPull role assignment is co-located in `function-app.bicep` (not in `container-registry.bicep`) to avoid a circular dependency between the Container App resource and the ACR role assignment. See [Technical Brief](#technical-brief-bicep-dependency-ordering-for-container-apps) below. |
+
+---
+
+## Technical Brief: Bicep Dependency Ordering for Container Apps with ACR
+
+When a Container App pulls images from ACR using its **system-assigned managed identity**, three things must happen in the right order:
+
+1. **Container App** is created with a system-assigned managed identity → produces a `principalId`
+2. **AcrPull role** is assigned to that `principalId` on the Container Registry
+3. **Container App** uses the ACR registry config (`identity: 'system'`) to authenticate image pulls
+
+Steps 1 and 3 are defined on the **same resource** — the Container App includes both the identity declaration and the `registries` configuration. The `registries` block with `identity: 'system'` requires the AcrPull role (step 2) to already be in place, but step 2 requires the `principalId` that only exists after step 1.
+
+### Why the AcrPull Role Lives in `function-app.bicep`
+
+If the AcrPull role assignment is placed in a **separate Bicep module** (e.g., `container-registry.bicep`), ARM cannot resolve the dependencies:
+
+- The Container App module outputs its `principalId` → passed to the ACR module for the role assignment
+- But the Container App's `registries` config needs ACR access _during creation_, before the role module runs
+- ARM evaluates the `registries` config as part of creating the Container App, not as a post-creation step
+
+This creates a **cross-module circular dependency** that ARM cannot resolve. The deployment hangs indefinitely in `InProgress` rather than failing with a clear error.
+
+The solution is to keep the AcrPull role assignment **in the same module** as the Container App. Using an `existing` resource reference to the ACR:
+
+```bicep
+// In function-app.bicep:
+
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: split(acrResourceId, '/')[8]
+}
+
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acrResourceId, functionApp.id, acrPullRoleId)
+  scope: containerRegistry
+  properties: {
+    principalId: functionApp.identity.principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
+    principalType: 'ServicePrincipal'
+  }
+}
+```
+
+Within a single module, ARM resolves the implicit dependency via `functionApp.identity.principalId` and orders the operations correctly:
+
+1. Create the Container App (with identity) → `principalId` is known
+2. Assign AcrPull role using that `principalId`
+3. Registry config is evaluated — ACR pull succeeds
+
+### General Rule
+
+Whenever a resource's configuration depends on a role that requires that resource's own identity, the role assignment must be **co-located in the same Bicep module**. Splitting them across modules creates a circular dependency that ARM cannot resolve.

@@ -26,7 +26,7 @@ app = func.FunctionApp()
 
 
 @app.function_name("fn_convert")
-@app.route(route="convert", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="convert", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def http_convert(req: func.HttpRequest) -> func.HttpResponse:
     """Convert articles from staging blob to serving blob.
 
@@ -84,7 +84,7 @@ def http_convert(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name("fn_convert_mistral")
-@app.route(route="convert-mistral", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="convert-mistral", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def http_convert_mistral(req: func.HttpRequest) -> func.HttpResponse:
     """Convert articles using Mistral Document AI (staging blob → serving blob).
 
@@ -137,7 +137,7 @@ def http_convert_mistral(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name("fn_index")
-@app.route(route="index", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="index", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def http_index(req: func.HttpRequest) -> func.HttpResponse:
     """Index articles from serving blob into Azure AI Search.
 

@@ -6,7 +6,7 @@
 //   - Storage (Staging + Serving accounts)
 //   - Azure AI Services (Content Understanding + Embeddings + Agent model)
 //   - Azure AI Search (Basic tier, vector + full-text)
-//   - Azure Functions (Python, Flex Consumption)
+//   - Azure Functions (Python, Container App with custom Docker container)
 //
 // All inter-service auth uses managed identity (no keys/secrets).
 // ---------------------------------------------------------------------------
@@ -142,6 +142,9 @@ module functionApp 'modules/function-app.bicep' = {
     mistralDeploymentName: aiServices.outputs.mistralDeploymentName
     searchEndpoint: search.outputs.searchEndpoint
     deployerPrincipalId: principalId
+    acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
+    acrResourceId: containerRegistry.outputs.containerRegistryId
+    containerAppsEnvId: containerApp.outputs.containerAppsEnvId
   }
 }
 
@@ -306,9 +309,9 @@ output MISTRAL_DEPLOYMENT_NAME string = aiServices.outputs.mistralDeploymentName
 output SEARCH_SERVICE_NAME string = search.outputs.searchName
 output SEARCH_ENDPOINT string = search.outputs.searchEndpoint
 
-// Functions
+// Functions (Container App)
 output FUNCTION_APP_NAME string = functionApp.outputs.functionAppName
-output FUNCTION_APP_HOSTNAME string = functionApp.outputs.functionAppDefaultHostname
+output FUNCTION_APP_URL string = functionApp.outputs.functionAppUrl
 output FUNCTIONS_STORAGE_ACCOUNT string = functionApp.outputs.functionsStorageAccountName
 
 // Monitoring
