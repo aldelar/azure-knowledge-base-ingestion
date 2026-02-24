@@ -1,4 +1,4 @@
-"""Tests for fn_convert.cu_text — CU text extraction via prebuilt-documentSearch.
+"""Tests for fn_convert_cu.cu_text — CU text extraction via prebuilt-documentSearch.
 
 These are integration tests that call the live Azure Content Understanding
 endpoint.  They require:
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from fn_convert.cu_text import CuTextResult, extract_text
+from fn_convert_cu.cu_text import CuTextResult, extract_text
 
 
 # ---------------------------------------------------------------------------

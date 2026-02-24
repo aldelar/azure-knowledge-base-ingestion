@@ -1,9 +1,9 @@
-"""Unit tests for fn_convert.merge — link recovery and image block insertion."""
+"""Unit tests for fn_convert_cu.merge — link recovery and image block insertion."""
 
 import pytest
 
-from fn_convert.cu_images import ImageAnalysisResult
-from fn_convert.merge import (
+from fn_convert_cu.cu_images import ImageAnalysisResult
+from fn_convert_cu.merge import (
     _format_image_block,
     _insert_after_text,
     _normalize_for_match,

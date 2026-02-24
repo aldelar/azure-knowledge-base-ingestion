@@ -12,6 +12,9 @@ dependencies = [
     "azure-functions>=1.21.0",
     "beautifulsoup4>=4.12.0",
     "python-dotenv>=1.0.0",
+    "playwright>=1.40.0",
+    "httpx>=0.27.0",
+    "openai>=1.50.0",
 ]
 
 [project.optional-dependencies]
@@ -25,7 +28,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.hatch.build.targets.wheel]
-packages = ["fn_convert", "fn_index", "shared"]
+packages = ["fn_convert_cu", "fn_convert_mistral", "fn_index", "shared"]
 
 [build-system]
 requires = ["hatchling"]

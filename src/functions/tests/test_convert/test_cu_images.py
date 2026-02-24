@@ -1,4 +1,4 @@
-"""Tests for fn_convert.cu_images — CU image analysis via kb_image_analyzer.
+"""Tests for fn_convert_cu.cu_images — CU image analysis via kb_image_analyzer.
 
 Integration tests calling the live Azure Content Understanding endpoint.
 Requires:
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from fn_convert.cu_images import ImageAnalysisResult, analyze_image
+from fn_convert_cu.cu_images import ImageAnalysisResult, analyze_image
 
 # ---------------------------------------------------------------------------
 # Paths

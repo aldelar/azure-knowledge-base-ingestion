@@ -1,7 +1,7 @@
 """Azure Functions v2 entry point.
 
-Registers fn-convert and fn-index as HTTP-triggered functions.
-Both functions read/write via Azure Blob Storage (staging + serving containers).
+Registers fn-convert (CU), fn-convert-mistral, and fn-index as HTTP-triggered functions.
+Both convert functions read/write via Azure Blob Storage (staging + serving containers).
 For local development, use the shell scripts in scripts/functions/ instead.
 """
 
@@ -16,7 +16,8 @@ import azure.functions as func
 from shared.blob_storage import download_article, list_articles, upload_article
 from shared.config import config
 
-import fn_convert
+import fn_convert_cu
+import fn_convert_mistral
 import fn_index
 
 logger = logging.getLogger(__name__)
@@ -58,8 +59,8 @@ def http_convert(req: func.HttpRequest) -> func.HttpResponse:
             serving_dir = out_root / article_id
             serving_dir.mkdir()
 
-            # Run the existing convert logic
-            fn_convert.run(str(staging_dir), str(serving_dir))
+            # Run the CU convert logic
+            fn_convert_cu.run(str(staging_dir), str(serving_dir))
 
             # Upload results to serving blob
             count = upload_article(
@@ -74,6 +75,59 @@ def http_convert(req: func.HttpRequest) -> func.HttpResponse:
 
         except Exception as e:
             logger.exception("fn-convert failed for %s", article_id)
+            results.append({"article_id": article_id, "status": "error", "error": str(e)})
+
+    return func.HttpResponse(
+        json.dumps({"results": results}, indent=2),
+        mimetype="application/json",
+    )
+
+
+@app.function_name("fn_convert_mistral")
+@app.route(route="convert-mistral", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+def http_convert_mistral(req: func.HttpRequest) -> func.HttpResponse:
+    """Convert articles using Mistral Document AI (staging blob → serving blob).
+
+    POST /api/convert-mistral
+    Optional body: {"article_id": "specific-article-id"}
+    If no article_id, processes ALL articles in the staging container.
+    """
+    logging.basicConfig(level=logging.INFO)
+
+    article_ids = _get_article_ids(req, config.staging_blob_endpoint, "staging")
+    if not article_ids:
+        return func.HttpResponse(
+            json.dumps({"error": "No articles found in staging container"}),
+            status_code=404,
+            mimetype="application/json",
+        )
+
+    results = []
+    for article_id in article_ids:
+        try:
+            tmp_root = Path(tempfile.mkdtemp(prefix="kb-convert-mistral-"))
+            staging_dir = tmp_root / article_id
+            download_article(
+                config.staging_blob_endpoint, "staging", article_id, staging_dir
+            )
+            out_root = Path(tempfile.mkdtemp(prefix="kb-out-"))
+            serving_dir = out_root / article_id
+            serving_dir.mkdir()
+
+            # Run the Mistral convert logic
+            fn_convert_mistral.run(str(staging_dir), str(serving_dir))
+
+            count = upload_article(
+                config.serving_blob_endpoint, "serving", article_id, serving_dir
+            )
+
+            results.append({"article_id": article_id, "status": "ok", "blobs_uploaded": count})
+
+            shutil.rmtree(tmp_root, ignore_errors=True)
+            shutil.rmtree(out_root, ignore_errors=True)
+
+        except Exception as e:
+            logger.exception("fn-convert-mistral failed for %s", article_id)
             results.append({"article_id": article_id, "status": "error", "error": str(e)})
 
     return func.HttpResponse(

@@ -17,7 +17,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from fn_convert import cu_images, cu_text, html_parser, merge
+from fn_convert_cu import cu_images, cu_text, html_parser, merge
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def run(article_path: str, output_path: str) -> None:
     markdown = merge.insert_image_blocks(markdown, image_map, analyses)
 
     # ── 4. Write outputs ───────────────────────────────────────────────
-    _write_outputs(output_dir, markdown, text_result.summary, unique_image_paths)
+    _write_outputs(output_dir, markdown, unique_image_paths)
     logger.info("fn-convert complete: %s", article_dir.name)
 
 
@@ -138,10 +138,9 @@ def _resolve_image_paths(
 def _write_outputs(
     output_dir: Path,
     markdown: str,
-    summary: str,
     image_paths: list[Path],
 ) -> None:
-    """Write ``article.md``, ``summary.txt``, and copy images as PNGs."""
+    """Write ``article.md`` and copy images as PNGs."""
     output_dir.mkdir(parents=True, exist_ok=True)
     images_dir = output_dir / "images"
     images_dir.mkdir(exist_ok=True)
@@ -149,11 +148,6 @@ def _write_outputs(
     # Write article.md
     (output_dir / "article.md").write_text(markdown, encoding="utf-8")
     logger.info("Wrote article.md (%d chars)", len(markdown))
-
-    # Write summary.txt
-    if summary:
-        (output_dir / "summary.txt").write_text(summary, encoding="utf-8")
-        logger.info("Wrote summary.txt (%d chars)", len(summary))
 
     # Copy images → images/<stem>.png
     for img_path in image_paths:

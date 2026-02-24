@@ -41,16 +41,44 @@ _CONTENT_IMAGE_RE = re.compile(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _build_ref_map(citations: list[Citation]) -> list[Citation]:
-    """De-duplicate citations by (article_id, section_header) preserving order."""
-    seen: set[str] = set()
+def _build_ref_map(citations: list[Citation]) -> tuple[list[Citation], dict[int, int]]:
+    """De-duplicate citations by (article_id, section_header) preserving order.
+
+    Returns
+    -------
+    tuple[list[Citation], dict[int, int]]
+        The de-duplicated list and a mapping from old 1-based ref number
+        to new 1-based ref number so the LLM output text can be rewritten.
+    """
+    seen: dict[str, int] = {}       # key → 1-based dedup index
     unique: list[Citation] = []
-    for c in citations:
+    old_to_new: dict[int, int] = {}  # old 1-based → new 1-based
+    for old_idx, c in enumerate(citations, 1):
         key = f"{c.article_id}:{c.section_header}"
         if key not in seen:
-            seen.add(key)
             unique.append(c)
-    return unique
+            seen[key] = len(unique)  # new 1-based index
+        old_to_new[old_idx] = seen[key]
+    return unique, old_to_new
+
+
+def _remap_ref_numbers(text: str, old_to_new: dict[int, int]) -> str:
+    r"""Rewrite ``Ref #N`` numbers so they match the de-duplicated citations.
+
+    Handles both bracketed ``[Ref #4]`` and bare ``Ref #4`` occurrences.
+    """
+    if not old_to_new:
+        return text
+
+    # Match bare or bracketed forms: Ref #4, [Ref #4], [Ref #1, #4]
+    _REF_NUM_RE = re.compile(r"(?<=#)(\d+)")
+
+    def _rewrite(m: re.Match) -> str:
+        old = int(m.group(1))
+        new = old_to_new.get(old, old)
+        return str(new)
+
+    return _REF_NUM_RE.sub(_rewrite, text)
 
 
 def _expand_ref_markers(text: str) -> str:
@@ -300,13 +328,15 @@ async def on_message(message: cl.Message) -> None:
     else:
         logger.info("LLM output contains no image references")
 
+    # ---- Remap ref numbers to match de-duplicated citations ----
+    unique_citations, ref_mapping = _build_ref_map(response.citations)
+    if ref_mapping:
+        msg.content = _remap_ref_numbers(msg.content, ref_mapping)
+
     msg.content = _expand_ref_markers(msg.content)
     msg.content = _normalise_inline_images(msg.content, response.citations)
 
     elements: list[cl.Element] = []
-
-    # ---- Build citation elements (cl.Text with display="side") ----
-    unique_citations = _build_ref_map(response.citations)
     for idx, cit in enumerate(unique_citations, 1):
         elements.append(
             cl.Text(

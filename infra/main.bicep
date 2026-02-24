@@ -139,6 +139,7 @@ module functionApp 'modules/function-app.bicep' = {
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
     embeddingDeploymentName: aiServices.outputs.embeddingDeploymentName
     agentDeploymentName: aiServices.outputs.agentDeploymentName
+    mistralDeploymentName: aiServices.outputs.mistralDeploymentName
     searchEndpoint: search.outputs.searchEndpoint
     deployerPrincipalId: principalId
   }
@@ -299,6 +300,7 @@ output AI_SERVICES_ENDPOINT string = aiServices.outputs.aiServicesEndpoint
 output EMBEDDING_DEPLOYMENT_NAME string = aiServices.outputs.embeddingDeploymentName
 output AGENT_DEPLOYMENT_NAME string = aiServices.outputs.agentDeploymentName
 output CU_COMPLETION_DEPLOYMENT_NAME string = aiServices.outputs.cuCompletionDeploymentName
+output MISTRAL_DEPLOYMENT_NAME string = aiServices.outputs.mistralDeploymentName
 
 // Search
 output SEARCH_SERVICE_NAME string = search.outputs.searchName

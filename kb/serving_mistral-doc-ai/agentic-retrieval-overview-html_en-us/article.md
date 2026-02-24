@@ -28,14 +28,14 @@ The retrieval component is the ability to run subqueries simultaneously, merge r
 Query expansion and parallel execution, plus the retrieval response, are the key capabilities of agentic retrieval that make it the best choice for generative AI (RAG) applications.
 
 > **[Image: agentric-retrieval-example](images/agentric-retrieval-example.png)**
-> 1. **Description**:  
-This image presents a structured breakdown of a user query about a software patch (KB4048959), highlighting best practices for processing and understanding knowledge base article searches. It emphasizes using chat history for context, splitting complex queries to address different informational needs, and the importance of correcting spelling within the context of whole sentences.
-
-2. **UIElements**:  
-None.
-
-3. **NavigationPath**:  
-N/A.
+> Description:
+> The image is a screenshot from a knowledge base article demonstrating best practices for understanding and processing user queries about software updates. The central example query, "what does KB4048959 fix and what systems is the patch compatible with?", is highlighted and surrounded by annotations explaining how chat systems should use context, handle co-references, and correct spelling in context to improve result accuracy when responding to such queries.
+> 
+> UIElements:
+> None.
+> 
+> NavigationPath:
+> N/A.
 
 Agentic retrieval adds latency to query processing, but it makes up for it by adding these capabilities:
 
@@ -55,14 +55,7 @@ Note: Including an LLM in query planning adds latency to a query pipeline. You c
 Agentic retrieval is designed for conversational search experiences that use an LLM to intelligently break down complex queries. The system coordinates multiple Azure services to deliver comprehensive search results.
 
 > **[Image: agentic-retrieval-architecture](images/agentic-retrieval-architecture.png)**
-> Description:
-This diagram illustrates the process of applying agentic methods to information retrieval systems. It breaks down the workflow into three stages: query planning, fan-out query execution, and results merging. The process starts with a user query and conversation turns, which are input into a query planning module. This module generates multiple search queries that are executed in parallel (fan-out), each going through levels of retrieval (L1, L2). The results from each search are then merged to provide the final answer. A comparison with a single LLM call is shown below, highlighting features such as using conversation history for context, correcting spellings, decomposing queries, and paraphrasing queries.
-
-UIElements:
-None.
-
-NavigationPath:
-N/A.
+> This diagram illustrates how agentic methods are applied to information retrieval using multi-step query planning. It shows the process starting from a user query and conversation history, which are fed into a query planning step. The output consists of multiple search queries executed in parallel, passing through two levels of processing (L1 and L2), before the results are merged. The image also contrasts this approach with a traditional single LLM call, noting benefits like contextual understanding, spelling correction, query decomposition, and paraphrasing
 
 ## How it works
 

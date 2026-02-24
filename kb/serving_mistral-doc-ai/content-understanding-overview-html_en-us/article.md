@@ -7,20 +7,14 @@ Azure Content Understanding in Foundry Tools is an **[Foundry Tool](https://lear
 Content Understanding is now a generally available (GA) service with the release of the 2025-11-01 API version. It's now available in a broader range of **[regions](https://learn.microsoft.com/en-us/azure/ai-services/content-understanding/language-region-support)**. For details on the updates in the GA release, see the Content Understanding [What's New](https://learn.microsoft.com/en-us/azure/ai-services/content-understanding/whats-new) page.
 
 > **[Image: content-understanding-framework-2025](images/content-understanding-framework-2025.png)**
-> 1. **Description**:  
-This image presents an overview of a "Content Understanding Framework" used for processing various input types such as documents, images, videos, and audio. The framework outlines how these inputs pass through analyzers—content extraction, segmentation, field extraction, and postprocessing—using specialized AI and foundational models like GPT, before generating structured outputs (Markdown or JSON schema). It also highlights the framework’s applicability to different platforms, including search, agents, databases, copilots, apps, and fabric.
-
-2. **UIElements**:  
-- Category labels (Inputs, Analyzers, Output)
-- Input options (Documents, Image, Video, Audio)
-- Analyzer stages (Content Extraction, Segmentation, Field Extraction, Postprocessing)
-- AI model categories (Specialized AI Models, Foundational Models)
-- Output item (Structured output)
-- Target platform icons (Search, Agents, Databases, Copilots, Apps, Fabric)
-- “New” badge above Foundational Models
-
-3. **NavigationPath**:  
-N/A (This is a conceptual framework diagram, not a screenshot of software navigation.)
+> Description:  
+> This image presents a high-level overview of a "Content Understanding Framework," detailing the flow from various input types (documents, images, video, audio) through a series of analysis stages (content extraction, segmentation, field extraction, postprocessing) to produce structured output (Markdown or JSON schema). It highlights the use of specialized AI and foundational models to power the analyzers, and shows how the resulting structured data can be integrated with applications like search, agents, databases, copilots, apps, and fabric.
+> 
+> UIElements:  
+> There are no traditional UI components such as buttons, menus, tabs, or form fields present. The visual consists of labeled sections, icons, and arrows that illustrate the process flow.
+> 
+> NavigationPath:  
+> N/A (the image is a conceptual diagram, not a specific software interface screenshot).
 
 # Why use Content Understanding?
 
@@ -62,20 +56,14 @@ Some common industry-specific applications for Content Understanding include:
 The Content Understanding framework processes unstructured content through multiple stages, transforming inputs into structured, actionable outputs. The following table describes each component from left to right as shown in the diagram:
 
 > **[Image: content-understanding-framework-2025](images/content-understanding-framework-2025.png)**
-> 1. **Description**:  
-This image presents an overview of a "Content Understanding Framework" used for processing various input types such as documents, images, videos, and audio. The framework outlines how these inputs pass through analyzers—content extraction, segmentation, field extraction, and postprocessing—using specialized AI and foundational models like GPT, before generating structured outputs (Markdown or JSON schema). It also highlights the framework’s applicability to different platforms, including search, agents, databases, copilots, apps, and fabric.
-
-2. **UIElements**:  
-- Category labels (Inputs, Analyzers, Output)
-- Input options (Documents, Image, Video, Audio)
-- Analyzer stages (Content Extraction, Segmentation, Field Extraction, Postprocessing)
-- AI model categories (Specialized AI Models, Foundational Models)
-- Output item (Structured output)
-- Target platform icons (Search, Agents, Databases, Copilots, Apps, Fabric)
-- “New” badge above Foundational Models
-
-3. **NavigationPath**:  
-N/A (This is a conceptual framework diagram, not a screenshot of software navigation.)
+> Description:  
+> This image presents a high-level overview of a "Content Understanding Framework," detailing the flow from various input types (documents, images, video, audio) through a series of analysis stages (content extraction, segmentation, field extraction, postprocessing) to produce structured output (Markdown or JSON schema). It highlights the use of specialized AI and foundational models to power the analyzers, and shows how the resulting structured data can be integrated with applications like search, agents, databases, copilots, apps, and fabric.
+> 
+> UIElements:  
+> There are no traditional UI components such as buttons, menus, tabs, or form fields present. The visual consists of labeled sections, icons, and arrows that illustrate the process flow.
+> 
+> NavigationPath:  
+> N/A (the image is a conceptual diagram, not a specific software interface screenshot).
 
 |  Component | Description  |
 | --- | --- |
