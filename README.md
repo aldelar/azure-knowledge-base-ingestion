@@ -61,6 +61,9 @@ Teams and organizations that:
 ├── kb/
 │   ├── staging/         Source articles (HTML + images), one folder per article
 │   └── serving/         Processed articles (MD + images), one folder per article
+├── kb_snapshot/             Snapshots of each analyzer's convert step output for comparison
+│   ├── serving_content-understanding/   Convert output from Content Understanding pipeline
+│   └── serving_mistral-doc-ai/          Convert output from Mistral Document AI pipeline
 ├── scripts/
 │   ├── dev-setup.sh     Dev environment setup
 │   └── functions/       Shell scripts to run fn-convert / fn-index locally

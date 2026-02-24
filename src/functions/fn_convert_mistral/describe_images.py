@@ -16,16 +16,23 @@ from openai import AzureOpenAI
 logger = logging.getLogger(__name__)
 
 IMAGE_PROMPT = (
-    "Analyze this screenshot from a knowledge base article. Produce a structured description with:\n"
+    "Analyze this image from a knowledge base article. The image may be an architecture diagram, "
+    "flowchart, network topology, conceptual illustration, chart, photograph, or a software UI "
+    "screenshot. Do NOT assume it is a screenshot unless it clearly shows a software user interface.\n"
+    "\n"
+    "Produce a structured description with:\n"
     "\n"
     "1. **Description**: A concise paragraph describing what the image shows, suitable for embedding "
-    "in a search index to help users find this content via natural language queries.\n"
+    "in a search index to help users find this content via natural language queries. Focus on the key "
+    "concepts, components, relationships, and data flows depicted.\n"
     "\n"
-    '2. **UIElements**: List any UI elements visible (buttons, menus, tabs, form fields, navigation items). '
-    'If none, say "None".\n'
+    "2. **UIElements**: ONLY if the image is a software UI screenshot, list the UI elements visible "
+    "(buttons, menus, tabs, form fields, navigation items). If the image is not a UI screenshot "
+    '(e.g., it is a diagram, chart, or illustration), say "None".\n'
     "\n"
-    "3. **NavigationPath**: If the image shows a software UI, describe the navigation path to reach this "
-    'screen (e.g., "Settings > Account > Security"). If not applicable, say "N/A".\n'
+    "3. **NavigationPath**: ONLY if the image is a software UI screenshot, describe the navigation "
+    'path to reach this screen (e.g., "Settings > Account > Security"). If the image is not a UI '
+    'screenshot, say "N/A".\n'
     "\n"
     "Respond in plain text, not JSON."
 )

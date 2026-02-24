@@ -53,8 +53,11 @@ def run(article_path: str, output_path: str) -> None:
     logger.info("Analyzed %d images", len(analyses))
 
     # ── 3. Merge ───────────────────────────────────────────────────────
-    markdown = merge.recover_links(text_result.markdown, link_map)
-    markdown = merge.insert_image_blocks(markdown, image_map, analyses)
+    # Insert image blocks first — before link recovery — so that the
+    # preceding-text matching runs against the clean CU markdown
+    # (without [text](url) link syntax that would break word matching).
+    markdown = merge.insert_image_blocks(text_result.markdown, image_map, analyses)
+    markdown = merge.recover_links(markdown, link_map)
 
     # ── 4. Write outputs ───────────────────────────────────────────────
     _write_outputs(output_dir, markdown, unique_image_paths)

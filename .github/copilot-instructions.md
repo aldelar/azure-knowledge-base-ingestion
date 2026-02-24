@@ -18,6 +18,7 @@ docs/ - Documentation, specs, and design docs
 - specs/ - Architecture and design specifications
 infra/ - Bicep modules and infrastructure code
 kb/ - Knowledge base articles samples
+kb_snapshot/ - Snapshots of each analyzer's convert step output (serving_content-understanding, serving_mistral-doc-ai) for comparison
 scripts/ - Ad-hoc scripts for data processing, testing, etc.
 src/ - Application source code
 - spikes/ - Spike implementations and prototypes (not part of the solution, code for research and experimentation only)

@@ -8,6 +8,9 @@ Azure Content Understanding in Foundry Tools is an Foundry Tool that's available
 
 Content Understanding is now a generally available (GA) service with the release of the  API version. It's now available in a broader range of [regions](https://learn.microsoft.com/en-us/azure/ai-services/content-understanding/language-region-support). For details on the updates in the GA release, see the Content Understanding [What's New](https://learn.microsoft.com/en-us/azure/ai-services/content-understanding/whats-new) page.
 
+> **[Image: content-understanding-framework-2025](images/content-understanding-framework-2025.png)**
+> This image is a conceptual diagram titled 'Content Understanding Framework.' It illustrates the flow of processing various input types (Documents, Image, Video, Audio) through a series of analyzers to produce structured output (Markdown or JSON schema). The analyzers are divided into four main categories: Content Extraction, Segmentation, Field Extraction, and Postprocessing. Each category lists specific tasks, such as OCR, layout extraction, categorization, routing, field extraction, and normalization. The diagram also highlights the use of Specialized AI Models (OCR, Layout, Transcription) and Foundational Models (GPT-4o, 4.1 family, Embedding) to support these processes. The output is shown as being usable by various applications like Search, Agents, Databases, Copilots, Apps, and Fabric.
+
 ### Why use Content Understanding?
 
 Content Understanding accelerates time to value by enabling straight-through processing of unstructured data with confidence scores, minimizing manual review, and reducing operational costs. Key benefits include:
@@ -57,9 +60,7 @@ Some common industry-specific applications for Content Understanding include:
 The Content Understanding framework processes unstructured content through multiple stages, transforming inputs into structured, actionable outputs. The following table describes each component from left to right as shown in the diagram:
 
 > **[Image: content-understanding-framework-2025](images/content-understanding-framework-2025.png)**
-> This image presents a 'Content Understanding Framework' diagram. It visually explains the process of transforming various input types (Documents, Image, Video, Audio) through a series of analyzers into structured output (Markdown or JSON schema). The analyzers are divided into four main categories: Content Extraction, Segmentation, Field Extraction, and Postprocessing. Each category lists specific tasks performed, such as scale/format derivation, categorization, field extraction, and normalization. At the bottom, there are two supporting model types: Specialized AI Models (OCR, Layout, Transcription) and Foundational Models (GPT 4.0, 4.1 family, Embedding). The output is shown as being usable by various applications like Search, Agents, Databases, Copilots, Apps, and Fabric.
-> **UI Elements**: Documents button, Image button, Video button, Audio button, Content Extraction section, Segmentation section, Field Extraction section, Postprocessing section, Specialized AI Models box, Foundational Models box, Structured output box, Search icon, Agents icon, Databases icon, Copilots icon, Apps icon, Fabric icon
-> **Navigation Path**: Inputs > Analyzers (Content Extraction, Segmentation, Field Extraction, Postprocessing) > Output
+> This image is a conceptual diagram titled 'Content Understanding Framework.' It illustrates the flow of processing various input types (Documents, Image, Video, Audio) through a series of analyzers to produce structured output (Markdown or JSON schema). The analyzers are divided into four main categories: Content Extraction, Segmentation, Field Extraction, and Postprocessing. Each category lists specific tasks, such as OCR, layout extraction, categorization, routing, field extraction, and normalization. The diagram also highlights the use of Specialized AI Models (OCR, Layout, Transcription) and Foundational Models (GPT-4o, 4.1 family, Embedding) to support these processes. The output is shown as being usable by various applications like Search, Agents, Databases, Copilots, Apps, and Fabric.
 
 | Component | Description |
 | - | - |
@@ -91,9 +92,3 @@ Our quickstart guides help you quickly start using the Content Understanding ser
 [Content Understanding Studio quickstart](https://learn.microsoft.com/en-us/azure/ai-services/content-understanding/quickstart/content-understanding-studio) 
 
 [REST API Quickstart](https://learn.microsoft.com/en-us/azure/ai-services/content-understanding/quickstart/use-rest-api) 
-
-
-> **[Image: content-understanding-framework-2025](images/content-understanding-framework-2025.png)**
-> This image presents a 'Content Understanding Framework' diagram. It visually explains the process of transforming various input types (Documents, Image, Video, Audio) through a series of analyzers into structured output (Markdown or JSON schema). The analyzers are divided into four main categories: Content Extraction, Segmentation, Field Extraction, and Postprocessing. Each category lists specific tasks performed, such as scale/format derivation, categorization, field extraction, and normalization. At the bottom, there are two supporting model types: Specialized AI Models (OCR, Layout, Transcription) and Foundational Models (GPT 4.0, 4.1 family, Embedding). The output is shown as being usable by various applications like Search, Agents, Databases, Copilots, Apps, and Fabric.
-> **UI Elements**: Documents button, Image button, Video button, Audio button, Content Extraction section, Segmentation section, Field Extraction section, Postprocessing section, Specialized AI Models box, Foundational Models box, Structured output box, Search icon, Agents icon, Databases icon, Copilots icon, Apps icon, Fabric icon
-> **Navigation Path**: Inputs > Analyzers (Content Extraction, Segmentation, Field Extraction, Postprocessing) > Output
