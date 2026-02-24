@@ -96,11 +96,33 @@ def insert_image_blocks(
 # ---------------------------------------------------------------------------
 
 
+# Values that indicate a field has no meaningful content.
+_EMPTY_MARKERS = frozenset(("", "none", "n/a", "none.", "n/a."))
+
+
 def _format_image_block(stem: str, analysis: ImageAnalysisResult) -> str:
-    """Format an image description as a Markdown blockquote."""
+    """Format an image description as a Markdown blockquote.
+
+    Includes UIElements and NavigationPath only when they contain
+    meaningful content (not empty, "None", or "N/A").
+    """
     lines = [f"> **[Image: {stem}](images/{stem}.png)**"]
     if analysis.description:
         lines.append(f"> {analysis.description}")
+
+    # Include UIElements only when meaningful
+    if analysis.ui_elements:
+        joined = ", ".join(analysis.ui_elements)
+        if joined.strip().lower() not in _EMPTY_MARKERS:
+            lines.append(f"> **UI Elements**: {joined}")
+
+    # Include NavigationPath only when meaningful
+    if (
+        analysis.navigation_path
+        and analysis.navigation_path.strip().lower() not in _EMPTY_MARKERS
+    ):
+        lines.append(f"> **Navigation Path**: {analysis.navigation_path}")
+
     return "\n".join(lines)
 
 

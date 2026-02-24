@@ -15,9 +15,10 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Regex to extract structured sections from GPT image descriptions.
-# Handles both numbered ("1. **Description**:") and unnumbered ("**Description**:")
+# Handles numbered/unnumbered and bold/plain variants:
+#   "1. **Description**:", "**Description**:", "Description:", "1. Description:"
 _SECTION_RE = re.compile(
-    r"(?:^|\n)\s*(?:\d+\.\s*)?\*\*([^*]+)\*\*\s*:?\s*",
+    r"(?:^|\n)\s*(?:\d+\.\s*)?(?:\*\*([^*]+)\*\*|(Description|UIElements|NavigationPath))\s*:[ \t]*",
     re.IGNORECASE,
 )
 
@@ -120,15 +121,19 @@ def _clean_description(raw: str) -> str:
     parts = _SECTION_RE.split(raw)
 
     # If we don't find structured sections, return the raw text as-is
-    if len(parts) < 3:  # noqa: PLR2004 — need at least one header + body
+    # With 2 capture groups, we need at least 4 parts: [preamble, g1, g2, body]
+    if len(parts) < 4:  # noqa: PLR2004 — need at least one header + body
         return raw.strip()
 
-    # parts alternates: [preamble, header1, body1, header2, body2, ...]
+    # parts alternates: [preamble, group1_bold, group2_plain, body, ...]
+    # Because re has two capture groups, each split entry alternates:
+    # [preamble, bold_or_None, plain_or_None, body, bold_or_None, plain_or_None, body, ...]
     sections: dict[str, str] = {}
-    for i in range(1, len(parts) - 1, 2):
-        header = parts[i].strip().lower()
-        body = parts[i + 1].strip().rstrip(".")
-        sections[header] = body
+    for i in range(1, len(parts) - 2, 3):
+        header = (parts[i] or parts[i + 1] or "").strip().lower()
+        body = parts[i + 2].strip().rstrip(".")
+        if header:
+            sections[header] = body
 
     description = sections.get("description", "").strip()
     if not description:
