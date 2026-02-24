@@ -309,6 +309,7 @@ output SEARCH_ENDPOINT string = search.outputs.searchEndpoint
 // Functions
 output FUNCTION_APP_NAME string = functionApp.outputs.functionAppName
 output FUNCTION_APP_HOSTNAME string = functionApp.outputs.functionAppDefaultHostname
+output FUNCTIONS_STORAGE_ACCOUNT string = functionApp.outputs.functionsStorageAccountName
 
 // Monitoring
 output APPINSIGHTS_NAME string = monitoring.outputs.appInsightsName

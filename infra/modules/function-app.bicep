@@ -220,3 +220,4 @@ output functionAppId string = functionApp.id
 output functionAppName string = functionApp.name
 output functionAppPrincipalId string = functionApp.identity.principalId
 output functionAppDefaultHostname string = functionApp.properties.defaultHostName
+output functionsStorageAccountName string = functionsStorage.name

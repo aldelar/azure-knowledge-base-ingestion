@@ -11,14 +11,21 @@ echo "Resolving storage account names from AZD environment..."
 RG=$(azd env get-value RESOURCE_GROUP)
 STAGING=$(azd env get-value STAGING_STORAGE_ACCOUNT)
 SERVING=$(azd env get-value SERVING_STORAGE_ACCOUNT)
+FUNCTIONS=$(azd env get-value FUNCTIONS_STORAGE_ACCOUNT 2>/dev/null || true)
 
 echo ""
 echo "  Resource Group : $RG"
 echo "  Staging        : $STAGING"
 echo "  Serving        : $SERVING"
+echo "  Functions      : ${FUNCTIONS:-<not set — run make azure-provision to populate>}"
 echo ""
 
-for ACCOUNT in "$STAGING" "$SERVING"; do
+ACCOUNTS=("$STAGING" "$SERVING")
+if [[ -n "$FUNCTIONS" ]]; then
+    ACCOUNTS+=("$FUNCTIONS")
+fi
+
+for ACCOUNT in "${ACCOUNTS[@]}"; do
     echo "Enabling public network access on $ACCOUNT..."
     az storage account update \
         --name "$ACCOUNT" \
