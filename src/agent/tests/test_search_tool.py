@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.agent.search_tool import SearchResult, search_kb
+from agent.search_tool import SearchResult, search_kb
 
 
 class TestSearchResult:
@@ -46,8 +46,8 @@ class TestSearchKb:
         assert search_kb("") == []
         assert search_kb("   ") == []
 
-    @patch("app.agent.search_tool._get_search_client")
-    @patch("app.agent.search_tool._embed_query")
+    @patch("agent.search_tool._get_search_client")
+    @patch("agent.search_tool._embed_query")
     def test_hybrid_search_returns_results(
         self, mock_embed: MagicMock, mock_client_factory: MagicMock
     ) -> None:
@@ -80,8 +80,8 @@ class TestSearchKb:
         assert r.image_urls == ["images/framework.png"]
         assert r.score == 0.87
 
-    @patch("app.agent.search_tool._get_search_client")
-    @patch("app.agent.search_tool._embed_query")
+    @patch("agent.search_tool._get_search_client")
+    @patch("agent.search_tool._embed_query")
     def test_search_with_no_images(
         self, mock_embed: MagicMock, mock_client_factory: MagicMock
     ) -> None:
@@ -106,8 +106,8 @@ class TestSearchKb:
         assert len(results) == 1
         assert results[0].image_urls == []
 
-    @patch("app.agent.search_tool._get_search_client")
-    @patch("app.agent.search_tool._embed_query")
+    @patch("agent.search_tool._get_search_client")
+    @patch("agent.search_tool._embed_query")
     def test_search_respects_top_parameter(
         self, mock_embed: MagicMock, mock_client_factory: MagicMock
     ) -> None:

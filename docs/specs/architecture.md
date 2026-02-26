@@ -77,13 +77,13 @@ flowchart LR
         subgraph Pipeline["Ingestion Pipeline — Azure Functions"]
             direction TB
             CONV["<b>fn-convert</b><br/>HTML → MD + images"]
+            AN["Analyzer ✱<br/>HTML + image analysis"]
             IDX["<b>fn-index</b><br/>MD → chunks → index"]
-            CONV --> IDX
+            CONV --> AN --> IDX
         end
-        subgraph Sources["Storage & Analysis"]
+        subgraph Sources["Storage"]
             direction TB
             SA1["Staging Storage<br/>Source articles"]
-            AN["Analyzer ✱<br/>HTML + image analysis"]
             SA2["Serving Storage<br/>Processed articles"]
         end
     end
@@ -94,18 +94,21 @@ flowchart LR
             direction TB
             AF["AI Foundry<br/>GPT-4.1 + Embeddings"]
             AIS["AI Search<br/>kb-articles index"]
+            COSMOS["Cosmos DB<br/>Conversation history"]
         end
-        subgraph App["KB Agent"]
+        subgraph AgentSvc["KB Agent — Foundry Hosted Agent"]
+            direction TB
+            AGENT["<b>ChatAgent</b><br/>search tool + reasoning"]
+            VIS["<b>Vision Middleware</b><br/>Image injection"]
+        end
+        subgraph WebApp["Web App — Container Apps"]
             direction TB
             PROXY["<b>Image Proxy</b><br/>/api/images/*"]
-            VIS["<b>Vision Middleware</b><br/>Image injection"]
-            AGENT["<b>KB Agent</b><br/>ChatAgent + tools"]
-            
+            CHAT["<b>Chainlit UI</b><br/>Streaming chat"]
         end
     end
 
     CONV -->|read| SA1
-    CONV -->|analyze| AN
     CONV -->|write| SA2
     IDX -->|read| SA2
 
@@ -114,9 +117,11 @@ flowchart LR
 
     AGENT -->|reason| AF
     AGENT -->|query| AIS
+    VIS -->|fetch images| SA2
 
-    VIS -->|fetch| SA2
-    PROXY -->|serve| SA2
+    CHAT -->|Responses API| AGENT
+    CHAT -->|read/write| COSMOS
+    PROXY -->|serve images| SA2
 
     classDef invisible fill:none,stroke:none;
     class left,right invisible;
@@ -126,33 +131,67 @@ flowchart LR
 
 ## Context Aware & Vision Grounded KB Agent
 
-The agent is a conversational interface that consumes the `kb-articles` index via a **Microsoft Agent Framework** agent backed by a **Chainlit** chat UI. It runs locally against the same Azure services used by the ingestion pipeline.
+The solution consists of two services: a standalone **KB Agent** deployed as a **Foundry hosted agent** and a **Chainlit thin client** web app that calls the agent via the OpenAI-compatible **Responses API** and stores conversation history in **Cosmos DB**.
 
-### Components
+### Agent (Foundry Hosted Agent)
+
+The agent runs as a FastAPI service on port 8088 (locally) or as a Foundry hosted agent (deployed). It exposes three endpoints:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check |
+| `/v1/entities` | GET | List available agents |
+| `/v1/responses` | POST | Process a user message (streaming + non-streaming) |
+
+#### Agent Components
 
 - **KB Agent** — A `ChatAgent` (from `agent-framework-core` + `agent-framework-azure-ai`) with a single tool: `search_knowledge_base`. The agent uses `gpt-4.1` for reasoning and calls the tool to perform hybrid search (vector + keyword) against the index.
 - **Search Tool** — Embeds the agent's query with `text-embedding-3-small`, performs hybrid search via `azure-search-documents`, and returns ranked chunks with image references.
 - **Vision Middleware** — A `ChatMiddleware` on the Azure OpenAI chat client that intercepts tool results, detects image URLs in the search response JSON, downloads the images from blob storage, and injects them into the LLM conversation as `DataContent` (base64 image payloads). This enables GPT-4.1's vision capabilities — the LLM can **see** the actual images (diagrams, screenshots, architecture charts) and reason about their visual content when composing answers.
+- **Image Service** — Downloads images from blob storage for the vision middleware. Uses `DefaultAzureCredential` for blob access.
+
+### Web App (Chainlit Thin Client)
+
+The web app is a Chainlit-based UI that calls the agent via the Responses API. It does **not** contain any agent logic, search code, or vision middleware — those all live in the agent package.
+
+#### Web App Components
+
+- **OpenAI SDK Client** — Calls the agent via `client.responses.create(input=..., stream=True)`. Dual-mode auth: `http://` → no auth (local), `https://` → Entra token via `get_bearer_token_provider`.
+- **Context Window Management** — Maintains in-memory conversation history per session. Estimates tokens (4 chars ≈ 1 token) and drops oldest messages when context exceeds 120K tokens (leaving headroom for response). Cosmos DB retains the full conversation (append-only).
+- **Cosmos DB Data Layer** — `CosmosDataLayer(BaseDataLayer)` stores conversations in Cosmos DB NoSQL (serverless). Partition key: `/userId`. Auto-title from first user message (80 chars max). Supports thread listing, resume, and deletion.
 - **Image Proxy** — A FastAPI endpoint (`/api/images/{article_id}/{image_path}`) that downloads images from the serving blob account on demand. Chainlit renders standard `![alt](/api/images/...)` markdown natively, and the browser fetches images from this same-origin proxy.
 - **Image Normaliser** — Post-processing step that normalises all `![alt](url)` references in the LLM output to clean `/api/images/...` proxy URLs. Handles the variety of URL formats the LLM may generate (hallucinated domains, missing leading slashes, `attachment:` schemes) via pattern matching and filename-to-citation lookup.
-- **Chainlit Chat UI** — Streaming chat interface with real-time token display, native Markdown rendering (including inline images via the proxy), clickable `[Ref #N]` citation links with side-panel detail views, and conversation history via `AgentThread`.
+- **Chainlit Chat UI** — Streaming chat interface with real-time token display, native Markdown rendering (including inline images via the proxy), clickable `[Ref #N]` citation links with side-panel detail views, and conversation history panel.
+
+### Conversation Flow
+
+```
+User message → Web App → Build context (system prompt + history from Cosmos)
+                       → POST /v1/responses (stream=True)
+                       → Agent (FastAPI) → ChatAgent.run_stream()
+                                         → search_knowledge_base tool
+                                         → Vision middleware (download + inject images)
+                                         → LLM response (streamed SSE)
+                       ← Stream tokens to Chainlit UI
+                       → Save to Cosmos DB (user message + agent response)
+```
 
 ### Image Flow: From Index to Browser
 
-The image-aware chunks created by the ingestion pipeline (Epic 001) are the foundation of the web app's visual capabilities. Here is the end-to-end flow:
+The image-aware chunks created by the ingestion pipeline (Epic 001) are the foundation of the vision-grounded capabilities. Here is the end-to-end flow across both services:
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Chainlit as Chainlit UI
-    participant Agent as KB Agent (gpt-4.1)
+    participant WebApp as Web App (Chainlit)
+    participant Agent as Agent (FastAPI)
     participant Search as AI Search
     participant VisionMW as Vision Middleware
     participant Blob as Serving Blob Storage
-    participant Proxy as Image Proxy
+    participant Proxy as Image Proxy (Web App)
 
-    User->>Chainlit: Ask question
-    Chainlit->>Agent: chat_stream(question)
+    User->>WebApp: Ask question
+    WebApp->>Agent: POST /v1/responses (stream=True)
     Agent->>Search: search_knowledge_base(query)
     Search-->>Agent: chunks with image_urls[]
 
@@ -162,8 +201,8 @@ sequenceDiagram
     VisionMW->>Agent: Append DataContent (base64 images) to conversation
 
     Note over Agent: LLM sees actual images + text chunks
-    Agent-->>Chainlit: Stream tokens with ![alt](/api/images/...)
-    Chainlit-->>User: Render markdown (images load via proxy)
+    Agent-->>WebApp: Stream SSE tokens with ![alt](/api/images/...)
+    WebApp-->>User: Render markdown (images load via proxy)
 
     User->>Proxy: Browser GETs /api/images/article/images/file.png
     Proxy->>Blob: Download blob
@@ -192,26 +231,42 @@ Despite explicit system prompt instructions, LLMs generate image URLs in many cr
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| 1 | Microsoft Agent Framework | Provides `ChatAgent` with built-in tool calling, conversation threading, and Azure OpenAI integration — avoids manual Responses API loop management. |
-| 2 | Vision middleware for image injection | `ChatMiddleware` intercepts tool results and injects images as `DataContent`. The framework auto-converts to OpenAI's vision format. The LLM can reason about visual content (diagrams, architecture charts) not just text descriptions — producing higher-fidelity answers. |
-| 3 | Same-origin image proxy | Avoids SAS URL complexity (token expiry, CORS). Chainlit renders `![alt](/api/images/...)` as native markdown; browser fetches from same origin. Images persist across `msg.update()` re-renders. |
-| 4 | Post-processing normalisation (not base64 `<img>`) | Chainlit strips HTML `<img>` tags on `msg.update()`, causing grey boxes. Native markdown `![alt](url)` survives re-rendering. The normaliser ensures all URLs point to the proxy. |
-| 5 | Hybrid search | Best relevance — combines vector similarity and keyword matching. |
-| 6 | Chainlit | Purpose-built chat UI with native streaming, `cl.Text` side panels for citations, and markdown rendering. Single `chainlit run` command. |
+| 1 | Two-service split (Agent + Web App) | Agent is a standalone Foundry hosted agent with its own identity and RBAC. Web app is a thin client — no agent logic, search code, or vision middleware. Clean separation of concerns. |
+| 2 | Microsoft Agent Framework | Provides `ChatAgent` with built-in tool calling, conversation threading, and Azure OpenAI integration — avoids manual Responses API loop management. |
+| 3 | Responses API integration | Web app calls agent via OpenAI SDK `client.responses.create()`. Standard protocol, dual-mode auth (no auth local, Entra token deployed), streaming SSE. |
+| 4 | Vision middleware for image injection | `ChatMiddleware` intercepts tool results and injects images as `DataContent`. The framework auto-converts to OpenAI's vision format. The LLM can reason about visual content (diagrams, architecture charts) not just text descriptions — producing higher-fidelity answers. |
+| 5 | Cosmos DB conversation persistence | Serverless NoSQL with `/userId` partition key. Replaces in-memory-only thread storage. Supports conversation resume, history panel, and cross-session continuity. |
+| 6 | Same-origin image proxy | Avoids SAS URL complexity (token expiry, CORS). Chainlit renders `![alt](/api/images/...)` as native markdown; browser fetches from same origin. Images persist across `msg.update()` re-renders. |
+| 7 | Post-processing normalisation (not base64 `<img>`) | Chainlit strips HTML `<img>` tags on `msg.update()`, causing grey boxes. Native markdown `![alt](url)` survives re-rendering. The normaliser ensures all URLs point to the proxy. |
+| 8 | Hybrid search | Best relevance — combines vector similarity and keyword matching. |
+| 9 | Chainlit | Purpose-built chat UI with native streaming, `cl.Text` side panels for citations, and markdown rendering. Single `chainlit run` command. |
 
-For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md).
+For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md) and [Epic 005](../epics/005-hosted-agent-foundry.md).
 
 ### Deployment
 
-The web app is deployed to **Azure Container Apps** with **Entra ID Easy Auth** (single-tenant). The deployment architecture enables zero-code authentication and managed identity access to all Azure services.
+The solution deploys two services:
 
-#### Container Apps Hosting
+1. **Agent** — Published as a **Foundry hosted agent** via `az cognitiveservices account agent publish`. The agent container is built from `src/agent/Dockerfile` and deployed to the Foundry project within Azure AI Services.
+2. **Web App** — Deployed to **Azure Container Apps** with **Entra ID Easy Auth** (single-tenant).
+
+#### Agent Deployment (Foundry)
+
+- **Container image** built from `src/agent/Dockerfile` (Python 3.11, FastAPI + uvicorn, port 8088)
+- **AZD service** defined in `azure.yaml` as `host: ai.agent` — `azd deploy --service agent` pushes the container
+- **Publish script** (`scripts/publish-agent.sh`) publishes the agent and assigns RBAC roles to the published agent's identity:
+  - Cognitive Services OpenAI User → AI Services
+  - Search Index Data Reader → AI Search
+  - Storage Blob Data Reader → Serving Storage
+- **Agent endpoint** stored in AZD env as `AGENT_ENDPOINT` for the web app to consume
+
+#### Web App Deployment (Container Apps)
 
 - **Container image** built from `src/web-app/Dockerfile` and pushed to **Azure Container Registry** (Basic SKU)
 - **Container App** runs on a Consumption-plan **Container Apps Environment** linked to Log Analytics
 - Single container: 0.5 vCPU / 1 GiB memory, scale 0–1 (scale-to-zero for cost savings)
 - Ingress: external, port 8080, HTTPS-only
-- Application settings (AI Services endpoint, Search endpoint, Blob endpoint, deployment names) injected as environment variables from Bicep outputs
+- Application settings (Agent endpoint, Cosmos endpoint, AI Services endpoint, Search endpoint, Blob endpoint, deployment names) injected as environment variables from Bicep outputs
 
 #### Authentication — Entra ID Easy Auth
 
@@ -227,18 +282,26 @@ Only users in the Azure AD tenant can access the app. An **Entra App Registratio
 
 #### Managed Identity RBAC
 
-The Container App's **system-assigned managed identity** replaces the developer's `az login` credential. `DefaultAzureCredential` works transparently in both local and deployed environments.
+Each service has its own identity with least-privilege roles:
+
+**Published Agent Identity** (assigned by `scripts/publish-agent.sh`):
 
 | Role | Resource | Purpose |
 |------|----------|---------|
 | Cognitive Services OpenAI User | AI Services | Call GPT-4.1 and embedding models |
 | Search Index Data Reader | AI Search | Query the `kb-articles` index |
+| Storage Blob Data Reader | Serving Storage | Download article images for vision middleware |
+
+**Web App Container App Managed Identity**:
+
+| Role | Resource | Purpose |
+|------|----------|---------|
+| Cognitive Services OpenAI User | AI Services | Call agent via Responses API |
 | Storage Blob Data Reader | Serving Storage | Download article images via proxy |
+| Cosmos DB Built-in Data Contributor | Cosmos DB | Read/write conversation history |
 | AcrPull | Container Registry | Pull Docker images |
 
-> The web app only **reads** from the index and blob storage — it does not need Contributor roles.
-
-For infrastructure details, see [Infrastructure](../specs/infrastructure.md). For deployment epic, see [Epic 003](../epics/003-web-app-azure-deployment.md).
+For infrastructure details, see [Infrastructure](../specs/infrastructure.md). For deployment epics, see [Epic 003](../epics/003-web-app-azure-deployment.md) and [Epic 005](../epics/005-hosted-agent-foundry.md).
 
 ---
 
@@ -575,6 +638,63 @@ The `deploy` command uses `allow_replace=True`, so it overwrites the existing an
 | `text-embedding-3-large` | `text-embedding-3-large` |
 
 Stale mappings (from previously deployed models that no longer exist) are automatically removed to prevent CU errors.
+
+## Observability & Telemetry
+
+The agent emits OpenTelemetry traces, metrics, and logs for full end-to-end visibility. Telemetry is configured via `configure_otel_providers()` from the `agent_framework.observability` module, called at agent startup.
+
+### Telemetry Pipeline
+
+```
+Agent (FastAPI)                        Azure Monitor
+────────────────                       ──────────────
+configure_otel_providers()
+    ├── TracerProvider ─── OTLP / AzMon ──→ Application Insights
+    ├── MeterProvider  ─── OTLP / AzMon ──→ Application Insights
+    └── LoggerProvider ─── OTLP / AzMon ──→ Application Insights
+```
+
+### Environment Variables
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Export traces/metrics/logs to Azure Monitor | _(none — console only)_ |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Export to OTLP collector (Aspire Dashboard) | _(none)_ |
+| `OTEL_SERVICE_NAME` | Service name in traces | `agent_framework` |
+| `AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED` | Record prompt/response content in traces (opt-in, may contain PII) | `false` |
+
+### What Is Traced
+
+- **Agent execution spans** — top-level span per `/v1/responses` request
+- **Tool call spans** — `search_knowledge_base` calls with query + result count
+- **Model call spans** — GPT-4.1 invocations with latency + token usage
+- **Vision middleware operations** — image download + base64 injection
+- **Distributed trace correlation** — traces flow from agent → AI Services → AI Search
+
+### Content Recording
+
+Content recording is **opt-in** via `AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED=true`. When enabled, traces include:
+- System prompts and user messages
+- Tool inputs and outputs (search queries, results)
+- Model responses (full text)
+
+> **PII warning:** Enabling content recording may capture user messages and KB article content. Use only in development or controlled environments.
+
+### Local Development
+
+| Mode | Configuration | Output |
+|------|---------------|--------|
+| Console only | No env vars set | Traces/logs to stdout (default) |
+| Aspire Dashboard | `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:18889` | Rich trace UI at `http://localhost:18888` |
+| AI Toolkit (VS Code) | `OTEL_EXPORTER_OTLP_ENDPOINT` per extension config | Traces visible in VS Code AI Toolkit panel |
+
+### Deployed (Foundry)
+
+When deployed to Foundry, `APPLICATIONINSIGHTS_CONNECTION_STRING` is set automatically via Bicep. Traces are visible in:
+- **Foundry portal** → Project → Tracing tab
+- **Application Insights** → Transaction search / End-to-end transaction details
+
+---
 
 ## Design Principles
 

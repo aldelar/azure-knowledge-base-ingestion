@@ -20,7 +20,7 @@ from agent_framework import ChatMessage
 from agent_framework._middleware import ChatContext, ChatMiddleware
 from agent_framework._types import DataContent, FunctionResultContent, TextContent
 
-from app.agent.image_service import download_image
+from agent.image_service import download_image
 
 logger = logging.getLogger(__name__)
 

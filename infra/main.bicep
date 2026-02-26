@@ -177,6 +177,32 @@ module containerApp 'modules/container-app.bicep' = {
     servingBlobEndpoint: servingStorage.outputs.blobEndpoint
     entraClientId: entraClientId
     entraClientSecret: entraClientSecret
+    cosmosEndpoint: cosmosDb.outputs.cosmosEndpoint
+    cosmosDatabaseName: cosmosDb.outputs.cosmosDatabaseName
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module: Foundry Project (child of AI Services)
+// ---------------------------------------------------------------------------
+module foundryProject 'modules/foundry-project.bicep' = {
+  name: 'foundry-project'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module: Cosmos DB (conversation history)
+// ---------------------------------------------------------------------------
+module cosmosDb 'modules/cosmos-db.bicep' = {
+  name: 'cosmos-db'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
   }
 }
 
@@ -285,6 +311,17 @@ module searchWebAppRole 'modules/search.bicep' = {
   }
 }
 
+// Cosmos DB: Data Contributor (Container App MI — read/write conversations)
+// Uses a dedicated role module to avoid re-deploying the full cosmos-db module.
+module cosmosDbWebAppRole 'modules/cosmos-db-role.bicep' = {
+  name: 'cosmos-db-webapp-role'
+  params: {
+    baseName: baseName
+    principalId: containerApp.outputs.containerAppPrincipalId
+  }
+  dependsOn: [cosmosDb]
+}
+
 // ---------------------------------------------------------------------------
 // Outputs — consumed by AZD and application code
 // ---------------------------------------------------------------------------
@@ -325,3 +362,11 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.cont
 // Web App (Container App)
 output WEBAPP_NAME string = containerApp.outputs.containerAppName
 output WEBAPP_URL string = containerApp.outputs.containerAppUrl
+
+// Foundry Project
+output FOUNDRY_PROJECT_NAME string = foundryProject.outputs.projectName
+output FOUNDRY_PROJECT_ENDPOINT string = foundryProject.outputs.projectEndpoint
+
+// Cosmos DB
+output COSMOS_ENDPOINT string = cosmosDb.outputs.cosmosEndpoint
+output COSMOS_DATABASE_NAME string = cosmosDb.outputs.cosmosDatabaseName

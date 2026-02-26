@@ -59,3 +59,9 @@ services:
     host: containerapp
     docker:
       path: ./Dockerfile
+  agent:
+    project: ./src/agent
+    language: python
+    host: ai.agent
+    docker:
+      path: ./Dockerfile

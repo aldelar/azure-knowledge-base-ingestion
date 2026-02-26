@@ -14,7 +14,7 @@ from azure.identity import DefaultAzureCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
 
-from app.config import config
+from agent.config import config
 
 logger = logging.getLogger(__name__)
 

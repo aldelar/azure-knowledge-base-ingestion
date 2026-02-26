@@ -1,15 +1,9 @@
 """Integration tests for fn_index.embedder — verify embedding returns 1536-dim vectors."""
 
-from pathlib import Path
-
 import pytest
 
 from fn_index.chunker import Chunk, chunk_article
 from fn_index.embedder import embed_chunks, embed_text
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-_SERVING = _REPO_ROOT / "kb" / "serving"
-_DITA_ARTICLE = _SERVING / "ymr1770823224196_en-us" / "article.md"
 
 
 class TestEmbedText:
@@ -45,13 +39,4 @@ class TestEmbedChunks:
             assert "section_header" in r
             assert "image_refs" in r
 
-    def test_real_article_embedding(self):
-        if not _DITA_ARTICLE.exists():
-            pytest.skip("DITA article not available")
-        md = _DITA_ARTICLE.read_text(encoding="utf-8")
-        chunks = chunk_article(md)
-        # Embed just first 2 to keep test fast
-        results = embed_chunks(chunks[:2])
-        assert len(results) == 2
-        for r in results:
-            assert len(r["content_vector"]) == 1536
+

@@ -48,6 +48,17 @@ param servingBlobEndpoint string
 @description('Serving storage container name')
 param servingContainerName string = 'serving'
 
+// --- Agent endpoint ---
+@description('Agent endpoint URL (Foundry hosted agent or localhost for local dev)')
+param agentEndpoint string = ''
+
+// --- Cosmos DB ---
+@description('Cosmos DB endpoint')
+param cosmosEndpoint string = ''
+
+@description('Cosmos DB database name')
+param cosmosDatabaseName string = 'kb-agent'
+
 // --- Easy Auth ---
 @description('Entra App Registration client ID for Easy Auth')
 param entraClientId string = ''
@@ -129,6 +140,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'SEARCH_INDEX_NAME', value: searchIndexName }
             { name: 'SERVING_BLOB_ENDPOINT', value: servingBlobEndpoint }
             { name: 'SERVING_CONTAINER_NAME', value: servingContainerName }
+            { name: 'AGENT_ENDPOINT', value: agentEndpoint }
+            { name: 'COSMOS_ENDPOINT', value: cosmosEndpoint }
+            { name: 'COSMOS_DATABASE_NAME', value: cosmosDatabaseName }
           ]
         }
       ]

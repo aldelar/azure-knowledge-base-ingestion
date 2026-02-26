@@ -3,24 +3,31 @@
 Uses gpt-4.1 via ``AzureOpenAIChatClient`` and ``ChatAgent`` with a single
 ``search_knowledge_base`` function tool to answer knowledge-base questions
 grounded in Azure AI Search results.
+
+Exports a ``create_agent()`` factory used by the FastAPI server.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
-from typing import Annotated, AsyncIterator, Union
+from typing import Annotated
 
-from azure.identity import DefaultAzureCredential
-from agent_framework import ChatAgent, AgentThread
-from agent_framework._types import TextContent
+from azure.identity import (
+    AzureCliCredential,
+    ChainedTokenCredential,
+    EnvironmentCredential,
+    ManagedIdentityCredential,
+)
+from agent_framework import ChatAgent
 from agent_framework.azure import AzureOpenAIChatClient
 
-from app.agent.search_tool import SearchResult, search_kb
-from app.agent.image_service import get_image_url
-from app.agent.vision_middleware import VisionImageMiddleware
-from app.config import config
+from agent.search_tool import SearchResult, search_kb
+from agent.image_service import get_image_url
+from agent.vision_middleware import VisionImageMiddleware
+from agent.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -138,119 +145,53 @@ def search_knowledge_base(
 
 
 # ---------------------------------------------------------------------------
-# KBAgent — wraps Microsoft Agent Framework ChatAgent
+# Agent factory — used by the hosting adapter
 # ---------------------------------------------------------------------------
 
-class KBAgent:
-    """Conversational KB search agent using Microsoft Agent Framework.
+def create_agent() -> ChatAgent:
+    """Create and return a configured ChatAgent instance.
 
-    Uses :class:`~agent_framework.ChatAgent` with
-    :class:`~agent_framework.azure.AzureOpenAIChatClient` (backed by Azure
-    OpenAI) and a single ``search_knowledge_base`` function tool.
-
-    Conversation state is managed via :class:`~agent_framework.AgentThread`.
+    This factory is the entry point for the FastAPI server.
+    It creates the ``AzureOpenAIChatClient`` with a credential chain
+    (EnvironmentCredential → AzureCliCredential → ManagedIdentityCredential)
+    and returns a ``ChatAgent`` configured with the search tool and
+    vision middleware.
     """
+    # Use API key if provided (local dev), otherwise credential chain
+    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 
-    def __init__(self) -> None:
+    if api_key:
         client = AzureOpenAIChatClient(
-            credential=DefaultAzureCredential(),
+            api_key=api_key,
             endpoint=config.ai_services_endpoint,
             deployment_name=config.agent_model_deployment_name,
             api_version="2025-03-01-preview",
             middleware=[VisionImageMiddleware()],
         )
-        self._agent = ChatAgent(
-            chat_client=client,
-            name="KBSearchAgent",
-            instructions=_SYSTEM_PROMPT,
-            tools=[search_knowledge_base],
+    else:
+        mi_client_id = os.environ.get("AZURE_CLIENT_ID")
+        credential = ChainedTokenCredential(
+            EnvironmentCredential(),
+            AzureCliCredential(),
+            ManagedIdentityCredential(client_id=mi_client_id),
         )
-        logger.info(
-            "KBAgent initialized (model=%s)",
-            config.agent_model_deployment_name,
-        )
-
-    async def chat(
-        self,
-        user_message: str,
-        thread: AgentThread | None = None,
-    ) -> AgentResponse:
-        """Send a user message and get an agent response.
-
-        Parameters
-        ----------
-        user_message:
-            The user's question or message.
-        thread:
-            An existing :class:`AgentThread` for multi-turn conversations.
-            Pass ``None`` to start a new conversation.  The thread is mutated
-            in-place by the framework so subsequent calls with the same
-            thread maintain history automatically.
-
-        Returns
-        -------
-        AgentResponse
-            The agent's text answer, citations, and image URLs.
-        """
-        # Reset per-request accumulators
-        _pending_citations.clear()
-        _pending_images.clear()
-
-        try:
-            response = await self._agent.run(
-                user_message,
-                thread=thread,
-            )
-            text = response.text or ""
-        except Exception:
-            logger.error("Agent run failed", exc_info=True)
-            text = "Sorry, I encountered an error processing your request. Please try again."
-
-        return AgentResponse(
-            text=text,
-            citations=list(_pending_citations),
-            images=list(_pending_images),
+        client = AzureOpenAIChatClient(
+            credential=credential,
+            endpoint=config.ai_services_endpoint,
+            deployment_name=config.agent_model_deployment_name,
+            api_version="2025-03-01-preview",
+            middleware=[VisionImageMiddleware()],
         )
 
-    async def chat_stream(
-        self,
-        user_message: str,
-        thread: AgentThread | None = None,
-    ) -> AsyncIterator[Union[str, AgentResponse]]:
-        """Stream the agent response, yielding text deltas then a final AgentResponse.
-
-        Yields
-        ------
-        str
-            Incremental text chunks as they arrive from the LLM.
-        AgentResponse
-            The final complete response (always the last item yielded).
-        """
-        # Reset per-request accumulators
-        _pending_citations.clear()
-        _pending_images.clear()
-
-        full_text = ""
-        try:
-            async for update in self._agent.run_stream(
-                user_message,
-                thread=thread,
-            ):
-                # Each update may contain multiple content items; extract text only
-                delta = ""
-                for content in update.contents:
-                    if isinstance(content, TextContent):
-                        delta += content.text
-                if delta:
-                    full_text += delta
-                    yield delta
-        except Exception:
-            logger.error("Agent stream failed", exc_info=True)
-            full_text = "Sorry, I encountered an error processing your request. Please try again."
-            yield full_text
-
-        yield AgentResponse(
-            text=full_text,
-            citations=list(_pending_citations),
-            images=list(_pending_images),
-        )
+    agent = ChatAgent(
+        chat_client=client,
+        name="KBSearchAgent",
+        instructions=_SYSTEM_PROMPT,
+        tools=[search_knowledge_base],
+    )
+    logger.info(
+        "Created KBSearchAgent (model=%s, endpoint=%s)",
+        config.agent_model_deployment_name,
+        config.ai_services_endpoint,
+    )
+    return agent

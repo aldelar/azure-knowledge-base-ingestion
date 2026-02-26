@@ -1,0 +1,12 @@
+# Agent manifest for azd ai agent CLI integration
+name: kb-agent
+description: >
+  Context-aware, vision-grounded KB search agent.
+  Answers questions about Azure services using hybrid search
+  (vector + keyword) with image-aware reasoning via GPT-4.1 vision.
+protocol: responses
+version: "1.0"
+entrypoint: main.py
+container:
+  cpu: "1.0"
+  memory: "2Gi"
