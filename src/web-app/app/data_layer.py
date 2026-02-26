@@ -222,11 +222,35 @@ class CosmosDataLayer(BaseDataLayer):
     # Elements
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _element_to_dict(element) -> dict:
+        """Convert a Chainlit Element object or ElementDict to a plain dict."""
+        if isinstance(element, dict):
+            return element
+        # Chainlit may pass an Element object (Text, Image, …) instead of a
+        # TypedDict.  Pull the relevant attributes into a plain dict.
+        d: dict = {}
+        for key in (
+            "id", "threadId", "type", "url", "name", "display",
+            "language", "size", "page", "forId", "mime",
+        ):
+            # Element objects use snake_case attrs; map threadId → thread_id
+            attr = "thread_id" if key == "threadId" else "for_id" if key == "forId" else key
+            val = getattr(element, attr, None)
+            if val is not None:
+                d[key] = val
+        # Content may be stored as .content or .output
+        content = getattr(element, "content", None) or getattr(element, "output", None)
+        if content is not None:
+            d["content"] = content
+        return d
+
     async def create_element(self, element: "ElementDict") -> None:
         """Append element to its parent thread document."""
         if not self._container:
             return
-        thread_id = element.get("threadId")  # type: ignore[union-attr]
+        el_dict = self._element_to_dict(element)
+        thread_id = el_dict.get("threadId")
         if not thread_id:
             return
         doc = self._read_thread_doc(thread_id)
@@ -234,7 +258,6 @@ class CosmosDataLayer(BaseDataLayer):
             logger.warning("create_element: thread %s not found", thread_id)
             return
         elements: list = doc.get("elements", [])
-        el_dict = dict(element) if not isinstance(element, dict) else element
         elements = [e for e in elements if e.get("id") != el_dict.get("id")]
         elements.append(el_dict)
         doc["elements"] = elements
@@ -279,8 +302,18 @@ class CosmosDataLayer(BaseDataLayer):
             return
         doc = self._read_thread_doc(thread_id)
         if not doc:
-            logger.warning("create_step: thread %s not found", thread_id)
-            return
+            # Thread document may not yet exist (Chainlit fires step events
+            # before update_thread in some flows).  Create it on the fly.
+            now = datetime.now(timezone.utc).isoformat()
+            doc = {
+                "id": thread_id,
+                "userId": "local-user",
+                "createdAt": now,
+                "updatedAt": now,
+                "steps": [],
+                "elements": [],
+            }
+            logger.debug("create_step: auto-created thread %s", thread_id)
         steps: list = doc.get("steps", [])
         steps.append(dict(step_dict))
         doc["steps"] = steps
@@ -301,8 +334,17 @@ class CosmosDataLayer(BaseDataLayer):
             return
         doc = self._read_thread_doc(thread_id)
         if not doc:
-            logger.warning("update_step: thread %s not found", thread_id)
-            return
+            # Thread document may not yet exist — create it on the fly.
+            now = datetime.now(timezone.utc).isoformat()
+            doc = {
+                "id": thread_id,
+                "userId": "local-user",
+                "createdAt": now,
+                "updatedAt": now,
+                "steps": [],
+                "elements": [],
+            }
+            logger.debug("update_step: auto-created thread %s", thread_id)
         steps: list = doc.get("steps", [])
         step_id = step_dict.get("id")
         # Replace existing step or append

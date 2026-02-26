@@ -276,6 +276,17 @@ module containerRegistryRole 'modules/container-registry.bicep' = {
   }
 }
 
+// ACR: AcrPull (Foundry Project MI used by unpublished hosted agent runtime)
+module containerRegistryFoundryRole 'modules/container-registry.bicep' = {
+  name: 'container-registry-foundry-role'
+  params: {
+    location: location
+    baseName: environmentName
+    tags: defaultTags
+    acrPullPrincipalId: foundryProject.outputs.projectPrincipalId
+  }
+}
+
 // Serving storage: Blob Data Reader (Container App MI — read-only for image proxy)
 module servingStorageReaderRole 'modules/storage.bicep' = {
   name: 'serving-storage-reader-role'

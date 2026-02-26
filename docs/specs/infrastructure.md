@@ -1,6 +1,6 @@
 # Infrastructure
 
-> **Status:** Draft — February 24, 2026
+> **Status:** Updated — February 25, 2026
 
 ## Overview
 
@@ -53,7 +53,7 @@ infra/
     ├── cosmos-db.bicep           # Cosmos DB NoSQL (serverless) — database + conversations container
     ├── cosmos-db-role.bicep      # Cosmos DB Built-in Data Contributor role assignment
     ├── function-app.bicep       # Functions on Container Apps (custom Docker) + runtime storage + AcrPull RBAC
-    ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC (web app only)
+    ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC (web app + Foundry project)
     └── container-app.bicep      # Container Apps Environment + Container App + Easy Auth
 ```
 
@@ -188,7 +188,7 @@ Hosts Docker images for the Context Aware & Vision Grounded KB Agent container.
 | Admin User | Disabled (managed identity pull) |
 | Public Network | Enabled |
 
-The module accepts an optional `acrPullPrincipalId` parameter. When provided, it grants the **AcrPull** role to that principal (used to give the web app Container App access to pull images). The Function App's AcrPull role is managed separately in `function-app.bicep` — see [Technical Brief](#technical-brief-bicep-dependency-ordering-for-container-apps) for why.
+The module accepts an optional `acrPullPrincipalId` parameter. When provided, it grants the **AcrPull** role to that principal (used to give the web app Container App and Foundry project identity access to pull images). The Function App's AcrPull role is managed separately in `function-app.bicep` — see [Technical Brief](#technical-brief-bicep-dependency-ordering-for-container-apps) for why.
 
 ### Foundry Project (`foundry-project.bicep`)
 
@@ -200,7 +200,19 @@ Creates a Foundry project as a child resource of the AI Services account. The pr
 | Name | `proj-kbidx-{env}` |
 | Display Name | `KB Agent (proj-kbidx-{env})` |
 
-The project endpoint is output for use by agent publish scripts and by the web app client.
+The project endpoint is output for use by agent deployment (AZD `azure.ai.agents` extension) and by the web app client.
+
+The project is tagged with `azd-service-name: agent` so the AZD extension can discover it during deployment.
+
+**AZD Environment Variables** (set during `azd ai agent init` or manually):
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `AZURE_AI_PROJECT_ID` | Full ARM resource ID of the Foundry project | AZD extension uses this to target deployments |
+| `AZURE_AI_PROJECT_ENDPOINT` | `https://ai-kbidx-{env}.services.ai.azure.com/api/projects/proj-kbidx-{env}` | Agent runtime config |
+| `AZURE_AI_ACCOUNT_NAME` | `ai-kbidx-{env}` | AZD extension uses this for account lookups |
+| `AZURE_AI_PROJECT_NAME` | `proj-kbidx-{env}` | AZD extension uses this for project lookups |
+| `AZURE_OPENAI_ENDPOINT` | `https://ai-kbidx-{env}.openai.azure.com/` | OpenAI-compatible endpoint |
 
 ### Cosmos DB (`cosmos-db.bicep`)
 
@@ -322,6 +334,7 @@ The Container App uses **Easy Auth** (platform-level) with an **Entra App Regist
 | Function App | AI Services | Cognitive Services User |
 | Function App | AI Search | Search Index Data Contributor |
 | Function App | AI Search | Search Service Contributor |
+| Foundry Project (unpublished hosted agent) | Container Registry | AcrPull |
 | Published Agent | AI Services | Cognitive Services OpenAI User |
 | Published Agent | AI Search | Search Index Data Reader |
 | Published Agent | Serving Storage | Storage Blob Data Reader |
@@ -370,7 +383,8 @@ AZD reads `azure.yaml` (project root) and `infra/main.parameters.json` to resolv
 |--------|---------|
 | `make azure-provision` | `azd provision` |
 | `make azure-deploy` | `azd deploy` |
-| `make azure-agent-deploy` | `azd deploy --service agent` |
+| `make azure-agent-deploy` | `azd deploy --service agent` (builds in ACR, deploys to Foundry) |
+| `make azure-agent-capability-host` | Ensures account capability host exists with `enablePublicHostingEnvironment=true` |
 | `make azure-agent-publish` | `bash scripts/publish-agent.sh` (publish + RBAC) |
 | `make azure-agent` | Deploy + publish agent |
 | `make azure-deploy-app` | `azd deploy --service web-app` |
@@ -406,6 +420,11 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `WEBAPP_URL` | `https://webapp-kbidx-dev.<region>.azurecontainerapps.io` |
 | `FOUNDRY_PROJECT_NAME` | `proj-kbidx-dev` |
 | `FOUNDRY_PROJECT_ENDPOINT` | `https://ai-kbidx-dev.services.ai.azure.com/api/projects/proj-kbidx-dev` |
+| `AZURE_AI_PROJECT_ID` | `/subscriptions/.../providers/Microsoft.CognitiveServices/accounts/ai-kbidx-dev/projects/proj-kbidx-dev` |
+| `AZURE_AI_PROJECT_ENDPOINT` | `https://ai-kbidx-dev.services.ai.azure.com/api/projects/proj-kbidx-dev` |
+| `AZURE_AI_ACCOUNT_NAME` | `ai-kbidx-dev` |
+| `AZURE_AI_PROJECT_NAME` | `proj-kbidx-dev` |
+| `AZURE_OPENAI_ENDPOINT` | `https://ai-kbidx-dev.openai.azure.com/` |
 | `COSMOS_ENDPOINT` | `https://cosmos-kbidx-dev.documents.azure.com:443/` |
 | `COSMOS_DATABASE_NAME` | `kb-agent` |
 

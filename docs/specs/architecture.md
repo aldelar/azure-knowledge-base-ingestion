@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** Updated — February 17, 2026
+> **Status:** Updated — February 25, 2026
 
 ## Overview
 
@@ -247,18 +247,23 @@ For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md) an
 
 The solution deploys two services:
 
-1. **Agent** — Published as a **Foundry hosted agent** via `az cognitiveservices account agent publish`. The agent container is built from `src/agent/Dockerfile` and deployed to the Foundry project within Azure AI Services.
+1. **Agent** — Deployed as a **Foundry hosted agent** via AZD's `azure.ai.agents` extension. The agent container is built remotely in ACR and deployed to the Foundry project within Azure AI Services.
 2. **Web App** — Deployed to **Azure Container Apps** with **Entra ID Easy Auth** (single-tenant).
 
 #### Agent Deployment (Foundry)
 
 - **Container image** built from `src/agent/Dockerfile` (Python 3.11, FastAPI + uvicorn, port 8088)
-- **AZD service** defined in `azure.yaml` as `host: ai.agent` — `azd deploy --service agent` pushes the container
+- **AZD service** defined in `azure.yaml` as `host: azure.ai.agent`, `language: docker`, `docker.remoteBuild: true`
+- **Config block** specifies container resources (CPU, memory), scale settings, and model deployments (gpt-4.1)
+- **Agent manifest** (`src/agent/agent.yaml`) uses the `ContainerAgent` schema: `kind: hosted`, `protocols: [responses v1]`, `environment_variables` for runtime config
+- **Deployment** via `azd deploy --service agent` — builds the Docker image in ACR and deploys to Foundry
 - **Publish script** (`scripts/publish-agent.sh`) publishes the agent and assigns RBAC roles to the published agent's identity:
   - Cognitive Services OpenAI User → AI Services
   - Search Index Data Reader → AI Search
   - Storage Blob Data Reader → Serving Storage
 - **Agent endpoint** stored in AZD env as `AGENT_ENDPOINT` for the web app to consume
+
+See [ARD-005](../ards/ARD-005-foundry-hosted-agent.md) and [Research 006](../research/006-foundry-hosted-agent-deployment.md) for the deployment approach and findings.
 
 #### Web App Deployment (Container Apps)
 

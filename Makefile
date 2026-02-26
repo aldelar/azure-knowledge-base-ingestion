@@ -250,10 +250,30 @@ azure-app-logs: ## Stream live logs from the deployed web app
 # ------------------------------------------------------------------------------
 # Azure — Agent (Foundry Hosted Agent)
 # ------------------------------------------------------------------------------
-.PHONY: azure-agent-deploy azure-agent-publish azure-agent azure-agent-logs azure-test-agent azure-test-app azure-test
+.PHONY: azure-agent-capability-host azure-agent-deploy azure-agent-publish azure-agent azure-agent-logs azure-test-agent azure-test-app azure-test
+
+azure-agent-capability-host: ## Ensure Foundry capability host exists with public hosting enabled
+	@set -e; \
+	SUB=$$(azd env get-value AZURE_SUBSCRIPTION_ID); \
+	RG=$$(azd env get-value RESOURCE_GROUP); \
+	AI=$$(azd env get-value AI_SERVICES_NAME); \
+	DEFAULT_URL="https://management.azure.com/subscriptions/$$SUB/resourceGroups/$$RG/providers/Microsoft.CognitiveServices/accounts/$$AI/capabilityHosts/default?api-version=2025-04-01-preview"; \
+	DEFAULT_KIND=$$(az rest --method GET --url "$$DEFAULT_URL" --query properties.capabilityHostKind -o tsv 2>/dev/null || true); \
+	if [ "$$DEFAULT_KIND" = "Agents" ]; then \
+		echo "Capability host already exists (default)."; \
+	else \
+		URL="https://management.azure.com/subscriptions/$$SUB/resourceGroups/$$RG/providers/Microsoft.CognitiveServices/accounts/$$AI/capabilityHosts/accountcaphost?api-version=2025-10-01-preview"; \
+		echo "Ensuring capability host accountcaphost exists..."; \
+		az rest --method PUT --url "$$URL" \
+			--headers "Content-Type=application/json" \
+			--body '{"properties":{"capabilityHostKind":"Agents","enablePublicHostingEnvironment":true}}' \
+			-o none; \
+		echo "Capability host ensured."; \
+	fi
 
 azure-agent-deploy: ## Deploy the KB Agent to Foundry (dev mode)
-	azd deploy --service agent
+	$(MAKE) azure-agent-capability-host
+	AZD_EXT_TIMEOUT=120 azd deploy --service agent
 
 azure-agent-publish: ## Publish the agent (dedicated identity + stable endpoint)
 	@bash scripts/publish-agent.sh
