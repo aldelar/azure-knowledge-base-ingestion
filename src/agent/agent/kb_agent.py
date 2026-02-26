@@ -4,7 +4,7 @@ Uses gpt-4.1 via ``AzureOpenAIChatClient`` and ``ChatAgent`` with a single
 ``search_knowledge_base`` function tool to answer knowledge-base questions
 grounded in Azure AI Search results.
 
-Exports a ``create_agent()`` factory used by the FastAPI server.
+Exports a ``create_agent()`` factory used by the hosting adapter (``main.py``).
 """
 
 from __future__ import annotations
@@ -15,12 +15,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Annotated
 
-from azure.identity import (
-    AzureCliCredential,
-    ChainedTokenCredential,
-    EnvironmentCredential,
-    ManagedIdentityCredential,
-)
+from azure.identity import DefaultAzureCredential
 from agent_framework import ChatAgent
 from agent_framework.azure import AzureOpenAIChatClient
 
@@ -96,11 +91,6 @@ class AgentResponse:
 # automatically; no manual JSON schema definition is needed.
 # ---------------------------------------------------------------------------
 
-# Accumulator populated by the tool function during a single agent.run()
-# cycle.  Reset before each call to agent.run() by KBAgent.chat().
-_pending_citations: list[Citation] = []
-_pending_images: list[str] = []
-
 
 def search_knowledge_base(
     query: Annotated[str, "The search query — use natural language describing what information is needed"],
@@ -119,22 +109,14 @@ def search_knowledge_base(
 
     result_dicts: list[dict] = []
     for idx, r in enumerate(results, start=1):
-        # Store raw image paths in citations (used by the UI to download blobs)
-        _pending_citations.append(Citation(
-            article_id=r.article_id,
-            title=r.title,
-            section_header=r.section_header,
-            chunk_index=r.chunk_index,
-            content=r.content,
-            image_urls=list(r.image_urls),  # raw paths like 'images/foo.png'
-        ))
-
         result_dicts.append({
             "ref_number": idx,
             "content": r.content,
             "title": r.title,
             "section_header": r.section_header,
             "article_id": r.article_id,
+            "chunk_index": r.chunk_index,
+            "image_urls": list(r.image_urls),  # raw paths like 'images/foo.png'
             "images": [
                 {"name": url.split("/")[-1], "url": get_image_url(r.article_id, url)}
                 for url in r.image_urls
@@ -151,9 +133,10 @@ def search_knowledge_base(
 def create_agent() -> ChatAgent:
     """Create and return a configured ChatAgent instance.
 
-    This factory is the entry point for the FastAPI server.
-    It creates the ``AzureOpenAIChatClient`` with a credential chain
-    (EnvironmentCredential → AzureCliCredential → ManagedIdentityCredential)
+    This factory is the entry point for the hosting adapter (``main.py``).
+    It creates the ``AzureOpenAIChatClient`` with ``DefaultAzureCredential``
+    (which includes WorkloadIdentityCredential for Foundry hosted agents,
+    ManagedIdentityCredential, AzureCliCredential for local dev, etc.)
     and returns a ``ChatAgent`` configured with the search tool and
     vision middleware.
     """
@@ -169,12 +152,10 @@ def create_agent() -> ChatAgent:
             middleware=[VisionImageMiddleware()],
         )
     else:
-        mi_client_id = os.environ.get("AZURE_CLIENT_ID")
-        credential = ChainedTokenCredential(
-            EnvironmentCredential(),
-            AzureCliCredential(),
-            ManagedIdentityCredential(client_id=mi_client_id),
-        )
+        # DefaultAzureCredential includes WorkloadIdentityCredential (used
+        # by Foundry hosted agents), ManagedIdentityCredential, AzureCliCredential,
+        # and others — covers both deployed and local-dev scenarios.
+        credential = DefaultAzureCredential()
         client = AzureOpenAIChatClient(
             credential=credential,
             endpoint=config.ai_services_endpoint,

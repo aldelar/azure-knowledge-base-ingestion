@@ -7,6 +7,7 @@ service (local ``make agent`` or deployed on Foundry).
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -508,7 +509,7 @@ async def on_message(message: cl.Message) -> None:
         )
 
         full_text = ""
-        raw_citations: list[dict] = []  # populated from response.completed metadata
+        raw_citations: list[dict] = []  # populated from function call output events
         for event in response:
             event_type = getattr(event, "type", None)
 
@@ -518,14 +519,24 @@ async def on_message(message: cl.Message) -> None:
                     full_text += delta
                     await msg.stream_token(delta)
 
+            elif event_type == "response.output_item.done":
+                # Extract citation data from search tool's function call output
+                item = getattr(event, "item", None)
+                if item and getattr(item, "type", None) == "function_call_output":
+                    output_str = getattr(item, "output", "")
+                    try:
+                        results = json.loads(output_str)
+                        if isinstance(results, list):
+                            for r in results:
+                                raw_citations.append(r)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
             elif event_type == "response.completed":
-                resp = getattr(event, "response", None)
-                if resp:
-                    # Extract citation metadata from the response
-                    meta = getattr(resp, "metadata", None) or {}
-                    if isinstance(meta, dict):
-                        raw_citations = meta.get("citations", [])
-                    if not full_text:
+                # Fallback: extract full text if streaming didn't capture it
+                if not full_text:
+                    resp = getattr(event, "response", None)
+                    if resp:
                         for output in getattr(resp, "output", []):
                             for content_item in getattr(output, "content", []):
                                 text = getattr(content_item, "text", "")

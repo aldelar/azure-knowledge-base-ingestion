@@ -242,10 +242,14 @@ class TestCreateStep:
         assert doc["name"] == "Hello!"  # auto-title from first user message
 
     @pytest.mark.asyncio
-    async def test_skips_when_thread_not_found(self, data_layer, mock_container):
+    async def test_auto_creates_thread_when_not_found(self, data_layer, mock_container):
         mock_container.query_items.return_value = iter([])
         await data_layer.create_step({"threadId": "missing", "type": "user_message"})
-        mock_container.upsert_item.assert_not_called()
+        # Thread is auto-created on the fly when document doesn't exist
+        mock_container.upsert_item.assert_called_once()
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert doc["id"] == "missing"
+        assert len(doc["steps"]) == 1
 
 
 class TestUpdateStep:

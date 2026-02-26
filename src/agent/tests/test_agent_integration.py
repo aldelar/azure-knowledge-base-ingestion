@@ -1,7 +1,13 @@
 """Agent integration tests — run against a live agent endpoint.
 
 These tests call a real agent (local or deployed) and verify the HTTP
-contract.  They do NOT mock anything.
+contract exposed by the ``from_agent_framework`` adapter.  They do NOT
+mock anything.
+
+Adapter endpoints:
+  POST /responses   — Responses API (streaming or non-streaming)
+  GET  /liveness    — 200 OK (container alive)
+  GET  /readiness   — {"status": "ready"} (agent ready to serve)
 
 Usage (local):
     make test-agent-integration      # expects agent running on localhost:8088
@@ -63,37 +69,23 @@ def client(base_url, headers) -> httpx.Client:
 
 
 # ---------------------------------------------------------------------------
-# Health endpoint
+# Health / readiness probes
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-class TestHealth:
-    """Verify the /health endpoint is reachable."""
+class TestHealthProbes:
+    """Verify the adapter health probe endpoints."""
 
-    def test_health_ok(self, client):
-        resp = client.get("/health")
+    def test_liveness(self, client):
+        resp = client.get("/liveness")
+        assert resp.status_code == 200
+
+    def test_readiness(self, client):
+        resp = client.get("/readiness")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "healthy"
-        assert body["entities_count"] >= 1
-
-
-# ---------------------------------------------------------------------------
-# Entities endpoint
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestEntities:
-    """Verify /v1/entities lists at least one agent."""
-
-    def test_entities_list(self, client):
-        resp = client.get("/v1/entities")
-        assert resp.status_code == 200
-        entities = resp.json()["entities"]
-        assert len(entities) >= 1
-        assert entities[0]["type"] == "agent"
+        assert body["status"] == "ready"
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +99,7 @@ class TestKnowledgeBaseQuery:
 
     def test_non_streaming_answer(self, client):
         resp = client.post(
-            "/v1/responses",
+            "/responses",
             json={"input": "What is Azure AI Search?", "stream": False},
         )
         assert resp.status_code == 200
@@ -130,7 +122,7 @@ class TestStreamingQuery:
     def test_streaming_produces_events(self, client):
         with client.stream(
             "POST",
-            "/v1/responses",
+            "/responses",
             json={"input": "What is Azure AI Search?", "stream": True},
         ) as resp:
             assert resp.status_code == 200
@@ -162,7 +154,7 @@ class TestCitationsPresent:
 
     def test_answer_references_sources(self, client):
         resp = client.post(
-            "/v1/responses",
+            "/responses",
             json={
                 "input": "What is agentic retrieval in Azure AI Search? Cite sources.",
                 "stream": False,

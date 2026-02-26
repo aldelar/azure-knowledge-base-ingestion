@@ -1,25 +1,53 @@
 # ARD-005: Foundry Hosted Agent Deployment
 
-> **Status:** Accepted
-> **Date:** 2026-02-25
+> **Status:** Accepted (Revised 2026-02-26)
+> **Date:** 2026-02-25 (revised 2026-02-26)
 > **Decision Makers:** Engineering Team
 
 ## Context
 
-The KB Agent is a FastAPI-based service that provides vision-grounded, search-augmented answers via the OpenAI Responses API. It uses Microsoft Agent Framework (`ChatAgent`) with a `search_knowledge_base` tool, vision middleware for image injection, and custom SSE streaming with citation metadata.
+The KB Agent is a conversational agent built with Microsoft Agent Framework (`ChatAgent`) that provides vision-grounded, search-augmented answers. It uses a `search_knowledge_base` tool, vision middleware for image injection, and supports SSE streaming.
 
 The agent needs to be deployed to Azure alongside the web app. The question is **how** to deploy the agent — as a standalone Container App, or as a Foundry hosted agent within the Azure AI Foundry project.
 
 ## Decision
 
-**Deploy the KB Agent as a Foundry hosted agent** using AZD's `azure.ai.agents` extension, while keeping our custom FastAPI server implementation.
+**Deploy the KB Agent as a Foundry hosted agent** using AZD's `azure.ai.agents` extension **and** the official `from_agent_framework` hosting adapter.
 
 ### What This Means
 
+- A single `main.py` entry point is used for both local development and Foundry deployment
+- The `from_agent_framework` adapter wraps our `ChatAgent` and provides:
+  - The Responses protocol endpoints (`/responses`, `/runs`)
+  - SSE streaming with keep-alive heartbeats (`agent.run_stream()` → Server-Sent Events)
+  - Health / readiness probes (`/liveness`, `/readiness`)
+  - Lazy agent creation (agent built on first request, not at import time)
 - The agent container is built in ACR via remote build and deployed to the Foundry project
 - Foundry provides a stable HTTPS endpoint with Entra ID authentication, managed identity, and a hosting runtime
 - The web app calls the agent via the Foundry endpoint using `DefaultAzureCredential` (Entra token auth)
-- The agent identity is managed by Foundry (separate from the Container App identity), with explicit RBAC role assignments for AI Services, AI Search, and Blob Storage
+
+### Streaming
+
+The `from_agent_framework` adapter **fully supports SSE streaming**. When the client sends `stream: true`, the adapter calls `agent.run_stream()` and converts the async generator output into the standard Responses API SSE event sequence:
+
+```
+response.created → response.in_progress → response.output_item.added →
+response.output_text.delta (repeated) → response.output_text.done →
+response.output_item.done → response.completed
+```
+
+Function call arguments, results, and tool outputs are also streamed as separate output items, enabling clients to extract structured data (e.g., citation metadata from search results) without custom protocol extensions.
+
+### Citation Flow
+
+Previously, citations were injected as custom `metadata.citations` in the `response.completed` SSE event by a custom FastAPI server. The adapter doesn't support injecting custom metadata into response events.
+
+Instead, citations flow through the standard protocol:
+1. The adapter streams function call output items (`response.output_item.done` with `type: function_call_output`)
+2. The `search_knowledge_base` function result JSON includes `chunk_index` and `image_urls` fields
+3. The web app extracts citation data from these function call output events
+
+This is cleaner — citation data travels through the standard Responses API protocol rather than a custom metadata sideband.
 
 ### Configuration
 
@@ -43,12 +71,15 @@ Deploy the agent as a second Container App alongside the web app, using the exis
 - **Pros:** Simpler — no Foundry-specific configuration, reuses existing Container App patterns. Full control over networking and scaling.
 - **Cons:** No Foundry integration — no managed agent identity, no Foundry tracing, no agent lifecycle management. The web app would need a different auth pattern (service-to-service within Container Apps Environment). Does not leverage the Foundry project we already provision. Misaligned with the platform direction for agent hosting.
 
-### Alternative 2: Use Foundry Hosting Adapter (Rejected)
+### Alternative 2: Custom FastAPI Server Without Adapter (Rejected — Revised)
 
-Adopt the official `azure-ai-agentserver-agentframework` package and wrap our agent with `from_agent_framework(agent).run()`.
-
-- **Pros:** Officially recommended pattern. Automatically exposes the correct REST surface. Simpler entrypoint code.
-- **Cons:** We lose our custom SSE streaming with citation metadata injection — the adapter controls the response format and doesn't support custom `metadata` fields in `response.completed` events. Our web app depends on this metadata for rendering clickable `[Ref #N]` citations with side-panel detail views. Switching would require reworking the citation flow in both the agent and web app. The adapter also doesn't support our `/v1/entities` endpoint (agent discovery). The adapter package (`azure-ai-agentserver-agentframework`) may conflict with our existing `agent-framework-core` and `agent-framework-azure-ai` packages.
+> **Original decision (2026-02-25):** Use a custom FastAPI server instead of the adapter, claiming the adapter didn't support streaming and custom citation metadata.
+>
+> **Revised (2026-02-26):** Investigation of the adapter source code revealed this was incorrect. The adapter fully supports SSE streaming via `agent.run_stream()`. The citation metadata limitation is real but solvable — function call output events carry the search results, and the web app can extract citations from those. The custom server approach was rejected in favor of the adapter because:
+> - It duplicates protocol logic the adapter already handles correctly
+> - It requires maintaining a second entry point (`main_local.py`) for local dev
+> - It's not guaranteed to match Foundry's container lifecycle expectations (health probes, startup protocol)
+> - The adapter works identically for local and deployed scenarios
 
 ### Alternative 3: Deploy via `az cognitiveservices account agent publish` Only (Deferred)
 
@@ -59,13 +90,14 @@ Use the publish CLI command without AZD integration.
 
 ## Consequences
 
-1. **`azure.yaml`** agent service updated to `host: azure.ai.agent` with proper `config` block
-2. **`agent.yaml`** rewritten in `ContainerAgent` schema format
-3. **AZD environment** needs additional variables (`AZURE_AI_PROJECT_ID`, `AZURE_AI_PROJECT_ENDPOINT`, etc.)
-4. **Agent code unchanged** — FastAPI server, streaming, citations, vision middleware all preserved
-5. **Web App unchanged** — `_create_agent_client()` already handles `https://` endpoints with Entra token auth
-6. **RBAC** — published agent identity needs roles on AI Services, AI Search, and Serving Storage (existing `publish-agent.sh` script handles this)
-7. **Observability** — Foundry provides built-in tracing; `APPLICATIONINSIGHTS_CONNECTION_STRING` is injected automatically
+1. **`main.py`** uses `from_agent_framework(_create_agent).run()` — single entry point for local + deployed
+2. **`main_local.py`** deleted — no longer needed
+3. **`azure.yaml`** agent service set to `host: azure.ai.agent` with proper `config` block
+4. **`agent.yaml`** uses `ContainerAgent` schema format
+5. **`pyproject.toml`** includes `azure-ai-agentserver-agentframework>=1.0.0b7` and `starlette<1.0` (adapter dependency compatibility)
+6. **Web app** extracts citations from `response.output_item.done` (function call output) instead of `response.completed.metadata`
+7. **Web app `AGENT_ENDPOINT`** set to `http://localhost:8088` for local (no `/v1` prefix — adapter serves at root)
+8. **RBAC** — published agent identity needs roles on AI Services, AI Search, and Serving Storage
 
 ## References
 

@@ -12,8 +12,6 @@ from agent.kb_agent import (
     AgentResponse,
     Citation,
     _SYSTEM_PROMPT,
-    _pending_citations,
-    _pending_images,
     create_agent,
     search_knowledge_base,
 )
@@ -80,10 +78,6 @@ class TestSystemPrompt:
 class TestSearchKnowledgeBaseTool:
     """Test the search_knowledge_base tool function directly."""
 
-    def setup_method(self) -> None:
-        _pending_citations.clear()
-        _pending_images.clear()
-
     @patch("agent.kb_agent.get_image_url")
     @patch("agent.kb_agent.search_kb")
     def test_returns_json_results(self, mock_search: MagicMock, mock_get_url: MagicMock) -> None:
@@ -110,20 +104,23 @@ class TestSearchKnowledgeBaseTool:
 
     @patch("agent.kb_agent.get_image_url")
     @patch("agent.kb_agent.search_kb")
-    def test_populates_citations(self, mock_search: MagicMock, mock_get_url: MagicMock) -> None:
+    def test_includes_citation_fields(self, mock_search: MagicMock, mock_get_url: MagicMock) -> None:
+        """Function result includes chunk_index and image_urls for citation extraction."""
         mock_search.return_value = [
             SearchResult(
-                id="a_0", article_id="a", chunk_index=0,
+                id="a_0", article_id="a", chunk_index=3,
                 content="C", title="T", section_header="S",
-                image_urls=[], score=0.5,
+                image_urls=["images/fig.png"], score=0.5,
             )
         ]
         mock_get_url.return_value = "/api/images/a/images/fig.png"
 
-        search_knowledge_base("query")
+        result = search_knowledge_base("query")
+        parsed = json.loads(result)
 
-        assert len(_pending_citations) == 1
-        assert _pending_citations[0].article_id == "a"
+        assert parsed[0]["article_id"] == "a"
+        assert parsed[0]["chunk_index"] == 3
+        assert parsed[0]["image_urls"] == ["images/fig.png"]
 
     @patch("agent.kb_agent.get_image_url")
     @patch("agent.kb_agent.search_kb")
@@ -163,16 +160,10 @@ class TestCreateAgent:
 
     @patch("agent.kb_agent.ChatAgent")
     @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.ChainedTokenCredential")
-    @patch("agent.kb_agent.ManagedIdentityCredential")
-    @patch("agent.kb_agent.AzureCliCredential")
-    @patch("agent.kb_agent.EnvironmentCredential")
+    @patch("agent.kb_agent.DefaultAzureCredential")
     def test_returns_chat_agent(
         self,
-        mock_env_cred: MagicMock,
-        mock_cli_cred: MagicMock,
-        mock_mi_cred: MagicMock,
-        mock_chained_cred: MagicMock,
+        mock_credential: MagicMock,
         mock_client_cls: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
@@ -183,22 +174,16 @@ class TestCreateAgent:
         agent = create_agent()
 
         assert agent is mock_agent_instance
-        mock_chained_cred.assert_called_once()
+        mock_credential.assert_called_once()
         mock_client_cls.assert_called_once()
         mock_agent_cls.assert_called_once()
 
     @patch("agent.kb_agent.ChatAgent")
     @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.ChainedTokenCredential")
-    @patch("agent.kb_agent.ManagedIdentityCredential")
-    @patch("agent.kb_agent.AzureCliCredential")
-    @patch("agent.kb_agent.EnvironmentCredential")
+    @patch("agent.kb_agent.DefaultAzureCredential")
     def test_agent_has_search_tool(
         self,
-        mock_env_cred: MagicMock,
-        mock_cli_cred: MagicMock,
-        mock_mi_cred: MagicMock,
-        mock_chained_cred: MagicMock,
+        mock_credential: MagicMock,
         mock_client_cls: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
@@ -210,16 +195,10 @@ class TestCreateAgent:
 
     @patch("agent.kb_agent.ChatAgent")
     @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.ChainedTokenCredential")
-    @patch("agent.kb_agent.ManagedIdentityCredential")
-    @patch("agent.kb_agent.AzureCliCredential")
-    @patch("agent.kb_agent.EnvironmentCredential")
+    @patch("agent.kb_agent.DefaultAzureCredential")
     def test_agent_name(
         self,
-        mock_env_cred: MagicMock,
-        mock_cli_cred: MagicMock,
-        mock_mi_cred: MagicMock,
-        mock_chained_cred: MagicMock,
+        mock_credential: MagicMock,
         mock_client_cls: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
@@ -231,16 +210,10 @@ class TestCreateAgent:
 
     @patch("agent.kb_agent.ChatAgent")
     @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.ChainedTokenCredential")
-    @patch("agent.kb_agent.ManagedIdentityCredential")
-    @patch("agent.kb_agent.AzureCliCredential")
-    @patch("agent.kb_agent.EnvironmentCredential")
+    @patch("agent.kb_agent.DefaultAzureCredential")
     def test_client_uses_vision_middleware(
         self,
-        mock_env_cred: MagicMock,
-        mock_cli_cred: MagicMock,
-        mock_mi_cred: MagicMock,
-        mock_chained_cred: MagicMock,
+        mock_credential: MagicMock,
         mock_client_cls: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
@@ -255,33 +228,19 @@ class TestCreateAgent:
 
     @patch("agent.kb_agent.ChatAgent")
     @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.ChainedTokenCredential")
-    @patch("agent.kb_agent.ManagedIdentityCredential")
-    @patch("agent.kb_agent.AzureCliCredential")
-    @patch("agent.kb_agent.EnvironmentCredential")
-    def test_uses_chained_credential(
+    @patch("agent.kb_agent.DefaultAzureCredential")
+    def test_uses_default_credential(
         self,
-        mock_env_cred: MagicMock,
-        mock_cli_cred: MagicMock,
-        mock_mi_cred: MagicMock,
-        mock_chained_cred: MagicMock,
+        mock_credential: MagicMock,
         mock_client_cls: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
-        """create_agent() uses a ChainedTokenCredential (Env → CLI → MI)."""
+        """create_agent() uses DefaultAzureCredential."""
         create_agent()
 
-        # ChainedTokenCredential was called with all three sub-credentials
-        mock_chained_cred.assert_called_once()
-        chain_args = mock_chained_cred.call_args.args
-        assert len(chain_args) == 3
-        assert chain_args[0] is mock_env_cred.return_value
-        assert chain_args[1] is mock_cli_cred.return_value
-        assert chain_args[2] is mock_mi_cred.return_value
-
-        # The chained credential was passed to AzureOpenAIChatClient
+        mock_credential.assert_called_once()
         client_kwargs = mock_client_cls.call_args.kwargs
-        assert client_kwargs["credential"] is mock_chained_cred.return_value
+        assert client_kwargs["credential"] is mock_credential.return_value
 
     @patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key-123"})
     @patch("agent.kb_agent.ChatAgent")
