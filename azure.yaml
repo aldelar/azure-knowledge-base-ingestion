@@ -59,6 +59,7 @@ hooks:
               echo "WARNING: ENTRA_CLIENT_ID or WEBAPP_URL not set. Skipping redirect URI update."
             fi
     preprovision:
+        name: preprovision
         shell: sh
         run: |
             # Ensure AZURE_PRINCIPAL_ID is set for deployer RBAC role assignments.
