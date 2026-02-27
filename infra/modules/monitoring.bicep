@@ -12,6 +12,9 @@ param baseName string
 @description('Tags to apply to all resources')
 param tags object = {}
 
+@description('Principal ID of the deployer (human user) for Log Analytics Reader role on App Insights')
+param deployerPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Log Analytics Workspace
 // ---------------------------------------------------------------------------
@@ -38,6 +41,23 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   properties: {
     Application_Type: 'web'
     WorkspaceResourceId: logAnalytics.id
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role: Log Analytics Reader — allows the deployer to view traces and
+// metrics in the Foundry Control Plane (Operate > Assets).  The Control
+// Plane reads Application Insights data and requires this role.
+// ---------------------------------------------------------------------------
+var logAnalyticsReaderRoleId = '73c42c96-874c-492b-b04d-ab87d138a893'
+
+resource deployerLogAnalyticsReaderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(appInsights.id, deployerPrincipalId, logAnalyticsReaderRoleId)
+  scope: appInsights
+  properties: {
+    principalId: deployerPrincipalId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', logAnalyticsReaderRoleId)
   }
 }
 

@@ -76,6 +76,7 @@ module monitoring 'modules/monitoring.bicep' = {
     location: location
     baseName: baseName
     tags: defaultTags
+    deployerPrincipalId: principalId
   }
 }
 

@@ -104,6 +104,26 @@ resource deployerAIDeveloperRole 'Microsoft.Authorization/roleAssignments@2022-0
 }
 
 // ---------------------------------------------------------------------------
+// Role: Reader — allows the deployer to see agents in the Foundry
+// Control Plane (Operate > Assets).  The Control Plane discovery queries
+// ARM and requires a standard Reader/Contributor/Owner role on the
+// resource group — AI-specific roles alone are not sufficient.
+// Ref: https://learn.microsoft.com/azure/ai-foundry/control-plane/how-to-manage-agents
+// See also: Log Analytics Reader on App Insights (deployed in monitoring.bicep)
+// ---------------------------------------------------------------------------
+var readerRoleId = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
+
+resource deployerReaderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(resourceGroup().id, deployerPrincipalId, readerRoleId)
+  scope: resourceGroup()
+  properties: {
+    principalId: deployerPrincipalId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', readerRoleId)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Connection: Container Registry — tells the Foundry Agent Service
 // how to pull the hosted-agent container image from our ACR.
 // Without this connection the "Starting agent container" phase hangs.
