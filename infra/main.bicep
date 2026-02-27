@@ -42,6 +42,13 @@ param entraClientId string = ''
 @secure()
 param entraClientSecret string = ''
 
+@description('Chainlit auth secret for JWT signing')
+@secure()
+param chainlitAuthSecret string = ''
+
+@description('Published agent endpoint URL (set by scripts/publish-agent.sh)')
+param agentEndpoint string = ''
+
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -177,6 +184,8 @@ module containerApp 'modules/container-app.bicep' = {
     servingBlobEndpoint: servingStorage.outputs.blobEndpoint
     entraClientId: entraClientId
     entraClientSecret: entraClientSecret
+    chainlitAuthSecret: chainlitAuthSecret
+    agentEndpoint: agentEndpoint
     cosmosEndpoint: cosmosDb.outputs.cosmosEndpoint
     cosmosDatabaseName: cosmosDb.outputs.cosmosDatabaseName
   }
@@ -196,7 +205,9 @@ module foundryProject 'modules/foundry-project.bicep' = {
     acrResourceId: containerRegistry.outputs.containerRegistryId
     appInsightsResourceId: monitoring.outputs.appInsightsId
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
+    webAppPrincipalId: containerApp.outputs.containerAppPrincipalId
   }
+  dependsOn: [containerApp]
 }
 
 // ---------------------------------------------------------------------------

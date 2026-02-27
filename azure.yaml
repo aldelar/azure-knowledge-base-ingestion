@@ -48,17 +48,11 @@ hooks:
     postprovision:
         shell: sh
         run: |
-            # Update the Entra App Registration redirect URI with the actual Container App URL
-            CLIENT_ID=$(azd env get-value ENTRA_CLIENT_ID 2>/dev/null || echo "")
-            WEBAPP_URL=$(azd env get-value WEBAPP_URL 2>/dev/null || echo "")
-            if [ -n "$CLIENT_ID" ] && [ -n "$WEBAPP_URL" ]; then
-              REDIRECT_URI="${WEBAPP_URL}/.auth/login/aad/callback"
-              echo "Setting redirect URI: $REDIRECT_URI"
-              az ad app update --id "$CLIENT_ID" --web-redirect-uris "$REDIRECT_URI"
-              echo "Entra App Registration redirect URI updated."
-            else
-              echo "WARNING: ENTRA_CLIENT_ID or WEBAPP_URL not set. Skipping redirect URI update."
-            fi
+            # Add redirect URIs to the Entra App Registration.
+            # This script is idempotent and CI/CD-safe.
+            # If it fails (e.g. Graph API CAE), run standalone: make azure-setup-auth
+            bash scripts/setup-redirect-uris.sh || \
+              echo "WARNING: Could not update redirect URIs. Run 'make azure-setup-auth' after fixing Graph API auth."
     preprovision:
         name: preprovision
         shell: sh

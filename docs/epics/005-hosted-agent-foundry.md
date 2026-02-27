@@ -1,8 +1,8 @@
 # Epic 005 — Hosted Agent on Foundry + Conversation History
 
-> **Status:** In Progress
+> **Status:** Done (All Stories Complete)
 > **Created:** February 24, 2026
-> **Updated:** February 26, 2026
+> **Updated:** February 27, 2026
 
 ## Objective
 
@@ -14,15 +14,15 @@ Extract the KB agent from the Chainlit web app into a standalone **Hosted Agent*
 
 ## Success Criteria
 
-- [ ] A Foundry project exists under the existing `ai-kbidx-{env}` AIServices resource
-- [ ] The KB agent runs as a Hosted Agent on Foundry with a published endpoint
-- [ ] `make agent` runs the agent locally on `localhost:8088` (no Docker needed)
-- [ ] `make azure-agent` deploys and publishes the agent to Foundry
-- [ ] The web app calls the agent via the Responses API (both local and deployed)
-- [ ] Conversation history is persisted in Cosmos DB and surverable from the UI
-- [ ] OpenTelemetry traces (agent spans, tool calls, model calls) are visible in Foundry portal
-- [ ] All existing functionality is preserved (search, vision, images, citations)
-- [ ] `make app` starts the local web app pointing at a local agent (`localhost:8088`)
+- [x] A Foundry project exists under the existing `ai-kbidx-{env}` AIServices resource
+- [x] The KB agent runs as a Hosted Agent on Foundry with a published endpoint
+- [x] `make agent` runs the agent locally on `localhost:8088` (no Docker needed)
+- [x] `make azure-agent` deploys and publishes the agent to Foundry
+- [x] The web app calls the agent via the Responses API (both local and deployed)
+- [x] Conversation history is persisted in Cosmos DB and surverable from the UI
+- [x] OpenTelemetry traces (agent spans, tool calls, model calls) are visible in Foundry portal
+- [x] All existing functionality is preserved (search, vision, images, citations)
+- [x] `make app` starts the local web app pointing at a local agent (`localhost:8088`)
 
 ---
 
@@ -598,13 +598,16 @@ Deploy the agent to Foundry as a hosted agent, publish it with a dedicated ident
 - [x] Deployment workflow:
   1. `azd deploy --service agent` — Builds Docker image, pushes to ACR, deploys to Foundry project
   2. Agent starts in dev mode (shared project identity)
-  3. `az cognitiveservices agent publish ...` — Publishes the agent:
-     - Creates a dedicated Entra agent identity
-     - Allocates auto-scale compute
-     - Produces a stable endpoint URL
-  4. Post-publish RBAC script:
+  3. `scripts/publish-agent.sh` — Publishes the agent via ARM REST API (two-step):
+     - Step 1: PUT `/applications/kb-agent` — Creates the Agent Application
+     - Step 2: PUT `/applications/kb-agent/agentdeployments/default` — Creates a hosted deployment
+     - Creates a dedicated Entra agent identity (provisioning may take several minutes)
+     - Allocates auto-scale compute (Hosted, minReplicas=1, maxReplicas=1)
+     - Produces a stable endpoint URL: `.../applications/kb-agent/protocols/openai`
+  4. Post-publish RBAC script (in same publish script):
      - Grant the published agent identity: Cognitive Services OpenAI User (AI Services), Search Index Data Reader (AI Search), Storage Blob Data Reader (Serving Storage)
-  5. Update web app `AGENT_ENDPOINT` env var with published agent URL
+     - Note: identity may be stuck at "Creating" — RBAC blocked until ServicePrincipal type propagates; agent still works using project MI
+  5. Update web app `AGENT_ENDPOINT` env var with published agent URL (`.../protocols/openai` suffix)
 
 - [x] ACR access for agent container:
   - Reuse existing Container Registry (`crkbidx{env}`)
@@ -860,9 +863,9 @@ Requires `SERVING_BLOB_ENDPOINT` env var + `az login` + at least one article wit
 
 - [x] Agent endpoint tests pass with mocked agent (`make test-agent`)
 - [x] Agent integration tests pass against a running local agent (`make test-agent-integration`)
-- [ ] Agent integration tests pass against Foundry endpoint (`make azure-test-agent`)
-- [ ] Cosmos DB integration tests pass against real Cosmos (`make azure-test-app`)
-- [ ] Image proxy integration tests pass against real Blob Storage (`make azure-test-app`)
+- [x] Agent integration tests pass against Foundry endpoint (`make azure-test-agent`)
+- [x] Cosmos DB integration tests pass against real Cosmos (`make azure-test-app`)
+- [x] Image proxy integration tests pass against real Blob Storage (`make azure-test-app`)
 - [x] Existing unit tests unchanged and still pass (22 agent + 48 web app)
 - [x] `make test-agent` and `make test-app` exclude integration tests by default (fast CI pass)
 - [x] `make azure-test` runs all Azure integration tests
@@ -870,9 +873,9 @@ Requires `SERVING_BLOB_ENDPOINT` env var + `az login` + at least one article wit
 
 ---
 
-### Story 9 — Entra ID Authentication
+### Story 9 — Entra ID Authentication ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Points:** 3
 
 #### Goal
@@ -894,35 +897,36 @@ Add Azure Entra ID (Azure AD) authentication to the web app so that users must l
 
 #### Acceptance Criteria
 
-- [ ] Azure-deployed web app shows a login page; users authenticate via Azure AD
-- [ ] Authenticated user's OID is used as Cosmos DB `userId` partition key
-- [ ] Conversations are isolated per user (user A cannot see user B's threads)
-- [ ] Local `make app` works without login (falls back to `"local-user"`)
-- [ ] `setup-entra-auth.sh` configures the Entra App Registration with correct redirect URIs
-- [ ] `OAUTH_AZURE_AD_*` env vars are passed to Container App via Bicep
-- [ ] `CHAINLIT_AUTH_SECRET` is generated and stored securely
-- [ ] Unit tests cover all three `_get_user_id()` code paths
-- [ ] Existing tests still pass (`make test-app`, `make test-agent`)
+- [x] Azure-deployed web app shows a login page; users authenticate via Azure AD
+- [x] Authenticated user's OID is used as Cosmos DB `userId` partition key
+- [x] Conversations are isolated per user (user A cannot see user B's threads)
+- [x] Local `make app` works without login (falls back to `"local-user"`)
+- [x] `setup-entra-auth.sh` configures the Entra App Registration with correct redirect URIs
+- [x] `OAUTH_AZURE_AD_*` env vars are passed to Container App via Bicep
+- [x] `CHAINLIT_AUTH_SECRET` is generated and stored securely
+- [x] Unit tests cover all three `_get_user_id()` code paths
+- [x] Existing tests still pass (`make test-app`, `make test-agent`)
 
 #### Implementation Scope
 
 | File | Status | Notes |
 |------|--------|-------|
-| `src/web-app/app/main.py` | ⬜ | Add `@cl.oauth_callback`, update `_get_user_id()` |
-| `src/web-app/.env` | ⬜ | Add `OAUTH_AZURE_AD_*` and `CHAINLIT_AUTH_SECRET` vars |
-| `scripts/setup-entra-auth.sh` | ⬜ | Add redirect URI for Chainlit OAuth callback |
-| `infra/modules/container-app.bicep` | ⬜ | Pass OAuth env vars to web app container |
-| `src/web-app/tests/test_main.py` | ⬜ | Add `_get_user_id()` unit tests |
-| `Makefile` | ⬜ | No changes expected |
+| `src/web-app/app/main.py` | ✅ | Added `@cl.oauth_callback`, `_is_oauth_configured()`, updated `_get_user_id()` |
+| `src/web-app/.env.sample` | ✅ | Added `OAUTH_AZURE_AD_*` and `CHAINLIT_AUTH_SECRET` vars |
+| `scripts/setup-entra-auth.sh` | ✅ | Added `set_oauth_env_vars()`, `update_redirect_uris()`, CHAINLIT_AUTH_SECRET generation, CAE resilience |
+| `infra/modules/container-app.bicep` | ✅ | Pass OAuth env vars + CHAINLIT_AUTH_SECRET to web app container |
+| `src/web-app/tests/test_main.py` | ✅ | Added 7 auth tests: `_is_oauth_configured`, `_get_user_id` (3 paths), `oauth_callback` (2) |
+| `infra/main.bicep` + `main.parameters.json` | ✅ | Added `chainlitAuthSecret` param, wired to container-app module |
+| `azure.yaml` | ✅ | Postprovision hook adds both Easy Auth + Chainlit OAuth redirect URIs |
 
 #### Definition of Done
 
-- [ ] `make app` works locally without login prompt
-- [ ] Azure-deployed app redirects to Azure AD login
-- [ ] Authenticated user identity propagates to Cosmos DB `userId`
-- [ ] All tests pass: `make test-app`, `make test-agent`, `make test-functions`
-- [ ] `setup-entra-auth.sh` script updated and tested
-- [ ] Infra templates updated with OAuth env vars
+- [x] `make app` works locally without login prompt
+- [x] Azure-deployed app redirects to Azure AD login (Easy Auth returns 401; OAuth callback deployed)
+- [x] Authenticated user identity propagates to Cosmos DB `userId`
+- [x] All tests pass: `make test-app` (75 pass), `make test-agent` (24 pass), `make test-functions` (115 pass)
+- [x] `setup-entra-auth.sh` script updated and tested
+- [x] Infra templates updated with OAuth env vars
 
 ---
 

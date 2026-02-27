@@ -14,6 +14,8 @@ from app.main import (
     _create_agent_client,
     _estimate_tokens,
     _expand_ref_markers,
+    _get_user_id,
+    _is_oauth_configured,
     _normalise_inline_images,
     _remap_ref_numbers,
     _rewrite_image_refs,
@@ -214,3 +216,71 @@ class TestBuildFilenameLooup:
 
     def test_empty_citations(self) -> None:
         assert _build_filename_lookup([]) == {}
+
+
+# ---------------------------------------------------------------------------
+# OAuth configuration detection
+# ---------------------------------------------------------------------------
+
+
+class TestIsOauthConfigured:
+
+    def test_true_when_env_set(self) -> None:
+        with patch.dict("os.environ", {"OAUTH_AZURE_AD_CLIENT_ID": "some-client-id"}):
+            assert _is_oauth_configured() is True
+
+    def test_false_when_env_unset(self) -> None:
+        with patch.dict("os.environ", {}, clear=False):
+            import os
+            os.environ.pop("OAUTH_AZURE_AD_CLIENT_ID", None)
+            assert _is_oauth_configured() is False
+
+    def test_false_when_env_empty(self) -> None:
+        with patch.dict("os.environ", {"OAUTH_AZURE_AD_CLIENT_ID": ""}):
+            assert _is_oauth_configured() is False
+
+
+# ---------------------------------------------------------------------------
+# User identity helper  (_get_user_id)
+# ---------------------------------------------------------------------------
+
+
+class TestGetUserId:
+    """Covers the three code paths in _get_user_id()."""
+
+    def test_returns_chainlit_user_identifier(self) -> None:
+        """Path 1: authenticated Chainlit user (OAuth or header callback)."""
+        import chainlit as cl
+
+        mock_user = MagicMock(spec=cl.User)
+        mock_user.identifier = "oid-abc-123"
+
+        with patch("chainlit.user_session") as mock_session:
+            mock_session.get.side_effect = lambda key: {
+                "user": mock_user,
+            }.get(key)
+            assert _get_user_id() == "oid-abc-123"
+
+    def test_returns_easy_auth_header(self) -> None:
+        """Path 2: no Chainlit user, but Easy Auth header present."""
+        with patch("chainlit.user_session") as mock_session:
+            def side_effect(key):
+                if key == "user":
+                    return None
+                if key == "http_headers":
+                    return {"x-ms-client-principal-id": "header-principal-456"}
+                return None
+            mock_session.get.side_effect = side_effect
+            assert _get_user_id() == "header-principal-456"
+
+    def test_returns_local_user_fallback(self) -> None:
+        """Path 3: no auth at all — local dev mode."""
+        with patch("chainlit.user_session") as mock_session:
+            mock_session.get.side_effect = lambda key: None
+            assert _get_user_id() == "local-user"
+
+    def test_returns_local_user_on_exception(self) -> None:
+        """Edge: user_session raises — treat as local dev."""
+        with patch("chainlit.user_session") as mock_session:
+            mock_session.get.side_effect = RuntimeError("no session")
+            assert _get_user_id() == "local-user"

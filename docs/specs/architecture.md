@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** Updated — February 25, 2026
+> **Status:** Updated — June 26, 2026
 
 ## Overview
 
@@ -273,17 +273,20 @@ See [ARD-005](../ards/ARD-005-foundry-hosted-agent.md) and [Research 006](../res
 - Ingress: external, port 8080, HTTPS-only
 - Application settings (Agent endpoint, Cosmos endpoint, AI Services endpoint, Search endpoint, Blob endpoint, deployment names) injected as environment variables from Bicep outputs
 
-#### Authentication — Entra ID Easy Auth
+#### Authentication — Dual-Layer Entra ID Auth
 
-Container Apps Easy Auth is a platform-level sidecar that intercepts all HTTP requests before they reach the application container. No authentication code is needed in the Chainlit app.
+Authentication uses two complementary layers:
 
-1. User navigates to the Container App URL
-2. Easy Auth intercepts the unauthenticated request
-3. User is auto-redirected to Microsoft Entra login
-4. After sign-in, Entra issues a token; Easy Auth validates it (single-tenant)
-5. Authenticated request reaches the Chainlit app transparently
+1. **Easy Auth (platform-level)** — Container Apps Easy Auth is a sidecar that intercepts all HTTP requests before they reach the application container. Unauthenticated requests are auto-redirected to Microsoft Entra login. After sign-in, Entra issues a token; Easy Auth validates it (single-tenant) and forwards the authenticated request with `X-MS-CLIENT-PRINCIPAL-ID` headers.
 
-Only users in the Azure AD tenant can access the app. An **Entra App Registration** (single-tenant) defines the client ID, tenant ID, and redirect URIs.
+2. **Chainlit OAuth callback (application-level)** — When `OAUTH_AZURE_AD_CLIENT_ID` is set, the app registers an `@cl.oauth_callback` handler that extracts the user's OID from the Azure AD token and creates a `cl.User` with the OID as identifier. This identity flows through to Cosmos DB as the `userId` partition key, enabling per-user conversation isolation.
+
+The `_get_user_id()` function implements a 3-tier identity resolution:
+- **Tier 1:** Chainlit authenticated user (`cl.user_session.get("user").identifier`) — OID from OAuth
+- **Tier 2:** Easy Auth header (`X-MS-CLIENT-PRINCIPAL-ID`) — passthrough from sidecar
+- **Tier 3:** Fallback to `"local-user"` — local development without authentication
+
+Only users in the Azure AD tenant can access the app. An **Entra App Registration** (single-tenant) defines the client ID, tenant ID, and redirect URIs. The `scripts/setup-entra-auth.sh` script automates app registration creation and OAuth environment variable configuration.
 
 #### Managed Identity RBAC
 

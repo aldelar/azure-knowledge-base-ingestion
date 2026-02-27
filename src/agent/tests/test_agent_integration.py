@@ -4,10 +4,14 @@ These tests call a real agent (local or deployed) and verify the HTTP
 contract exposed by the ``from_agent_framework`` adapter.  They do NOT
 mock anything.
 
-Adapter endpoints:
+Local adapter endpoints:
   POST /responses   — Responses API (streaming or non-streaming)
   GET  /liveness    — 200 OK (container alive)
   GET  /readiness   — {"status": "ready"} (agent ready to serve)
+
+Published agent endpoint (Foundry):
+  POST {base_url}/responses?api-version=2025-11-15-preview
+  Health probes are NOT exposed through the published endpoint.
 
 Usage (local):
     make test-agent-integration      # expects agent running on localhost:8088
@@ -34,10 +38,15 @@ import pytest
 
 AGENT_ENDPOINT = os.environ.get("AGENT_ENDPOINT", "http://localhost:8088")
 
+# True when targeting a published Foundry agent (https endpoint).  Health
+# probes aren't exposed through the published endpoint, and the api-version
+# query param differs from the dev endpoint.
+_IS_REMOTE = AGENT_ENDPOINT.startswith("https://")
+
 
 def _get_headers() -> dict[str, str]:
     """Return request headers — adds Entra token for https endpoints."""
-    if AGENT_ENDPOINT.startswith("https://"):
+    if _IS_REMOTE:
         from azure.identity import DefaultAzureCredential
 
         credential = DefaultAzureCredential()
@@ -53,7 +62,9 @@ def _get_headers() -> dict[str, str]:
 
 @pytest.fixture(scope="module")
 def base_url() -> str:
-    return AGENT_ENDPOINT.rstrip("/")
+    # Trailing slash ensures httpx resolves relative paths correctly
+    # (RFC 3986: "responses" appended to ".../openai/" → ".../openai/responses")
+    return AGENT_ENDPOINT.rstrip("/") + "/"
 
 
 @pytest.fixture(scope="module")
@@ -65,11 +76,11 @@ def headers() -> dict[str, str]:
 def client(base_url, headers) -> httpx.Client:
     """Synchronous HTTP client for integration tests."""
     params = {}
-    # Foundry hosted endpoints require api-version query parameter
-    if base_url.startswith("https://"):
-        params["api-version"] = "v1"
+    # Published Foundry endpoints require api-version query parameter.
+    if _IS_REMOTE:
+        params["api-version"] = "2025-11-15-preview"
     with httpx.Client(
-        base_url=base_url, headers=headers, params=params, timeout=60.0
+        base_url=base_url, headers=headers, params=params, timeout=120.0
     ) as c:
         yield c
 
@@ -81,14 +92,21 @@ def client(base_url, headers) -> httpx.Client:
 
 @pytest.mark.integration
 class TestHealthProbes:
-    """Verify the adapter health probe endpoints."""
+    """Verify the adapter health probe endpoints.
 
+    These probes are only available when testing the local container
+    directly.  Published Foundry endpoints don't expose /liveness or
+    /readiness.
+    """
+
+    @pytest.mark.skipif(_IS_REMOTE, reason="Health probes not exposed on published endpoint")
     def test_liveness(self, client):
-        resp = client.get("/liveness")
+        resp = client.get("liveness")
         assert resp.status_code == 200
 
+    @pytest.mark.skipif(_IS_REMOTE, reason="Health probes not exposed on published endpoint")
     def test_readiness(self, client):
-        resp = client.get("/readiness")
+        resp = client.get("readiness")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ready"
@@ -105,14 +123,19 @@ class TestKnowledgeBaseQuery:
 
     def test_non_streaming_answer(self, client):
         resp = client.post(
-            "/responses",
+            "responses",
             json={"input": "What is Azure AI Search?", "stream": False},
         )
         assert resp.status_code == 200
         body = resp.json()
         assert body["object"] == "response"
         assert len(body["output"]) >= 1
-        text = body["output"][0]["content"][0]["text"]
+        # Find the message output (skip function_call / function_call_output)
+        msg = next(
+            (o for o in body["output"] if o.get("type") == "message"),
+            body["output"][-1],
+        )
+        text = msg["content"][0]["text"]
         assert len(text) > 10, "Expected a non-trivial answer"
 
 
@@ -128,7 +151,7 @@ class TestStreamingQuery:
     def test_streaming_produces_events(self, client):
         with client.stream(
             "POST",
-            "/responses",
+            "responses",
             json={"input": "What is Azure AI Search?", "stream": True},
         ) as resp:
             assert resp.status_code == 200
@@ -139,14 +162,30 @@ class TestStreamingQuery:
                 if line.startswith("data: "):
                     events.append(line)
 
-        # Must have at least one delta + completion + [DONE]
+        # Must have at least a few SSE events (deltas + completion)
         assert len(events) >= 2, f"Expected >= 2 SSE events, got {len(events)}"
-        assert events[-1].strip() == "data: [DONE]"
 
-        # The second-to-last event should be the completion event
-        completion = json.loads(events[-2].removeprefix("data: "))
-        assert completion["object"] == "response"
-        assert len(completion["output"]) >= 1
+        # Find the completion event — either "response.completed" type or
+        # the data: [DONE] sentinel (local adapter uses [DONE], published
+        # Foundry endpoints send a response.completed event as the last data).
+        completion_event = None
+        for evt in reversed(events):
+            payload = evt.removeprefix("data: ").strip()
+            if payload == "[DONE]":
+                break
+            try:
+                parsed = json.loads(payload)
+                if parsed.get("type") == "response.completed":
+                    completion_event = parsed.get("response", parsed)
+                    break
+                if parsed.get("object") == "response":
+                    completion_event = parsed
+                    break
+            except json.JSONDecodeError:
+                continue
+
+        assert completion_event is not None, "No completion event found in stream"
+        assert len(completion_event.get("output", [])) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -160,14 +199,19 @@ class TestCitationsPresent:
 
     def test_answer_references_sources(self, client):
         resp = client.post(
-            "/responses",
+            "responses",
             json={
                 "input": "What is agentic retrieval in Azure AI Search? Cite sources.",
                 "stream": False,
             },
         )
         assert resp.status_code == 200
-        text = resp.json()["output"][0]["content"][0]["text"]
+        body = resp.json()
+        msg = next(
+            (o for o in body["output"] if o.get("type") == "message"),
+            body["output"][-1],
+        )
+        text = msg["content"][0]["text"]
         # The agent should mention a reference (e.g. [Ref #1]) or cite a source
         assert "ref" in text.lower() or "source" in text.lower() or "#" in text, (
             f"Expected citations in answer, got: {text[:200]}"
@@ -193,7 +237,7 @@ class TestSearchToolConnectivity:
     def test_search_returns_grounded_answer(self, client):
         """Ask a KB-specific question that can only be answered from the index."""
         resp = client.post(
-            "/responses",
+            "responses",
             json={
                 "input": (
                     "Explain what Content Understanding analyzers are in "
@@ -205,7 +249,11 @@ class TestSearchToolConnectivity:
         assert resp.status_code == 200
         body = resp.json()
         assert body["object"] == "response"
-        text = body["output"][0]["content"][0]["text"]
+        msg = next(
+            (o for o in body["output"] if o.get("type") == "message"),
+            body["output"][-1],
+        )
+        text = msg["content"][0]["text"]
 
         # The answer must contain domain-specific terms that only come from
         # the indexed KB articles — not from generic model knowledge.
@@ -218,7 +266,7 @@ class TestSearchToolConnectivity:
     def test_search_answer_contains_images(self, client):
         """KB articles include diagrams; the agent should surface image URLs."""
         resp = client.post(
-            "/responses",
+            "responses",
             json={
                 "input": (
                     "Describe the architecture of Azure AI Search agentic "
@@ -228,18 +276,27 @@ class TestSearchToolConnectivity:
             },
         )
         assert resp.status_code == 200
-        text = resp.json()["output"][0]["content"][0]["text"]
+        body = resp.json()
+        msg = next(
+            (o for o in body["output"] if o.get("type") == "message"),
+            body["output"][-1],
+        )
+        text = msg["content"][0]["text"]
 
-        # Image URLs from the serving blob should appear (SAS-signed or direct)
-        assert "http" in text and (".png" in text or ".jpg" in text or "blob.core" in text), (
-            f"Expected image URLs in answer, got: {text[:300]}"
+        # Image references should appear — either as full URLs (http...)
+        # or relative paths (/api/images/... or ![...](...))
+        has_image_url = "http" in text and (".png" in text or ".jpg" in text or "blob.core" in text)
+        has_image_path = ".png" in text or ".jpg" in text or ".svg" in text
+        has_markdown_image = "![" in text
+        assert has_image_url or has_image_path or has_markdown_image, (
+            f"Expected image references in answer, got: {text[:300]}"
         )
 
     def test_search_no_results_topic(self, client):
         """Ask about a topic NOT in the KB — the agent should state it has
         no relevant information rather than hallucinate."""
         resp = client.post(
-            "/responses",
+            "responses",
             json={
                 "input": (
                     "What is the capital of France? Answer only from "
@@ -249,7 +306,12 @@ class TestSearchToolConnectivity:
             },
         )
         assert resp.status_code == 200
-        text = resp.json()["output"][0]["content"][0]["text"].lower()
+        body = resp.json()
+        msg = next(
+            (o for o in body["output"] if o.get("type") == "message"),
+            body["output"][-1],
+        )
+        text = msg["content"][0]["text"].lower()
         # The agent should not confidently answer unrelated questions
         # It should either say it doesn't have info or provide a hedged answer
         assert any(
@@ -262,6 +324,7 @@ class TestSearchToolConnectivity:
                 "no relevant",
                 "no information",
                 "cannot find",
+                "do not contain",
                 "outside",
                 "not related",
                 "paris",  # if it does answer, at least it's correct

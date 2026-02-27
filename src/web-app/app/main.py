@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import TYPE_CHECKING
 
@@ -294,6 +295,7 @@ def _create_agent_client() -> OpenAI:
         client = OpenAI(
             base_url=endpoint,
             api_key=token_provider(),
+            default_query={"api-version": "2025-11-15-preview"},
         )
         logger.info("Agent client: Foundry mode (Entra auth) → %s", endpoint)
     else:
@@ -369,8 +371,48 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Authentication — header-based auto-login
+# Authentication — Entra ID OAuth + header-based fallback
 # ---------------------------------------------------------------------------
+
+def _is_oauth_configured() -> bool:
+    """Return True if Chainlit Azure AD OAuth env vars are set.
+
+    Chainlit auto-detects ``OAUTH_AZURE_AD_CLIENT_ID`` to enable the Azure AD
+    login button.  When unset (local dev), we fall back to the
+    ``header_auth_callback`` which auto-accepts as ``local-user``.
+    """
+    return bool(os.environ.get("OAUTH_AZURE_AD_CLIENT_ID"))
+
+
+# Register OAuth callback only when env vars are set — Chainlit's decorator
+# raises ValueError at import time if no OAuth provider env var is configured.
+if _is_oauth_configured():
+    @cl.oauth_callback
+    async def oauth_callback(
+        provider_id: str,
+        token: str,
+        raw_user_data: dict,
+        default_user: cl.User,
+    ) -> cl.User | None:
+        """Handle Azure AD OAuth sign-in.
+
+        Called by Chainlit when the user completes the Azure AD login flow.
+        Uses the Entra object-ID (``oid``) as the stable user identifier and
+        falls back to ``sub`` if ``oid`` is not present.
+        """
+        if provider_id == "azure-ad":
+            oid = raw_user_data.get("oid") or raw_user_data.get("sub", "")
+            display = raw_user_data.get("name", oid)
+            return cl.User(
+                identifier=oid,
+                metadata={
+                    "provider": "azure-ad",
+                    "display_name": display,
+                    "email": raw_user_data.get("email", ""),
+                },
+            )
+        return None
+
 
 @cl.header_auth_callback
 async def header_auth_callback(headers: dict) -> cl.User | None:

@@ -30,6 +30,9 @@ param appInsightsResourceId string = ''
 @secure()
 param appInsightsConnectionString string = ''
 
+@description('Principal ID of the web app Container App MI — gets Azure AI User role to call the agent Responses API')
+param webAppPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Foundry Project (child of AIServices)
 // ---------------------------------------------------------------------------
@@ -65,6 +68,21 @@ resource projectAIUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   scope: aiServicesAccount
   properties: {
     principalId: project.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAIUserRoleId)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role: Azure AI User — allows the web app to call the published agent
+// Responses API endpoint (/applications/{app}/protocols/openai).
+// Without this the web app gets 403 ForbiddenError on agent calls.
+// ---------------------------------------------------------------------------
+resource webAppAIUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(webAppPrincipalId)) {
+  name: guid(aiServicesAccount.id, webAppPrincipalId, azureAIUserRoleId)
+  scope: aiServicesAccount
+  properties: {
+    principalId: webAppPrincipalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAIUserRoleId)
   }

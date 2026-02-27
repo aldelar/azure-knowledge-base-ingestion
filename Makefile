@@ -239,6 +239,9 @@ azure-index-summarize: ## Show AI Search index contents summary
 azure-deploy-app: ## Build & deploy the web app to Azure Container Apps
 	azd deploy --service web-app
 
+azure-setup-auth: ## Add Entra redirect URIs (Easy Auth + Chainlit OAuth) — idempotent, CI/CD-safe
+	@bash scripts/setup-redirect-uris.sh
+
 azure-app-url: ## Print the deployed web app URL
 	@azd env get-value WEBAPP_URL
 
@@ -267,7 +270,12 @@ azure-test-agent: ## Run agent integration tests against published Foundry endpo
 	@cd src/agent && AGENT_ENDPOINT=$$(azd env get-value AGENT_ENDPOINT) uv run pytest tests/ -v -m integration || test $$? -eq 5
 
 azure-test-app: ## Run web app integration tests (Cosmos DB + Blob Storage)
-	@cd src/web-app && uv run pytest tests/ -v -m integration || test $$? -eq 5
+	@cd src/web-app && \
+	  SERVING_BLOB_ENDPOINT=$$(azd env get-value SERVING_BLOB_ENDPOINT) \
+	  COSMOS_ENDPOINT=$$(azd env get-value COSMOS_ENDPOINT) \
+	  COSMOS_DATABASE_NAME=$$(azd env get-value COSMOS_DATABASE_NAME) \
+	  AGENT_ENDPOINT=$$(azd env get-value AGENT_ENDPOINT) \
+	  uv run pytest tests/ -v -m integration || test $$? -eq 5
 
 azure-test: azure-test-agent azure-test-app ## Run all Azure integration tests
 
