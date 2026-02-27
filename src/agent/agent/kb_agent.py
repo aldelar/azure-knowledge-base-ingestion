@@ -15,7 +15,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Annotated
 
-from azure.identity import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from agent_framework import ChatAgent
 from agent_framework.azure import AzureOpenAIChatClient
 
@@ -152,12 +152,15 @@ def create_agent() -> ChatAgent:
             middleware=[VisionImageMiddleware()],
         )
     else:
-        # DefaultAzureCredential includes WorkloadIdentityCredential (used
-        # by Foundry hosted agents), ManagedIdentityCredential, AzureCliCredential,
-        # and others — covers both deployed and local-dev scenarios.
+        # Use ad_token_provider pattern (not credential=) to avoid eager token
+        # acquisition and support automatic token refresh for long-running servers.
+        # Reference: foundry-samples/agent-with-foundry-tools/main.py
         credential = DefaultAzureCredential()
+        token_provider = get_bearer_token_provider(
+            credential, "https://cognitiveservices.azure.com/.default"
+        )
         client = AzureOpenAIChatClient(
-            credential=credential,
+            ad_token_provider=token_provider,
             endpoint=config.ai_services_endpoint,
             deployment_name=config.agent_model_deployment_name,
             api_version="2025-03-01-preview",

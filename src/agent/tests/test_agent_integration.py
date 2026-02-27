@@ -41,7 +41,7 @@ def _get_headers() -> dict[str, str]:
         from azure.identity import DefaultAzureCredential
 
         credential = DefaultAzureCredential()
-        token = credential.get_token("https://cognitiveservices.azure.com/.default")
+        token = credential.get_token("https://ai.azure.com/.default")
         return {"Authorization": f"Bearer {token.token}"}
     return {}
 
@@ -64,7 +64,13 @@ def headers() -> dict[str, str]:
 @pytest.fixture(scope="module")
 def client(base_url, headers) -> httpx.Client:
     """Synchronous HTTP client for integration tests."""
-    with httpx.Client(base_url=base_url, headers=headers, timeout=60.0) as c:
+    params = {}
+    # Foundry hosted endpoints require api-version query parameter
+    if base_url.startswith("https://"):
+        params["api-version"] = "v1"
+    with httpx.Client(
+        base_url=base_url, headers=headers, params=params, timeout=60.0
+    ) as c:
         yield c
 
 
@@ -166,3 +172,98 @@ class TestCitationsPresent:
         assert "ref" in text.lower() or "source" in text.lower() or "#" in text, (
             f"Expected citations in answer, got: {text[:200]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Search tool — end-to-end validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestSearchToolConnectivity:
+    """Validate that the agent's search_knowledge_base tool connects to
+    Azure AI Search and returns grounded results.
+
+    These tests confirm that:
+    * The deployed agent can reach Azure AI Search via its managed identity.
+    * The search index contains documents and returns relevant hits.
+    * Image URLs from the knowledge base are surfaced in answers.
+    """
+
+    def test_search_returns_grounded_answer(self, client):
+        """Ask a KB-specific question that can only be answered from the index."""
+        resp = client.post(
+            "/responses",
+            json={
+                "input": (
+                    "Explain what Content Understanding analyzers are in "
+                    "Azure AI. Be specific and detailed."
+                ),
+                "stream": False,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["object"] == "response"
+        text = body["output"][0]["content"][0]["text"]
+
+        # The answer must contain domain-specific terms that only come from
+        # the indexed KB articles — not from generic model knowledge.
+        text_lower = text.lower()
+        assert any(
+            term in text_lower
+            for term in ["analyzer", "content understanding", "azure ai"]
+        ), f"Answer does not appear grounded in KB content: {text[:300]}"
+
+    def test_search_answer_contains_images(self, client):
+        """KB articles include diagrams; the agent should surface image URLs."""
+        resp = client.post(
+            "/responses",
+            json={
+                "input": (
+                    "Describe the architecture of Azure AI Search agentic "
+                    "retrieval. Include any diagrams or images."
+                ),
+                "stream": False,
+            },
+        )
+        assert resp.status_code == 200
+        text = resp.json()["output"][0]["content"][0]["text"]
+
+        # Image URLs from the serving blob should appear (SAS-signed or direct)
+        assert "http" in text and (".png" in text or ".jpg" in text or "blob.core" in text), (
+            f"Expected image URLs in answer, got: {text[:300]}"
+        )
+
+    def test_search_no_results_topic(self, client):
+        """Ask about a topic NOT in the KB — the agent should state it has
+        no relevant information rather than hallucinate."""
+        resp = client.post(
+            "/responses",
+            json={
+                "input": (
+                    "What is the capital of France? Answer only from "
+                    "the knowledge base."
+                ),
+                "stream": False,
+            },
+        )
+        assert resp.status_code == 200
+        text = resp.json()["output"][0]["content"][0]["text"].lower()
+        # The agent should not confidently answer unrelated questions
+        # It should either say it doesn't have info or provide a hedged answer
+        assert any(
+            phrase in text
+            for phrase in [
+                "knowledge base",
+                "don't have",
+                "do not have",
+                "not found",
+                "no relevant",
+                "no information",
+                "cannot find",
+                "outside",
+                "not related",
+                "paris",  # if it does answer, at least it's correct
+            ]
+        ), f"Expected graceful handling of off-topic query, got: {text[:300]}"

@@ -36,43 +36,30 @@ class SearchResult:
 
 
 # ---------------------------------------------------------------------------
-# Lazy singleton clients
+# Module-level clients (config is available at import time)
 # ---------------------------------------------------------------------------
 
-_embeddings_client: EmbeddingsClient | None = None
-_search_client: SearchClient | None = None
+_credential = DefaultAzureCredential()
 
+_embedding_endpoint = (
+    f"{config.ai_services_endpoint.rstrip('/')}/openai/deployments/{config.embedding_deployment_name}"
+)
+_embeddings_client = EmbeddingsClient(
+    endpoint=_embedding_endpoint,
+    credential=_credential,
+    credential_scopes=["https://cognitiveservices.azure.com/.default"],
+)
 
-def _get_embeddings_client() -> EmbeddingsClient:
-    """Lazy singleton for the embeddings client."""
-    global _embeddings_client
-    if _embeddings_client is None:
-        endpoint = config.ai_services_endpoint.rstrip("/")
-        model_endpoint = f"{endpoint}/openai/deployments/{config.embedding_deployment_name}"
-        _embeddings_client = EmbeddingsClient(
-            endpoint=model_endpoint,
-            credential=DefaultAzureCredential(),
-            credential_scopes=["https://cognitiveservices.azure.com/.default"],
-        )
-    return _embeddings_client
-
-
-def _get_search_client() -> SearchClient:
-    """Lazy singleton for the AI Search client."""
-    global _search_client
-    if _search_client is None:
-        _search_client = SearchClient(
-            endpoint=config.search_endpoint,
-            index_name=config.search_index_name,
-            credential=DefaultAzureCredential(),
-        )
-    return _search_client
+_search_client = SearchClient(
+    endpoint=config.search_endpoint,
+    index_name=config.search_index_name,
+    credential=_credential,
+)
 
 
 def _embed_query(query: str) -> list[float]:
     """Embed a query string. Returns a 1536-dimension vector."""
-    client = _get_embeddings_client()
-    response = client.embed(input=[query])
+    response = _embeddings_client.embed(input=[query])
     vector = response.data[0].embedding
     logger.debug("Embedded query (%d chars) → %d-dim vector", len(query), len(vector))
     return vector
@@ -105,8 +92,7 @@ def search_kb(query: str, top: int = 5) -> list[SearchResult]:
         fields="content_vector",
     )
 
-    client = _get_search_client()
-    results = client.search(
+    results = _search_client.search(
         search_text=query,
         vector_queries=[vector_query],
         select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls"],

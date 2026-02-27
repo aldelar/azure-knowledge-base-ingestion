@@ -191,6 +191,11 @@ module foundryProject 'modules/foundry-project.bicep' = {
     location: location
     baseName: baseName
     tags: defaultTags
+    deployerPrincipalId: principalId
+    acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
+    acrResourceId: containerRegistry.outputs.containerRegistryId
+    appInsightsResourceId: monitoring.outputs.appInsightsId
+    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
   }
 }
 
@@ -334,6 +339,88 @@ module cosmosDbWebAppRole 'modules/cosmos-db-role.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
+// Post-deploy: Grant AI Services managed identity access to dependent services
+// The Foundry hosted agent runs under the AI Services account's system-assigned
+// identity, so it needs RBAC on search, storage, and AI Services itself.
+// ---------------------------------------------------------------------------
+
+// AI Search: Search Index Data Reader (AI Services MI — for search_knowledge_base tool)
+module searchAgentRole 'modules/search.bicep' = {
+  name: 'search-agent-role'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    skuName: searchSkuName
+    indexReaderPrincipalId: aiServices.outputs.aiServicesPrincipalId
+  }
+}
+
+// AI Services: Cognitive Services OpenAI User (AI Services MI — for embedding calls)
+module aiServicesAgentRole 'modules/ai-services.bicep' = {
+  name: 'ai-services-agent-role'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    openAIOnlyUserPrincipalId: aiServices.outputs.aiServicesPrincipalId
+  }
+}
+
+// Serving storage: Storage Blob Data Reader (AI Services MI — for image proxy)
+module servingStorageAgentRole 'modules/storage.bicep' = {
+  name: 'serving-storage-agent-role'
+  params: {
+    location: location
+    storageAccountName: servingStorageName
+    tags: defaultTags
+    containerNames: ['serving']
+    readerPrincipalId: aiServices.outputs.aiServicesPrincipalId
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Post-deploy: Grant Foundry Project managed identity access to dependent services
+// When testing the unpublished agent in the Foundry UI, the runtime uses the
+// project's system-assigned identity (not the AI Services account identity).
+// ---------------------------------------------------------------------------
+
+// AI Search: Search Index Data Reader (Foundry Project MI)
+module searchFoundryRole 'modules/search.bicep' = {
+  name: 'search-foundry-role'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    skuName: searchSkuName
+    indexReaderPrincipalId: foundryProject.outputs.projectPrincipalId
+  }
+}
+
+// AI Services: Cognitive Services OpenAI User (Foundry Project MI — for embeddings)
+module aiServicesFoundryRole 'modules/ai-services.bicep' = {
+  name: 'ai-services-foundry-role'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    openAIOnlyUserPrincipalId: foundryProject.outputs.projectPrincipalId
+  }
+}
+
+// Serving storage: Storage Blob Data Reader (Foundry Project MI — for images)
+module servingStorageFoundryRole 'modules/storage.bicep' = {
+  name: 'serving-storage-foundry-role'
+  params: {
+    location: location
+    storageAccountName: servingStorageName
+    tags: defaultTags
+    containerNames: ['serving']
+    readerPrincipalId: foundryProject.outputs.projectPrincipalId
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs — consumed by AZD and application code
 // ---------------------------------------------------------------------------
 output AZURE_LOCATION string = location
@@ -364,6 +451,7 @@ output FUNCTIONS_STORAGE_ACCOUNT string = functionApp.outputs.functionsStorageAc
 
 // Monitoring
 output APPINSIGHTS_NAME string = monitoring.outputs.appInsightsName
+output APPLICATIONINSIGHTS_CONNECTION_STRING string = monitoring.outputs.appInsightsConnectionString
 
 // Container Registry
 output CONTAINER_REGISTRY_NAME string = containerRegistry.outputs.containerRegistryName

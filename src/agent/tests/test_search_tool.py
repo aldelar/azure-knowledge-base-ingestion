@@ -46,10 +46,10 @@ class TestSearchKb:
         assert search_kb("") == []
         assert search_kb("   ") == []
 
-    @patch("agent.search_tool._get_search_client")
+    @patch("agent.search_tool._search_client")
     @patch("agent.search_tool._embed_query")
     def test_hybrid_search_returns_results(
-        self, mock_embed: MagicMock, mock_client_factory: MagicMock
+        self, mock_embed: MagicMock, mock_client: MagicMock
     ) -> None:
         mock_embed.return_value = [0.1] * 1536
 
@@ -63,9 +63,7 @@ class TestSearchKb:
             "image_urls": ["images/framework.png"],
             "@search.score": 0.87,
         }
-        mock_client = MagicMock()
         mock_client.search.return_value = [mock_result]
-        mock_client_factory.return_value = mock_client
 
         results = search_kb("What is Content Understanding?")
 
@@ -80,10 +78,10 @@ class TestSearchKb:
         assert r.image_urls == ["images/framework.png"]
         assert r.score == 0.87
 
-    @patch("agent.search_tool._get_search_client")
+    @patch("agent.search_tool._search_client")
     @patch("agent.search_tool._embed_query")
     def test_search_with_no_images(
-        self, mock_embed: MagicMock, mock_client_factory: MagicMock
+        self, mock_embed: MagicMock, mock_client: MagicMock
     ) -> None:
         mock_embed.return_value = [0.1] * 1536
 
@@ -97,24 +95,20 @@ class TestSearchKb:
             "image_urls": None,
             "@search.score": 0.5,
         }
-        mock_client = MagicMock()
         mock_client.search.return_value = [mock_result]
-        mock_client_factory.return_value = mock_client
 
         results = search_kb("some query")
 
         assert len(results) == 1
         assert results[0].image_urls == []
 
-    @patch("agent.search_tool._get_search_client")
+    @patch("agent.search_tool._search_client")
     @patch("agent.search_tool._embed_query")
     def test_search_respects_top_parameter(
-        self, mock_embed: MagicMock, mock_client_factory: MagicMock
+        self, mock_embed: MagicMock, mock_client: MagicMock
     ) -> None:
         mock_embed.return_value = [0.1] * 1536
-        mock_client = MagicMock()
         mock_client.search.return_value = []
-        mock_client_factory.return_value = mock_client
 
         search_kb("query", top=3)
 

@@ -228,19 +228,25 @@ class TestCreateAgent:
 
     @patch("agent.kb_agent.ChatAgent")
     @patch("agent.kb_agent.AzureOpenAIChatClient")
+    @patch("agent.kb_agent.get_bearer_token_provider")
     @patch("agent.kb_agent.DefaultAzureCredential")
     def test_uses_default_credential(
         self,
         mock_credential: MagicMock,
+        mock_token_provider: MagicMock,
         mock_client_cls: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
-        """create_agent() uses DefaultAzureCredential."""
+        """create_agent() uses ad_token_provider with DefaultAzureCredential."""
         create_agent()
 
         mock_credential.assert_called_once()
+        mock_token_provider.assert_called_once_with(
+            mock_credential.return_value,
+            "https://cognitiveservices.azure.com/.default",
+        )
         client_kwargs = mock_client_cls.call_args.kwargs
-        assert client_kwargs["credential"] is mock_credential.return_value
+        assert client_kwargs["ad_token_provider"] is mock_token_provider.return_value
 
     @patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key-123"})
     @patch("agent.kb_agent.ChatAgent")

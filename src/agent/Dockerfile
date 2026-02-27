@@ -1,29 +1,31 @@
 # ---------------------------------------------------------------------------
-# Dockerfile — KB Agent (FastAPI + uvicorn)
+# Dockerfile — KB Agent (Foundry hosted agent)
 # ---------------------------------------------------------------------------
-# Python 3.11 + UV for dependency management.
-# Runs the agent server on port 8088.
+# Matches the Foundry hosted-agent reference layout exactly:
+#   - User code lives under /app/user_agent/
+#   - Dependencies installed to system Python via pip
+#   - CMD starts the agent server (required — platform does NOT inject one)
+#
+# Reference: github.com/microsoft-foundry/foundry-samples/…/echo-agent/Dockerfile
 # ---------------------------------------------------------------------------
 
-FROM python:3.11-slim
-
-# Install UV
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copy dependency files first for layer caching
-COPY pyproject.toml uv.lock .python-version ./
+# Copy everything into the user_agent/ subdirectory (Foundry convention)
+COPY . user_agent/
 
-# Install dependencies (production only)
-RUN uv sync --no-dev --frozen
+# Set working directory to user_agent
+WORKDIR /app/user_agent
 
-# Copy application code
-COPY main.py ./
-COPY agent/ ./agent/
+# Install dependencies from the locked requirements.txt
+RUN if [ -f requirements.txt ]; then \
+        pip install --no-cache-dir -r requirements.txt; \
+    else \
+        echo "No requirements.txt found"; \
+    fi
 
-# Expose the server port
 EXPOSE 8088
 
-# Run the agent server
-CMD ["uv", "run", "python", "main.py"]
+CMD ["python", "main.py"]

@@ -1,9 +1,11 @@
 """Adapter integration tests for the KB Agent server.
 
-The ``from_agent_framework`` adapter manages the HTTP layer (routes, SSE
-streaming, health probes).  These tests verify the contract between our
-code and the adapter — primarily the ``create_agent`` factory and the
-server object it produces.
+``main.py`` uses ``from_agent_framework()`` from the Azure AI Agent Server
+SDK to run the ChatAgent as an HTTP server on port 8088.
+
+These tests verify:
+1. The ``create_agent`` factory returns a valid ChatAgent.
+2. ``from_agent_framework`` accepts our agent type.
 
 Full HTTP endpoint tests (streaming, health, error handling) are covered
 by integration tests that require a running server.
@@ -43,29 +45,29 @@ class TestCreateAgentFactory:
 
 
 # ---------------------------------------------------------------------------
-# Adapter instantiation tests
+# from_agent_framework adapter tests
 # ---------------------------------------------------------------------------
 
 
-class TestAdapterInstantiation:
-    """Test that from_agent_framework accepts our ChatAgent."""
+class TestFromAgentFramework:
+    """Test that from_agent_framework accepts our agent."""
 
     @patch("agent.kb_agent.ChatAgent")
     @patch("agent.kb_agent.AzureOpenAIChatClient")
     @patch("agent.kb_agent.DefaultAzureCredential")
-    def test_adapter_wraps_agent(
+    def test_adapter_accepts_agent(
         self,
         mock_cred: MagicMock,
         mock_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
-        """from_agent_framework() wraps our ChatAgent without error."""
+        """from_agent_framework(agent) returns a runnable server."""
         from azure.ai.agentserver.agentframework import from_agent_framework
+
         from agent.kb_agent import create_agent
 
         agent = create_agent()
         server = from_agent_framework(agent)
 
-        # The adapter returns an object with a .run() method
         assert hasattr(server, "run")
         assert hasattr(server, "run_async")

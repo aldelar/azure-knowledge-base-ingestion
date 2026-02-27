@@ -23,21 +23,13 @@ from agent.config import config
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Blob client singleton
+# Module-level blob client (config is available at import time)
 # ---------------------------------------------------------------------------
 
-_blob_service_client: BlobServiceClient | None = None
-
-
-def _get_blob_service_client() -> BlobServiceClient:
-    """Lazy singleton for the BlobServiceClient."""
-    global _blob_service_client
-    if _blob_service_client is None:
-        _blob_service_client = BlobServiceClient(
-            account_url=config.serving_blob_endpoint,
-            credential=DefaultAzureCredential(),
-        )
-    return _blob_service_client
+_blob_service_client = BlobServiceClient(
+    account_url=config.serving_blob_endpoint,
+    credential=DefaultAzureCredential(),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -58,8 +50,7 @@ def download_image(article_id: str, image_path: str) -> ImageBlob | None:
     """
     blob_path = f"{article_id}/{image_path}"
     try:
-        client = _get_blob_service_client()
-        blob_client = client.get_blob_client(
+        blob_client = _blob_service_client.get_blob_client(
             container=config.serving_container_name,
             blob=blob_path,
         )

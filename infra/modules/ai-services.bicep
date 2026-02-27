@@ -26,7 +26,7 @@ param openAIOnlyUserPrincipalId string = ''
 // Azure AI Services Account (Foundry resource)
 // Provides: Content Understanding, OpenAI model hosting
 // ---------------------------------------------------------------------------
-resource aiServices 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
+resource aiServices 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: 'ai-${baseName}'
   location: location
   tags: tags
@@ -245,6 +245,7 @@ resource openAIOnlyUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
 output aiServicesId string = aiServices.id
 output aiServicesName string = aiServices.name
 output aiServicesEndpoint string = aiServices.properties.endpoint
+output aiServicesPrincipalId string = aiServices.identity.principalId
 output embeddingDeploymentName string = embeddingDeployment.name
 output agentDeploymentName string = agentDeployment.name
 output cuCompletionDeploymentName string = cuCompletionDeployment.name

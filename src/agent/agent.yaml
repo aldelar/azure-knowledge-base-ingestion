@@ -11,7 +11,6 @@ metadata:
     - aldelar
 protocols:
   - protocol: responses
-    version: v1
 environment_variables:
   - name: PROJECT_ENDPOINT
     value: ${AZURE_AI_PROJECT_ENDPOINT}

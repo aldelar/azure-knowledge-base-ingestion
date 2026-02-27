@@ -18,6 +18,7 @@ services:
                     memory: 2Gi
                 scale:
                     maxReplicas: 1
+                    minReplicas: 1
             deployments:
                 - model:
                     format: OpenAI

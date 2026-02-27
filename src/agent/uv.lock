@@ -1057,9 +1057,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-framework-azure-ai", specifier = "==1.0.0b260107" },
-    { name = "agent-framework-core", specifier = "==1.0.0b260107" },
-    { name = "azure-ai-agentserver-agentframework", specifier = ">=1.0.0b7" },
+    { name = "agent-framework-azure-ai", specifier = ">=1.0.0b260107" },
+    { name = "agent-framework-core", specifier = ">=1.0.0b260107" },
+    { name = "azure-ai-agentserver-agentframework", specifier = ">=1.0.0b14" },
     { name = "azure-ai-inference", specifier = ">=1.0.0b1" },
     { name = "azure-core-tracing-opentelemetry", specifier = ">=1.0.0b12" },
     { name = "azure-identity", specifier = ">=1.19.0" },

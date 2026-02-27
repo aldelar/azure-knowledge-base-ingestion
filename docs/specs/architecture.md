@@ -257,7 +257,7 @@ The solution deploys two services:
 - **Config block** specifies container resources (CPU, memory), scale settings, and model deployments (gpt-4.1)
 - **Agent manifest** (`src/agent/agent.yaml`) uses the `ContainerAgent` schema: `kind: hosted`, `protocols: [responses v1]`, `environment_variables` for runtime config
 - **Deployment** via `azd deploy --service agent` — builds the Docker image in ACR and deploys to Foundry
-- **Publish script** (`scripts/publish-agent.sh`) publishes the agent and assigns RBAC roles to the published agent's identity:
+- **Publish script** (`scripts/publish-agent.sh`) publishes the agent via the ARM management-plane API and assigns RBAC roles to the agent's identity:
   - Cognitive Services OpenAI User → AI Services
   - Search Index Data Reader → AI Search
   - Storage Blob Data Reader → Serving Storage
@@ -287,15 +287,26 @@ Only users in the Azure AD tenant can access the app. An **Entra App Registratio
 
 #### Managed Identity RBAC
 
-Each service has its own identity with least-privilege roles:
+Each service has its own identity with least-privilege roles. The Foundry hosted agent uses **two different identities** depending on context — both need the same set of roles:
 
-**Published Agent Identity** (assigned by `scripts/publish-agent.sh`):
+**AI Services Account MI** (used by the published agent at the `/applications/` endpoint):
 
 | Role | Resource | Purpose |
 |------|----------|---------|
-| Cognitive Services OpenAI User | AI Services | Call GPT-4.1 and embedding models |
+| Cognitive Services OpenAI User | AI Services | Call GPT-5-mini and embedding models |
 | Search Index Data Reader | AI Search | Query the `kb-articles` index |
 | Storage Blob Data Reader | Serving Storage | Download article images for vision middleware |
+
+**Foundry Project MI** (used when testing the unpublished agent in the Foundry UI):
+
+| Role | Resource | Purpose |
+|------|----------|---------|
+| Cognitive Services OpenAI User | AI Services | Call GPT-5-mini and embedding models |
+| Search Index Data Reader | AI Search | Query the `kb-articles` index |
+| Storage Blob Data Reader | Serving Storage | Download article images for vision middleware |
+| AcrPull | Container Registry | Pull the agent Docker image |
+
+> **Why two identities?** The Foundry runtime uses the **project's** system-assigned MI when running an unpublished agent version (e.g., testing v2 in the Foundry portal). Once the agent is published as an Application, the runtime switches to the **AI Services account's** system-assigned MI. Both identities are provisioned and granted roles via Bicep in `main.bicep`.
 
 **Web App Container App Managed Identity**:
 

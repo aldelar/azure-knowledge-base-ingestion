@@ -204,6 +204,17 @@ The project endpoint is output for use by agent deployment (AZD `azure.ai.agents
 
 The project is tagged with `azd-service-name: agent` so the AZD extension can discover it during deployment.
 
+**Hosted Agent Identities:**
+
+The Foundry hosted agent runtime uses **two different identities** depending on context:
+
+| Context | Identity Used | Notes |
+|---------|--------------|-------|
+| **Unpublished agent** (testing in Foundry UI) | Foundry Project system-assigned MI | Project-level identity |
+| **Published agent** (production `/applications/` endpoint) | AI Services Account system-assigned MI | Account-level identity |
+
+Both identities require RBAC on the same set of dependent resources (AI Search, AI Services for embeddings, Serving Storage for images). The Bicep modules grant roles to both identities via separate role-assignment module invocations in `main.bicep`.
+
 **AZD Environment Variables** (set during `azd ai agent init` or manually):
 
 | Variable | Value | Purpose |
@@ -287,7 +298,8 @@ No keys, connection strings, or secrets appear in application settings or config
 flowchart LR
     FA["Function App<br/><i>System Managed Identity</i>"]
     CA["Container App (Web App)<br/><i>System Managed Identity</i>"]
-    PA["Published Agent<br/><i>Foundry Identity</i>"]
+    PA["Published Agent<br/><i>AI Services Account MI</i>"]
+    FP["Unpublished Agent<br/><i>Foundry Project MI</i>"]
 
     FA -->|"Storage Blob Data<br/>Contributor"| ST["Staging Storage"]
     FA -->|"Storage Blob Data<br/>Contributor"| SV["Serving Storage"]
@@ -301,6 +313,11 @@ flowchart LR
     PA -->|"Cognitive Services<br/>OpenAI User"| AI
     PA -->|"Search Index Data<br/>Reader"| SR
     PA -->|"Storage Blob Data<br/>Reader"| SV
+
+    FP -->|"Cognitive Services<br/>OpenAI User"| AI
+    FP -->|"Search Index Data<br/>Reader"| SR
+    FP -->|"Storage Blob Data<br/>Reader"| SV
+    FP -->|"AcrPull"| ACR
 
     CA -->|"Cognitive Services<br/>OpenAI User"| AI
     CA -->|"Storage Blob Data<br/>Reader"| SV
@@ -334,10 +351,13 @@ The Container App uses **Easy Auth** (platform-level) with an **Entra App Regist
 | Function App | AI Services | Cognitive Services User |
 | Function App | AI Search | Search Index Data Contributor |
 | Function App | AI Search | Search Service Contributor |
-| Foundry Project (unpublished hosted agent) | Container Registry | AcrPull |
-| Published Agent | AI Services | Cognitive Services OpenAI User |
-| Published Agent | AI Search | Search Index Data Reader |
-| Published Agent | Serving Storage | Storage Blob Data Reader |
+| Foundry Project MI (unpublished agent — Foundry UI) | Container Registry | AcrPull |
+| Foundry Project MI (unpublished agent — Foundry UI) | AI Services | Cognitive Services OpenAI User |
+| Foundry Project MI (unpublished agent — Foundry UI) | AI Search | Search Index Data Reader |
+| Foundry Project MI (unpublished agent — Foundry UI) | Serving Storage | Storage Blob Data Reader |
+| AI Services Account MI (published agent) | AI Services | Cognitive Services OpenAI User |
+| AI Services Account MI (published agent) | AI Search | Search Index Data Reader |
+| AI Services Account MI (published agent) | Serving Storage | Storage Blob Data Reader |
 | Container App (Web App) | AI Services | Cognitive Services OpenAI User |
 | Container App (Web App) | Serving Storage | Storage Blob Data Reader |
 | Container App (Web App) | Cosmos DB | Cosmos DB Built-in Data Contributor |

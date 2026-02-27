@@ -26,7 +26,7 @@ echo ""
 # ---------------------------------------------------------------------------
 AI_SERVICES_NAME=$(azd env get-value AI_SERVICES_NAME)
 RESOURCE_GROUP=$(azd env get-value RESOURCE_GROUP)
-FOUNDRY_PROJECT_NAME=$(azd env get-value FOUNDRY_PROJECT_NAME)
+FOUNDRY_PROJECT_NAME=$(azd env get-value FOUNDRY_PROJECT_NAME 2>/dev/null || azd env get-value AZURE_AI_PROJECT_NAME)
 SEARCH_SERVICE_NAME=$(azd env get-value SEARCH_SERVICE_NAME)
 SERVING_STORAGE_ACCOUNT=$(azd env get-value SERVING_STORAGE_ACCOUNT)
 
