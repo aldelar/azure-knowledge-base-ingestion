@@ -19,6 +19,12 @@
     },
     "entraClientSecret": {
       "value": "${ENTRA_CLIENT_SECRET}"
+    },
+    "chainlitAuthSecret": {
+      "value": "${CHAINLIT_AUTH_SECRET}"
+    },
+    "agentEndpoint": {
+      "value": "${AGENT_ENDPOINT}"
     }
   }
 }

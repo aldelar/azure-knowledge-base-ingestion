@@ -1,61 +1,77 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
 name: context-aware-vision-grounded-kb-agent
 metadata:
-  template: context-aware-vision-grounded-kb-agent
-
-infra:
-  provider: bicep
-  path: infra
-  module: main
-
-hooks:
-  preprovision:
-    shell: sh
-    run: |
-      # Ensure AZURE_PRINCIPAL_ID is set for deployer RBAC role assignments.
-      # AZD uses this to grant the logged-in user access to deploy + interact with resources.
-      if [ -z "$(azd env get-value AZURE_PRINCIPAL_ID 2>/dev/null)" ]; then
-        PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null)
-        if [ -n "$PRINCIPAL_ID" ]; then
-          azd env set AZURE_PRINCIPAL_ID "$PRINCIPAL_ID"
-          echo "Set AZURE_PRINCIPAL_ID=$PRINCIPAL_ID"
-        else
-          echo "WARNING: Could not determine signed-in user principal ID. Deployer RBAC roles will be skipped."
-        fi
-      fi
-
-      # Export AZURE_ENV_NAME for sub-scripts (AZD sets it in env values
-      # but does not always export it as a shell variable to child processes)
-      export AZURE_ENV_NAME="$(azd env get-value AZURE_ENV_NAME 2>/dev/null)"
-
-      # Set up Entra App Registration for web app Easy Auth
-      bash scripts/setup-entra-auth.sh
-
-  postprovision:
-    shell: sh
-    run: |
-      # Update the Entra App Registration redirect URI with the actual Container App URL
-      CLIENT_ID=$(azd env get-value ENTRA_CLIENT_ID 2>/dev/null || echo "")
-      WEBAPP_URL=$(azd env get-value WEBAPP_URL 2>/dev/null || echo "")
-      if [ -n "$CLIENT_ID" ] && [ -n "$WEBAPP_URL" ]; then
-        REDIRECT_URI="${WEBAPP_URL}/.auth/login/aad/callback"
-        echo "Setting redirect URI: $REDIRECT_URI"
-        az ad app update --id "$CLIENT_ID" --web-redirect-uris "$REDIRECT_URI"
-        echo "Entra App Registration redirect URI updated."
-      else
-        echo "WARNING: ENTRA_CLIENT_ID or WEBAPP_URL not set. Skipping redirect URI update."
-      fi
-
+    template: context-aware-vision-grounded-kb-agent
 services:
-  functions:
-    project: ./src/functions
-    language: python
-    host: containerapp
-    docker:
-      path: ./Dockerfile
-  web-app:
-    project: ./src/web-app
-    language: python
-    host: containerapp
-    docker:
-      path: ./Dockerfile
+    agent:
+        project: ./src/agent
+        host: azure.ai.agent
+        language: docker
+        docker:
+            path: ./Dockerfile
+            remoteBuild: true
+        config:
+            container:
+                resources:
+                    cpu: "1.0"
+                    memory: 2Gi
+                scale:
+                    maxReplicas: 1
+                    minReplicas: 1
+            deployments:
+                - model:
+                    format: OpenAI
+                    name: gpt-4.1
+                    version: "2025-04-14"
+                  name: gpt-4.1
+                  sku:
+                    capacity: 30
+                    name: GlobalStandard
+    functions:
+        project: ./src/functions
+        host: containerapp
+        language: python
+        docker:
+            path: ./Dockerfile
+    web-app:
+        project: ./src/web-app
+        host: containerapp
+        language: python
+        docker:
+            path: ./Dockerfile
+infra:
+    provider: bicep
+    path: infra
+    module: main
+hooks:
+    postprovision:
+        shell: sh
+        run: |
+            # Add redirect URIs to the Entra App Registration.
+            # This script is idempotent and CI/CD-safe.
+            # If it fails (e.g. Graph API CAE), run standalone: make azure-setup-auth
+            bash scripts/setup-redirect-uris.sh || \
+              echo "WARNING: Could not update redirect URIs. Run 'make azure-setup-auth' after fixing Graph API auth."
+    preprovision:
+        name: preprovision
+        shell: sh
+        run: |
+            # Ensure AZURE_PRINCIPAL_ID is set for deployer RBAC role assignments.
+            # AZD uses this to grant the logged-in user access to deploy + interact with resources.
+            if [ -z "$(azd env get-value AZURE_PRINCIPAL_ID 2>/dev/null)" ]; then
+              PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null)
+              if [ -n "$PRINCIPAL_ID" ]; then
+                azd env set AZURE_PRINCIPAL_ID "$PRINCIPAL_ID"
+                echo "Set AZURE_PRINCIPAL_ID=$PRINCIPAL_ID"
+              else
+                echo "WARNING: Could not determine signed-in user principal ID. Deployer RBAC roles will be skipped."
+              fi
+            fi
+
+            # Export AZURE_ENV_NAME for sub-scripts (AZD sets it in env values
+            # but does not always export it as a shell variable to child processes)
+            export AZURE_ENV_NAME="$(azd env get-value AZURE_ENV_NAME 2>/dev/null)"
+
+            # Set up Entra App Registration for web app Easy Auth
+            bash scripts/setup-entra-auth.sh

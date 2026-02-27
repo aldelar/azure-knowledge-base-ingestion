@@ -1,6 +1,6 @@
 # Infrastructure
 
-> **Status:** Draft — February 24, 2026
+> **Status:** Updated — June 26, 2026
 
 ## Overview
 
@@ -30,6 +30,10 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | Container Registry | `container-registry.bicep` | `crkbidx{env}` | Basic |
 | Container Apps Environment | `container-app.bicep` | `cae-kbidx-{env}` | Consumption |
 | Container App (Web App) | `container-app.bicep` | `webapp-kbidx-{env}` | 0.5 vCPU, 1 GiB |
+| Foundry Project | `foundry-project.bicep` | `proj-kbidx-{env}` | — (child of AI Services) |
+| Cosmos DB (NoSQL) | `cosmos-db.bicep` | `cosmos-kbidx-{env}` | Serverless |
+| → Database | `cosmos-db.bicep` | `kb-agent` | — |
+| → Container | `cosmos-db.bicep` | `conversations` | Partition key `/userId` |
 | Entra App Registration | Pre-provision hook | `webapp-kbidx-{env}` | — |
 
 > `{env}` is the AZD environment name (e.g., `dev`, `staging`, `prod`).
@@ -45,8 +49,11 @@ infra/
     ├── storage.bicep            # Reusable storage account with containers + RBAC
     ├── ai-services.bicep        # AI Services account + model deployments + RBAC
     ├── search.bicep             # AI Search service + RBAC
+    ├── foundry-project.bicep    # Foundry project (child of AI Services) for hosted agent
+    ├── cosmos-db.bicep           # Cosmos DB NoSQL (serverless) — database + conversations container
+    ├── cosmos-db-role.bicep      # Cosmos DB Built-in Data Contributor role assignment
     ├── function-app.bicep       # Functions on Container Apps (custom Docker) + runtime storage + AcrPull RBAC
-    ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC (web app only)
+    ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC (web app + Foundry project)
     └── container-app.bicep      # Container Apps Environment + Container App + Easy Auth
 ```
 
@@ -181,11 +188,61 @@ Hosts Docker images for the Context Aware & Vision Grounded KB Agent container.
 | Admin User | Disabled (managed identity pull) |
 | Public Network | Enabled |
 
-The module accepts an optional `acrPullPrincipalId` parameter. When provided, it grants the **AcrPull** role to that principal (used to give the web app Container App access to pull images). The Function App's AcrPull role is managed separately in `function-app.bicep` — see [Technical Brief](#technical-brief-bicep-dependency-ordering-for-container-apps) for why.
+The module accepts an optional `acrPullPrincipalId` parameter. When provided, it grants the **AcrPull** role to that principal (used to give the web app Container App and Foundry project identity access to pull images). The Function App's AcrPull role is managed separately in `function-app.bicep` — see [Technical Brief](#technical-brief-bicep-dependency-ordering-for-container-apps) for why.
+
+### Foundry Project (`foundry-project.bicep`)
+
+Creates a Foundry project as a child resource of the AI Services account. The project provides the hosting context for the published agent.
+
+| Setting | Value |
+|---------|-------|
+| Parent | AI Services resource (`ai-kbidx-{env}`) |
+| Name | `proj-kbidx-{env}` |
+| Display Name | `KB Agent (proj-kbidx-{env})` |
+
+The project endpoint is output for use by agent deployment (AZD `azure.ai.agents` extension) and by the web app client.
+
+The project is tagged with `azd-service-name: agent` so the AZD extension can discover it during deployment.
+
+**Hosted Agent Identities:**
+
+The Foundry hosted agent runtime uses **two different identities** depending on context:
+
+| Context | Identity Used | Notes |
+|---------|--------------|-------|
+| **Unpublished agent** (testing in Foundry UI) | Foundry Project system-assigned MI | Project-level identity |
+| **Published agent** (production `/applications/` endpoint) | AI Services Account system-assigned MI | Account-level identity |
+
+Both identities require RBAC on the same set of dependent resources (AI Search, AI Services for embeddings, Serving Storage for images). The Bicep modules grant roles to both identities via separate role-assignment module invocations in `main.bicep`.
+
+**AZD Environment Variables** (set during `azd ai agent init` or manually):
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `AZURE_AI_PROJECT_ID` | Full ARM resource ID of the Foundry project | AZD extension uses this to target deployments |
+| `AZURE_AI_PROJECT_ENDPOINT` | `https://ai-kbidx-{env}.services.ai.azure.com/api/projects/proj-kbidx-{env}` | Agent runtime config |
+| `AZURE_AI_ACCOUNT_NAME` | `ai-kbidx-{env}` | AZD extension uses this for account lookups |
+| `AZURE_AI_PROJECT_NAME` | `proj-kbidx-{env}` | AZD extension uses this for project lookups |
+| `AZURE_OPENAI_ENDPOINT` | `https://ai-kbidx-{env}.openai.azure.com/` | OpenAI-compatible endpoint |
+
+### Cosmos DB (`cosmos-db.bicep`)
+
+Serverless NoSQL database for conversation persistence. The web app stores all conversation history here (threads, messages, user metadata).
+
+| Setting | Value |
+|---------|-------|
+| Kind | `GlobalDocumentDB` |
+| Capability | `EnableServerless` |
+| Consistency | Session |
+| Database | `kb-agent` |
+| Container | `conversations` (partition key: `/userId`) |
+| Public Network | Enabled |
+
+The `cosmos-db-role.bicep` module assigns the **Cosmos DB Built-in Data Contributor** role (role ID `00000000-0000-0000-0000-000000000002`) to a specified principal (the web app Container App identity).
 
 ### Container App (`container-app.bicep`)
 
-Hosts the Context Aware & Vision Grounded KB Agent as a containerized application with Entra ID Easy Auth.
+Hosts the web app as a containerized Chainlit application with Entra ID Easy Auth.
 
 #### Container Apps Environment
 
@@ -208,17 +265,24 @@ Hosts the Context Aware & Vision Grounded KB Agent as a containerized applicatio
 
 | Setting | Source | Purpose |
 |---------|--------|---------|
-| `AI_SERVICES_ENDPOINT` | AI Services endpoint | Azure AI Foundry (GPT-4.1 + embeddings) |
-| `AGENT_MODEL_DEPLOYMENT_NAME` | `gpt-4.1` | Agent reasoning model |
-| `EMBEDDING_DEPLOYMENT_NAME` | `text-embedding-3-small` | Query embedding model |
-| `SEARCH_ENDPOINT` | AI Search endpoint | Query the kb-articles index |
-| `SEARCH_INDEX_NAME` | `kb-articles` | Target search index |
-| `SERVING_BLOB_ENDPOINT` | Serving storage blob endpoint | Article images for proxy + vision |
+| `AGENT_ENDPOINT` | Foundry agent endpoint (from publish script) | Agent Responses API base URL |
+| `AI_SERVICES_ENDPOINT` | AI Services endpoint | Azure AI Foundry (token auth) |
+| `SERVING_BLOB_ENDPOINT` | Serving storage blob endpoint | Article images for proxy |
 | `SERVING_CONTAINER_NAME` | `serving` | Blob container name |
+| `COSMOS_ENDPOINT` | Cosmos DB endpoint | Conversation persistence |
+| `COSMOS_DATABASE_NAME` | `kb-agent` | Cosmos DB database name |
+| `OAUTH_AZURE_AD_CLIENT_ID` | Entra App Registration client ID | Chainlit OAuth — Azure AD login |
+| `OAUTH_AZURE_AD_CLIENT_SECRET` | Entra App Registration client secret | Chainlit OAuth — token exchange |
+| `OAUTH_AZURE_AD_TENANT_ID` | Azure AD tenant ID | Chainlit OAuth — tenant scope |
+| `CHAINLIT_AUTH_SECRET` | Random hex (generated by setup script) | JWT signing for Chainlit sessions |
 
-#### Entra ID Easy Auth
+#### Entra ID Authentication (Dual-Layer)
 
-Authentication is configured as a platform-level sidecar on the Container App — no code changes needed in the Chainlit application.
+Authentication uses two complementary layers:
+
+1. **Easy Auth (platform-level sidecar)** — Intercepts all HTTP requests. Unauthenticated requests are redirected to Microsoft login. Configured via `Microsoft.App/containerApps/authConfigs`.
+
+2. **Chainlit OAuth (application-level)** — When `OAUTH_AZURE_AD_CLIENT_ID` is set, the Chainlit app registers an OAuth callback that extracts the user's OID from the Azure AD token. This identity flows to Cosmos DB as the `userId` partition key for per-user conversation isolation.
 
 | Setting | Value |
 |---------|-------|
@@ -226,9 +290,9 @@ Authentication is configured as a platform-level sidecar on the Container App �
 | Tenant Mode | Single-tenant |
 | Unauthenticated Action | Redirect to login (return HTTP 302) |
 | App Registration | Created via AZD pre-provision hook |
-| Redirect URI | `https://<container-app-fqdn>/.auth/login/aad/callback` |
+| Redirect URIs | `https://<fqdn>/.auth/login/aad/callback` (Easy Auth) + `https://<fqdn>/auth/oauth/azure-ad/callback` (Chainlit OAuth) |
 
-The Entra App Registration is created by the AZD `preprovision` hook script using `az ad app create`. The client ID and secret are stored as AZD environment variables and passed to the Bicep template as parameters.
+The Entra App Registration is created by the AZD `preprovision` hook script (`scripts/setup-entra-auth.sh`). The client ID, secret, and tenant ID are stored as AZD environment variables and passed to the Bicep template as parameters. The `postprovision` hook adds both redirect URIs to the app registration.
 
 ---
 
@@ -241,7 +305,9 @@ No keys, connection strings, or secrets appear in application settings or config
 ```mermaid
 flowchart LR
     FA["Function App<br/><i>System Managed Identity</i>"]
-    CA["Container App<br/><i>System Managed Identity</i>"]
+    CA["Container App (Web App)<br/><i>System Managed Identity</i>"]
+    PA["Published Agent<br/><i>AI Services Account MI</i>"]
+    FP["Unpublished Agent<br/><i>Foundry Project MI</i>"]
 
     FA -->|"Storage Blob Data<br/>Contributor"| ST["Staging Storage"]
     FA -->|"Storage Blob Data<br/>Contributor"| SV["Serving Storage"]
@@ -252,15 +318,24 @@ flowchart LR
     FA -->|"Search Index Data<br/>Contributor"| SR["AI Search"]
     FA -->|"Search Service<br/>Contributor"| SR
 
+    PA -->|"Cognitive Services<br/>OpenAI User"| AI
+    PA -->|"Search Index Data<br/>Reader"| SR
+    PA -->|"Storage Blob Data<br/>Reader"| SV
+
+    FP -->|"Cognitive Services<br/>OpenAI User"| AI
+    FP -->|"Search Index Data<br/>Reader"| SR
+    FP -->|"Storage Blob Data<br/>Reader"| SV
+    FP -->|"AcrPull"| ACR
+
     CA -->|"Cognitive Services<br/>OpenAI User"| AI
-    CA -->|"Search Index Data<br/>Reader"| SR
     CA -->|"Storage Blob Data<br/>Reader"| SV
+    CA -->|"Cosmos DB Built-in<br/>Data Contributor"| CD["Cosmos DB"]
     CA -->|"AcrPull"| ACR["Container Registry"]
 ```
 
 ### Entra ID Authentication
 
-The Container App uses **Easy Auth** (platform-level) with an **Entra App Registration** (single-tenant). The app registration is created via an AZD pre-provision hook script (`az ad app create`) and its client ID / secret are passed to the Container App's auth configuration. Only users in the Azure AD tenant can access the web app. Unauthenticated requests are automatically redirected to the Microsoft login page.
+The Container App uses a **dual-layer auth model**: **Easy Auth** (platform-level sidecar) for gateway enforcement + **Chainlit OAuth callback** (application-level) for user identity extraction. The **Entra App Registration** (single-tenant) is created via an AZD pre-provision hook script (`scripts/setup-entra-auth.sh`). Both redirect URIs (`/.auth/login/aad/callback` for Easy Auth and `/auth/oauth/azure-ad/callback` for Chainlit OAuth) are added via the post-provision hook. Only users in the Azure AD tenant can access the web app. Unauthenticated requests are automatically redirected to the Microsoft login page.
 
 ### Key Security Settings
 
@@ -284,10 +359,17 @@ The Container App uses **Easy Auth** (platform-level) with an **Entra App Regist
 | Function App | AI Services | Cognitive Services User |
 | Function App | AI Search | Search Index Data Contributor |
 | Function App | AI Search | Search Service Contributor |
-| Container App | AI Services | Cognitive Services OpenAI User |
-| Container App | AI Search | Search Index Data Reader |
-| Container App | Serving Storage | Storage Blob Data Reader |
-| Container App | Container Registry | AcrPull |
+| Foundry Project MI (unpublished agent — Foundry UI) | Container Registry | AcrPull |
+| Foundry Project MI (unpublished agent — Foundry UI) | AI Services | Cognitive Services OpenAI User |
+| Foundry Project MI (unpublished agent — Foundry UI) | AI Search | Search Index Data Reader |
+| Foundry Project MI (unpublished agent — Foundry UI) | Serving Storage | Storage Blob Data Reader |
+| AI Services Account MI (published agent) | AI Services | Cognitive Services OpenAI User |
+| AI Services Account MI (published agent) | AI Search | Search Index Data Reader |
+| AI Services Account MI (published agent) | Serving Storage | Storage Blob Data Reader |
+| Container App (Web App) | AI Services | Cognitive Services OpenAI User |
+| Container App (Web App) | Serving Storage | Storage Blob Data Reader |
+| Container App (Web App) | Cosmos DB | Cosmos DB Built-in Data Contributor |
+| Container App (Web App) | Container Registry | AcrPull |
 
 ---
 
@@ -329,6 +411,11 @@ AZD reads `azure.yaml` (project root) and `infra/main.parameters.json` to resolv
 |--------|---------|
 | `make azure-provision` | `azd provision` |
 | `make azure-deploy` | `azd deploy` |
+| `make azure-agent-deploy` | `azd deploy --service agent` (builds in ACR, deploys to Foundry) |
+| `make azure-agent-capability-host` | Ensures account capability host exists with `enablePublicHostingEnvironment=true` |
+| `make azure-agent-publish` | `bash scripts/publish-agent.sh` (publish + RBAC) |
+| `make azure-agent` | Deploy + publish agent |
+| `make azure-deploy-app` | `azd deploy --service web-app` |
 
 ---
 
@@ -359,6 +446,15 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `CONTAINER_REGISTRY_LOGIN_SERVER` | `crkbidxdev.azurecr.io` |
 | `WEBAPP_NAME` | `webapp-kbidx-dev` |
 | `WEBAPP_URL` | `https://webapp-kbidx-dev.<region>.azurecontainerapps.io` |
+| `FOUNDRY_PROJECT_NAME` | `proj-kbidx-dev` |
+| `FOUNDRY_PROJECT_ENDPOINT` | `https://ai-kbidx-dev.services.ai.azure.com/api/projects/proj-kbidx-dev` |
+| `AZURE_AI_PROJECT_ID` | `/subscriptions/.../providers/Microsoft.CognitiveServices/accounts/ai-kbidx-dev/projects/proj-kbidx-dev` |
+| `AZURE_AI_PROJECT_ENDPOINT` | `https://ai-kbidx-dev.services.ai.azure.com/api/projects/proj-kbidx-dev` |
+| `AZURE_AI_ACCOUNT_NAME` | `ai-kbidx-dev` |
+| `AZURE_AI_PROJECT_NAME` | `proj-kbidx-dev` |
+| `AZURE_OPENAI_ENDPOINT` | `https://ai-kbidx-dev.openai.azure.com/` |
+| `COSMOS_ENDPOINT` | `https://cosmos-kbidx-dev.documents.azure.com:443/` |
+| `COSMOS_DATABASE_NAME` | `kb-agent` |
 
 ---
 

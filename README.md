@@ -66,17 +66,23 @@ Teams and organizations that:
 │   └── serving_mistral-doc-ai/          Convert output from Mistral Document AI pipeline
 ├── scripts/
 │   ├── dev-setup.sh     Dev environment setup
+│   ├── publish-agent.sh Publish Foundry agent + assign RBAC
 │   └── functions/       Shell scripts to run fn-convert / fn-index locally
 ├── src/
+│   ├── agent/           KB Agent — standalone Foundry hosted agent (FastAPI + uvicorn)
+│   │   ├── main.py      FastAPI server exposing Responses API (port 8088)
+│   │   ├── agent/       Agent modules (kb_agent, search_tool, vision_middleware, image_service)
+│   │   └── tests/       pytest test suite
 │   ├── functions/       Azure Functions project (fn-convert, fn-index, shared utils)
 │   │   ├── fn_convert_cu/       Stage 1 backend — Content Understanding (HTML → MD)
 │   │   ├── fn_convert_mistral/  Stage 1 backend — Mistral Document AI (HTML → PDF → OCR → MD)
 │   │   ├── fn_index/    Stage 2 — Markdown → AI Search index
 │   │   ├── shared/      Shared config, blob helpers, CU client
 │   │   └── tests/       pytest test suite
-│   ├── web-app/         Context Aware & Vision Grounded KB Agent (Chainlit + Agent Framework)
+│   ├── web-app/         Chainlit thin client (calls agent via Responses API)
 │   │   ├── app/main.py  Chainlit entry point (streaming, image proxy, citations)
-│   │   ├── app/agent/   KB agent, search tool, image service, vision middleware
+│   │   ├── app/data_layer.py  Cosmos DB conversation persistence
+│   │   ├── app/image_service.py  Blob image download + proxy helpers
 │   │   └── tests/       pytest test suite
 │   ├── analyzers/       CU custom analyzer definitions (kb-image-analyzer.json)
 │   └── spikes/          Spike/prototype scripts (research, not production)
@@ -86,7 +92,7 @@ Teams and organizations that:
 
 ## Architecture
 
-The solution has two layers: a **two-stage ingestion pipeline** (Azure Functions) that builds an image-aware search index, and a **conversational web app** that consumes it with an AI agent that can see and reason about the actual images.
+The solution has two layers: a **two-stage ingestion pipeline** (Azure Functions) that builds an image-aware search index, and a **conversational agent** deployed as a **Foundry hosted agent** that can see and reason about the actual images. A **Chainlit thin client** calls the agent via the Responses API and stores conversation history in **Cosmos DB**.
 
 ```mermaid
 flowchart LR
@@ -113,11 +119,16 @@ flowchart LR
             AF["AI Foundry<br/>GPT-4.1 + Embeddings"]
             AIS["AI Search<br/>kb-articles index"]
         end
-        subgraph App["KB Agent"]
+        subgraph Agent["KB Agent — Foundry Hosted Agent"]
             direction TB
-            PROXY["<b>Image Proxy</b><br/>/api/images/*"]
             VIS["<b>Vision Middleware</b><br/>Image injection"]
-            AGENT["<b>KB Agent</b><br/>ChatAgent + tools"]
+            AGT["<b>ChatAgent</b><br/>Search tool + reasoning"]
+        end
+        subgraph WebApp["Web App — Chainlit Thin Client"]
+            direction TB
+            CL["Chainlit UI"]
+            PROXY["Image Proxy"]
+            COSMOS["Cosmos DB<br/>Conversation history"]
         end
     end
 
@@ -129,11 +140,13 @@ flowchart LR
     IDX -->|embed| AF
     IDX -->|index| AIS
 
-    AGENT -->|reason| AF
-    AGENT -->|query| AIS
+    AGT -->|reason| AF
+    AGT -->|query| AIS
+    VIS -->|fetch images| SA2
+    PROXY -->|serve images| SA2
 
-    VIS -->|fetch| SA2
-    PROXY -->|serve| SA2
+    CL -->|"Responses API"| AGT
+    CL -->|persist| COSMOS
 
     classDef invisible fill:none,stroke:none;
     class left,right invisible;
@@ -210,18 +223,24 @@ Run `make help` to see all targets. Here is the full list:
 | **Local Development** | |
 | `make help` | Show available targets |
 | `make dev-doctor` | Check if required dev tools are installed |
-| `make dev-setup` | Install required dev tools and Python dependencies (functions + web app) |
-| `make dev-setup-env` | Populate src/functions/.env from AZD environment |
+| `make dev-setup` | Install required dev tools and Python dependencies (functions + web app + agent) |
+| `make dev-setup-env` | Populate .env files from AZD environment (functions + web app + agent) |
 | `make convert` | Run fn-convert locally — requires `analyzer=content-understanding` or `analyzer=mistral-doc-ai` |
 | `make index` | Run fn-index locally (kb/serving → Azure AI Search) |
 | `make test` | Run unit tests (pytest) |
 | `make validate-infra` | Validate Azure infra is ready for local dev |
 | `make grant-dev-roles` | Verify developer RBAC roles (provisioned via Bicep) |
-| `make app` | Run Context Aware & Vision Grounded KB Agent locally (http://localhost:8080) |
+| `make agent` | Run KB Agent locally (http://localhost:8088) |
+| `make agent-test` | Run agent unit tests |
+| `make app` | Run Chainlit web app locally (http://localhost:8080) |
 | `make app-test` | Run web app unit tests |
 | **Azure Operations** | |
 | `make azure-provision` | Provision all Azure resources (azd provision) |
 | `make azure-deploy` | Deploy functions, search index, and CU analyzer (azd deploy) |
+| `make azure-agent-deploy` | Deploy KB Agent to Foundry (dev mode) |
+| `make azure-agent-publish` | Publish agent (dedicated identity + stable endpoint) |
+| `make azure-agent` | Deploy + publish agent in one step |
+| `make azure-agent-logs` | Stream agent logs from Foundry |
 | `make azure-deploy-app` | Build & deploy the web app to Azure Container Apps |
 | `make azure-app-url` | Print the deployed web app URL |
 | `make azure-app-logs` | Stream live logs from the deployed web app |
@@ -328,47 +347,56 @@ make azure-clean-index    # Delete the AI Search index
 
 ## 4. Run Context Aware & Vision Grounded KB Agent
 
-The agent is a conversational interface that lets you search the `kb-articles` index using a Microsoft Agent Framework agent with vision capabilities. It runs locally against live Azure services.
+The agent is a standalone FastAPI service (port 8088) that exposes an OpenAI-compatible Responses API. The Chainlit web app is a thin client that calls the agent, handles streaming, renders citations/images, and stores conversation history in Cosmos DB.
 
 ### Prerequisites
 
 - The ingestion pipeline has been run at least once (articles indexed in AI Search)
-- Your `az login` identity has the **Storage Blob Delegator** role on the serving storage account (in addition to the roles provisioned by Bicep). This is required for generating user delegation SAS URLs for article images.
+- Azure infrastructure provisioned (`make azure-provision`)
 
 ### Setup & Run
 
 ```bash
-# 1. Populate .env files from AZD environment (functions + web app)
+# 1. Populate .env files from AZD environment (functions + web app + agent)
 make dev-setup-env
 
-# 2. Start the web app
+# 2. Start the agent (in one terminal)
+make agent
+
+# 3. Start the web app (in another terminal)
 make app
 ```
 
 Open `http://localhost:8080` — ask questions like "What is Azure Content Understanding?" or "How does search security work?" and get grounded answers with inline images and source citations.
 
-> **Note:** `make dev-setup` installs dependencies for both the functions project and the web app. No separate setup step is needed.
+The web app auto-detects the agent URL scheme: `http://` → no auth (local), `https://` → Entra token auth (deployed).
+
+> **Note:** `make dev-setup` installs dependencies for all projects (functions + web app + agent). No separate setup step is needed.
 
 ### Run Tests
 
 ```bash
-make app-test
+make agent-test   # Agent tests (22 tests)
+make app-test     # Web app tests (48 tests)
 ```
 
 ---
 
-## 5. Deploy Web App to Azure
+## 5. Deploy to Azure
 
-The Context Aware & Vision Grounded KB Agent can be deployed to Azure Container Apps with Entra ID authentication (Easy Auth).
+The KB Agent can be deployed to Foundry as a hosted agent, and the Chainlit web app to Azure Container Apps with Entra ID authentication (Easy Auth).
 
 ### Prerequisites
 
-- Azure infrastructure is provisioned (`make azure-provision` — this also creates the Entra App Registration)
+- Azure infrastructure is provisioned (`make azure-provision` — this also creates the Foundry project, Cosmos DB, and Entra App Registration)
 - The ingestion pipeline has been run at least once (articles indexed in AI Search)
 
-### Deploy
+### Deploy Agent + Web App
 
 ```bash
+# Deploy the agent to Foundry + publish with dedicated identity + assign RBAC
+make azure-agent
+
 # Deploy the web app container to Azure Container Apps
 make azure-deploy-app
 
@@ -377,9 +405,10 @@ make azure-app-url
 
 # Stream live logs (optional)
 make azure-app-logs
+make azure-agent-logs
 ```
 
-The deployed app is protected by Entra ID — users must sign in with their organizational account. The container runs on Azure Container Apps (Consumption plan) with a system-assigned managed identity that has least-privilege RBAC access to AI Services, AI Search, and blob storage.
+The deployed web app is protected by Entra ID — users must sign in with their organizational account. The agent runs as a Foundry hosted agent with a dedicated identity that has least-privilege RBAC access to AI Services, AI Search, and blob storage. Conversation history is persisted in Cosmos DB.
 
 The Docker image is built and pushed to Azure Container Registry automatically during `make azure-deploy-app` — no local Docker build step is needed.
 
@@ -391,5 +420,5 @@ The `kb/staging/` folder contains sample articles (HTML + images) used for devel
 
 ## Documentation
 
-- [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema
-- [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC
+- [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema, observability
+- [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC, Foundry project, Cosmos DB

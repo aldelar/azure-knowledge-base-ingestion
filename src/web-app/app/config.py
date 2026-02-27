@@ -2,7 +2,7 @@
 
 Usage:
     from app.config import config
-    print(config.ai_services_endpoint)
+    print(config.agent_endpoint)
 """
 
 import os
@@ -30,22 +30,16 @@ def _find_env_file() -> Path | None:
 class Config:
     """Typed configuration loaded from environment variables."""
 
-    # Azure AI Services endpoint (Foundry)
-    ai_services_endpoint: str
-
-    # Agent model deployment name
-    agent_model_deployment_name: str
-
-    # Embedding model deployment name
-    embedding_deployment_name: str
-
-    # Azure AI Search
-    search_endpoint: str
-    search_index_name: str
+    # Agent endpoint (local: http://localhost:8088, deployed: Foundry endpoint)
+    agent_endpoint: str
 
     # Azure Blob Storage — serving account (images)
     serving_blob_endpoint: str
     serving_container_name: str
+
+    # Cosmos DB — conversation history
+    cosmos_endpoint: str
+    cosmos_database_name: str
 
 
 def _load_config() -> Config:
@@ -55,8 +49,7 @@ def _load_config() -> Config:
         load_dotenv(env_file, override=False)
 
     required = {
-        "AI_SERVICES_ENDPOINT": "ai_services_endpoint",
-        "SEARCH_ENDPOINT": "search_endpoint",
+        "AGENT_ENDPOINT": "agent_endpoint",
         "SERVING_BLOB_ENDPOINT": "serving_blob_endpoint",
     }
 
@@ -70,13 +63,11 @@ def _load_config() -> Config:
         sys.exit(1)
 
     return Config(
-        ai_services_endpoint=os.environ["AI_SERVICES_ENDPOINT"],
-        agent_model_deployment_name=os.environ.get("AGENT_MODEL_DEPLOYMENT_NAME", "gpt-4.1"),
-        embedding_deployment_name=os.environ.get("EMBEDDING_DEPLOYMENT_NAME", "text-embedding-3-small"),
-        search_endpoint=os.environ["SEARCH_ENDPOINT"],
-        search_index_name=os.environ.get("SEARCH_INDEX_NAME", "kb-articles"),
-        serving_blob_endpoint=os.environ.get("SERVING_BLOB_ENDPOINT", ""),
+        agent_endpoint=os.environ["AGENT_ENDPOINT"],
+        serving_blob_endpoint=os.environ["SERVING_BLOB_ENDPOINT"],
         serving_container_name=os.environ.get("SERVING_CONTAINER_NAME", "serving"),
+        cosmos_endpoint=os.environ.get("COSMOS_ENDPOINT", ""),
+        cosmos_database_name=os.environ.get("COSMOS_DATABASE_NAME", "kb-agent"),
     )
 
 

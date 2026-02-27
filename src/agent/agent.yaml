@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
+# Agent manifest for AZD azure.ai.agents extension deployment
+kind: hosted
+name: kb-agent
+description: >
+  Context-aware, vision-grounded KB search agent.
+  Answers questions about Azure services using hybrid search
+  (vector + keyword) with image-aware reasoning via GPT-4.1 vision.
+metadata:
+  authors:
+    - aldelar
+protocols:
+  - protocol: responses
+environment_variables:
+  - name: PROJECT_ENDPOINT
+    value: ${AZURE_AI_PROJECT_ENDPOINT}
+  - name: AI_SERVICES_ENDPOINT
+    value: ${AZURE_OPENAI_ENDPOINT}
+  - name: SEARCH_ENDPOINT
+    value: ${SEARCH_ENDPOINT}
+  - name: SERVING_BLOB_ENDPOINT
+    value: ${SERVING_BLOB_ENDPOINT}
+  - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+    value: ${APPLICATIONINSIGHTS_CONNECTION_STRING}

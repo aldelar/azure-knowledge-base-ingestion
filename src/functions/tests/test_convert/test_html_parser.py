@@ -17,10 +17,8 @@ from fn_convert_cu.html_parser import extract_image_map, extract_link_map
 # ---------------------------------------------------------------------------
 
 _STAGING = Path(__file__).resolve().parent.parent.parent.parent.parent / "kb" / "staging"
-_DITA_DIR = _STAGING / "ymr1770823224196_en-us"
-_CLEAN_DIR = _STAGING / "content-understanding-html_en-us"
+_CLEAN_DIR = _STAGING / "content-understanding-overview-html_en-us"
 
-_DITA_HTML = _DITA_DIR / "index.html"
 _CLEAN_HTML = _CLEAN_DIR / "content-understanding-overview.html"
 
 
@@ -31,34 +29,6 @@ _CLEAN_HTML = _CLEAN_DIR / "content-understanding-overview.html"
 
 class TestExtractImageMap:
     """Tests for extract_image_map()."""
-
-    @pytest.mark.skipif(not _DITA_HTML.exists(), reason="DITA article not in staging")
-    def test_dita_image_count(self) -> None:
-        """DITA article has 4 images."""
-        image_map = extract_image_map(_DITA_HTML)
-        assert len(image_map) == 4
-
-    @pytest.mark.skipif(not _DITA_HTML.exists(), reason="DITA article not in staging")
-    def test_dita_image_filenames(self) -> None:
-        """DITA article image stems match expected .image files."""
-        image_map = extract_image_map(_DITA_HTML)
-        stems = [stem for _, stem in image_map]
-        assert "zzy1770827101433" in stems
-        assert "mnz1770827151034" in stems
-        assert "qvd1770827174448" in stems
-        assert "lsa1770833429187" in stems
-
-    @pytest.mark.skipif(not _DITA_HTML.exists(), reason="DITA article not in staging")
-    def test_dita_preceding_text_from_step(self) -> None:
-        """DITA images have their step command text as preceding text."""
-        image_map = extract_image_map(_DITA_HTML)
-        # First 3 images share the same step text
-        first_three = image_map[:3]
-        for text, _ in first_three:
-            assert "Manage user security" in text, f"Expected step text, got: {text!r}"
-        # 4th image: "Click on the company name."
-        text_4, _ = image_map[3]
-        assert "Click on the company name" in text_4
 
     @pytest.mark.skipif(not _CLEAN_HTML.exists(), reason="Clean HTML article not in staging")
     def test_clean_html_image_count(self) -> None:
@@ -102,19 +72,6 @@ class TestExtractImageMap:
 
 class TestExtractLinkMap:
     """Tests for extract_link_map()."""
-
-    @pytest.mark.skipif(not _DITA_HTML.exists(), reason="DITA article not in staging")
-    def test_dita_link_count(self) -> None:
-        """DITA article has at least 1 external link."""
-        link_map = extract_link_map(_DITA_HTML)
-        assert len(link_map) >= 1
-
-    @pytest.mark.skipif(not _DITA_HTML.exists(), reason="DITA article not in staging")
-    def test_dita_link_text(self) -> None:
-        """DITA article contains the 'Adding or Changing RUN User Roles' link."""
-        link_map = extract_link_map(_DITA_HTML)
-        texts = [text for text, _ in link_map]
-        assert any("Adding or Changing RUN User Roles" in t for t in texts)
 
     @pytest.mark.skipif(not _CLEAN_HTML.exists(), reason="Clean HTML article not in staging")
     def test_clean_html_link_count(self) -> None:

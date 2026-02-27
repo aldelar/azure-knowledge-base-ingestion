@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.agent import image_service
-from app.agent.image_service import get_image_url, resolve_image_urls
+from app import image_service
+from app.image_service import get_image_url, resolve_image_urls
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +56,7 @@ class TestResolveImageUrls:
 class TestDownloadImage:
     """Test blob download functionality."""
 
-    @patch("app.agent.image_service._get_blob_service_client")
+    @patch("app.image_service._get_blob_service_client")
     def test_downloads_blob(self, mock_client_factory: MagicMock) -> None:
         mock_client = MagicMock()
         mock_blob_client = MagicMock()
@@ -73,7 +73,7 @@ class TestDownloadImage:
         assert result.data == b"PNG_DATA"
         assert result.content_type == "image/png"
 
-    @patch("app.agent.image_service._get_blob_service_client")
+    @patch("app.image_service._get_blob_service_client")
     def test_returns_none_on_failure(self, mock_client_factory: MagicMock) -> None:
         mock_client = MagicMock()
         mock_client.get_blob_client.side_effect = Exception("Blob not found")

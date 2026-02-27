@@ -1,16 +1,28 @@
-"""Context Aware & Vision Grounded KB Agent — Chainlit entry point."""
+"""Context Aware & Vision Grounded KB Agent — Chainlit entry point.
+
+The web app is a thin Chainlit client that calls the standalone KB agent
+via the OpenAI-compatible Responses API.  The agent runs as a separate
+service (local ``make agent`` or deployed on Foundry).
+"""
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
+from typing import TYPE_CHECKING
 
 import chainlit as cl
-from agent_framework import AgentThread
+from openai import OpenAI
 from starlette.responses import Response
 
-from app.agent.image_service import download_image
-from app.agent.kb_agent import AgentResponse, Citation, KBAgent
+from app.config import config
+from app.image_service import download_image, get_image_url
+from app.models import Citation
+
+if TYPE_CHECKING:
+    from chainlit.types import ThreadDict
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -19,7 +31,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
 )
-for _name in ("azure.core", "azure.identity", "httpx", "watchfiles"):
+for _name in ("azure.core", "azure.cosmos", "azure.identity", "httpx", "watchfiles", "openai"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
@@ -152,8 +164,6 @@ _API_PATH_RE = re.compile(r"/?api/images/(.+)")
 
 def _build_filename_lookup(citations: list[Citation]) -> dict[str, str]:
     """Build a filename → proxy-URL lookup from citations."""
-    from app.agent.image_service import get_image_url
-
     lookup: dict[str, str] = {}
     for cit in citations:
         for path in cit.image_urls:
@@ -222,6 +232,83 @@ def _build_citation_content(cit: Citation, idx: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Context window management
+# ---------------------------------------------------------------------------
+_MAX_CONTEXT_TOKENS = 128_000
+_RESPONSE_HEADROOM = 8_000
+_CHARS_PER_TOKEN = 4
+
+
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count using a char-based heuristic (1 token ≈ 4 chars)."""
+    return len(text) // _CHARS_PER_TOKEN
+
+
+def _trim_context(messages: list[dict], max_tokens: int | None = None) -> list[dict]:
+    """Trim oldest messages if estimated tokens exceed the context window.
+
+    Messages are dropped from the front (oldest first).
+    Cosmos DB is append-only — trimming only affects in-memory context sent
+    to the agent.
+    """
+    limit = max_tokens or (_MAX_CONTEXT_TOKENS - _RESPONSE_HEADROOM)
+
+    total = sum(_estimate_tokens(m.get("content", "")) for m in messages)
+    if total <= limit:
+        return messages
+
+    dropped = 0
+    trimmed = list(messages)
+    while len(trimmed) > 1:
+        est = sum(_estimate_tokens(m.get("content", "")) for m in trimmed)
+        if est <= limit:
+            break
+        trimmed.pop(0)
+        dropped += 1
+
+    if dropped:
+        logger.warning(
+            "Context window trimmed: dropped %d oldest messages (estimated %d tokens remaining)",
+            dropped,
+            sum(_estimate_tokens(m.get("content", "")) for m in trimmed),
+        )
+    return trimmed
+
+
+# ---------------------------------------------------------------------------
+# Agent client — dual-mode (local HTTP / Foundry with Entra auth)
+# ---------------------------------------------------------------------------
+
+def _create_agent_client() -> OpenAI:
+    """Create an OpenAI client pointing at the agent endpoint.
+
+    - ``http://`` scheme → local agent, no auth needed.
+    - ``https://`` scheme → Foundry hosted agent, Entra token auth.
+    """
+    endpoint = config.agent_endpoint.rstrip("/")
+
+    if endpoint.startswith("https://"):
+        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+        token_provider = get_bearer_token_provider(
+            DefaultAzureCredential(), "https://ai.azure.com/.default"
+        )
+        client = OpenAI(
+            base_url=endpoint,
+            api_key=token_provider(),
+            default_query={"api-version": "2025-11-15-preview"},
+        )
+        logger.info("Agent client: Foundry mode (Entra auth) → %s", endpoint)
+    else:
+        client = OpenAI(
+            base_url=endpoint,
+            api_key="local",
+        )
+        logger.info("Agent client: local mode (no auth) → %s", endpoint)
+
+    return client
+
+
+# ---------------------------------------------------------------------------
 # Image proxy endpoint
 #
 # Chainlit registers a catch-all ``/{full_path:path}`` that serves the SPA.
@@ -256,13 +343,119 @@ async def image_proxy(article_id: str, image_path: str) -> Response:
 
 
 # Pop the catch-all, include our router, then re-add the catch-all.
-_app = cl.server.app
-_catchall = [r for r in _app.routes if isinstance(r, Route) and getattr(r, "path", "") == "/{full_path:path}"]
-for r in _catchall:
-    _app.routes.remove(r)
-_app.include_router(_image_router)
-for r in _catchall:
-    _app.routes.append(r)
+# This block only runs when Chainlit is serving (not during test collection).
+try:
+    _app = cl.server.app
+    _catchall = [r for r in _app.routes if isinstance(r, Route) and getattr(r, "path", "") == "/{full_path:path}"]
+    for r in _catchall:
+        _app.routes.remove(r)
+    _app.include_router(_image_router)
+    for r in _catchall:
+        _app.routes.append(r)
+except AttributeError:
+    # Chainlit server not initialised — running in test/CLI context.
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Cosmos DB data layer (optional — enabled when COSMOS_ENDPOINT is set)
+# ---------------------------------------------------------------------------
+
+if config.cosmos_endpoint:
+    @cl.data_layer
+    def _get_data_layer():
+        from app.data_layer import CosmosDataLayer
+        return CosmosDataLayer()
+else:
+    logger.info("Cosmos DB not configured — conversation persistence disabled")
+
+
+# ---------------------------------------------------------------------------
+# Authentication — Entra ID OAuth + header-based fallback
+# ---------------------------------------------------------------------------
+
+def _is_oauth_configured() -> bool:
+    """Return True if Chainlit Azure AD OAuth env vars are set.
+
+    Chainlit auto-detects ``OAUTH_AZURE_AD_CLIENT_ID`` to enable the Azure AD
+    login button.  When unset (local dev), we fall back to the
+    ``header_auth_callback`` which auto-accepts as ``local-user``.
+    """
+    return bool(os.environ.get("OAUTH_AZURE_AD_CLIENT_ID"))
+
+
+# Register OAuth callback only when env vars are set — Chainlit's decorator
+# raises ValueError at import time if no OAuth provider env var is configured.
+if _is_oauth_configured():
+    @cl.oauth_callback
+    async def oauth_callback(
+        provider_id: str,
+        token: str,
+        raw_user_data: dict,
+        default_user: cl.User,
+    ) -> cl.User | None:
+        """Handle Azure AD OAuth sign-in.
+
+        Called by Chainlit when the user completes the Azure AD login flow.
+        Uses the Entra object-ID (``oid``) as the stable user identifier and
+        falls back to ``sub`` if ``oid`` is not present.
+        """
+        if provider_id == "azure-ad":
+            oid = raw_user_data.get("oid") or raw_user_data.get("sub", "")
+            display = raw_user_data.get("name", oid)
+            return cl.User(
+                identifier=oid,
+                metadata={
+                    "provider": "azure-ad",
+                    "display_name": display,
+                    "email": raw_user_data.get("email", ""),
+                },
+            )
+        return None
+
+
+@cl.header_auth_callback
+async def header_auth_callback(headers: dict) -> cl.User | None:
+    """Authenticate the user from request headers.
+
+    - **Azure (Easy Auth):** trusts ``X-MS-CLIENT-PRINCIPAL-ID``.
+    - **Local dev:** auto-creates a ``local-user`` identity.
+
+    Returning a ``cl.User`` enables Chainlit's login requirement, which
+    in turn activates the conversation history sidebar.
+    """
+    principal = headers.get("x-ms-client-principal-id")
+    if principal:
+        display = headers.get("x-ms-client-principal-name", principal)
+        return cl.User(identifier=principal, metadata={"provider": "azure-ad", "display_name": display})
+    # Local dev — no auth headers, auto-accept as local-user
+    return cl.User(identifier="local-user", metadata={"provider": "header"})
+
+
+# ---------------------------------------------------------------------------
+# User identity helper
+# ---------------------------------------------------------------------------
+
+def _get_user_id() -> str:
+    """Extract user identity for the current session.
+
+    Prefers the Chainlit-authenticated user (set by ``header_auth_callback``).
+    Falls back to Easy Auth header or ``"local-user"``.
+    """
+    try:
+        user = cl.user_session.get("user")
+        if user and hasattr(user, "identifier") and user.identifier:
+            return user.identifier
+    except Exception:
+        pass
+    try:
+        headers = cl.user_session.get("http_headers") or {}
+        principal = headers.get("x-ms-client-principal-id")
+        if principal:
+            return principal
+    except Exception:
+        pass
+    return "local-user"
 
 
 # ---------------------------------------------------------------------------
@@ -290,37 +483,125 @@ async def set_starters() -> list[cl.Starter]:
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
-    """Initialise per-session agent and conversation thread."""
-    agent = KBAgent()
-    thread = AgentThread()
-    cl.user_session.set("agent", agent)
-    cl.user_session.set("thread", thread)
-    logger.info("New chat session started")
+    """Initialise per-session agent client and conversation history."""
+    client = _create_agent_client()
+    cl.user_session.set("client", client)
+    cl.user_session.set("messages", [])
+    cl.user_session.set("user_id", _get_user_id())
+    logger.info("New chat session started (agent endpoint: %s)", config.agent_endpoint)
+
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: ThreadDict) -> None:
+    """Resume a previous conversation from the data layer.
+
+    Rebuilds the in-memory messages list from the stored steps so the
+    agent receives the correct conversation context.
+    """
+    client = _create_agent_client()
+    cl.user_session.set("client", client)
+    cl.user_session.set("user_id", _get_user_id())
+
+    # Rebuild messages from stored steps
+    messages: list[dict] = []
+    for step in thread.get("steps", []):
+        step_type = step.get("type", "")
+        output = step.get("output", "")
+        if step_type == "user_message":
+            messages.append({"role": "user", "content": output})
+        elif step_type == "assistant_message":
+            messages.append({"role": "assistant", "content": output})
+
+    cl.user_session.set("messages", messages)
+    logger.info(
+        "Chat resumed: thread=%s, messages=%d",
+        thread.get("id", "?"),
+        len(messages),
+    )
 
 
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
     """Handle an incoming user message — stream the agent answer."""
-    agent: KBAgent = cl.user_session.get("agent")  # type: ignore[assignment]
-    thread: AgentThread = cl.user_session.get("thread")  # type: ignore[assignment]
+    client: OpenAI = cl.user_session.get("client")  # type: ignore[assignment]
+    messages: list[dict] = cl.user_session.get("messages")  # type: ignore[assignment]
+
+    # Append user message to conversation history
+    messages.append({"role": "user", "content": message.content})
+
+    # Build context: trim to fit context window
+    context = _trim_context(messages)
+
+    # Build conversation context string for the agent
+    input_parts = []
+    for msg_item in context[:-1]:  # All messages except the current one
+        input_parts.append(f"[{msg_item['role']}]: {msg_item['content']}")
+    conversation_context = "\n".join(input_parts) if input_parts else None
 
     # Create the response message and stream tokens into it
     msg = cl.Message(content="")
+    await msg.send()  # renders the bubble with the thinking indicator
 
-    response: AgentResponse | None = None
+    try:
+        response = client.responses.create(
+            model="kb-agent",
+            input=message.content,
+            instructions=conversation_context,
+            stream=True,
+        )
 
-    async for chunk in agent.chat_stream(message.content, thread=thread):
-        if isinstance(chunk, AgentResponse):
-            response = chunk
-        else:
-            await msg.stream_token(chunk)
+        full_text = ""
+        raw_citations: list[dict] = []  # populated from function call output events
+        for event in response:
+            event_type = getattr(event, "type", None)
 
-    if response is None:
+            if event_type == "response.output_text.delta":
+                delta = getattr(event, "delta", "")
+                if delta:
+                    full_text += delta
+                    await msg.stream_token(delta)
+
+            elif event_type == "response.output_item.done":
+                # Extract citation data from search tool's function call output
+                item = getattr(event, "item", None)
+                if item and getattr(item, "type", None) == "function_call_output":
+                    output_str = getattr(item, "output", "")
+                    try:
+                        results = json.loads(output_str)
+                        if isinstance(results, list):
+                            for r in results:
+                                raw_citations.append(r)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+            elif event_type == "response.completed":
+                # Fallback: extract full text if streaming didn't capture it
+                if not full_text:
+                    resp = getattr(event, "response", None)
+                    if resp:
+                        for output in getattr(resp, "output", []):
+                            for content_item in getattr(output, "content", []):
+                                text = getattr(content_item, "text", "")
+                                if text:
+                                    full_text = text
+                                    await msg.stream_token(text)
+
+        if not full_text:
+            msg.content = "I wasn't able to generate a response. Please try again."
+            await msg.send()
+            return
+
+        # Append assistant response to history
+        messages.append({"role": "assistant", "content": full_text})
+        cl.user_session.set("messages", messages)
+
+    except Exception as e:
+        logger.error("Error calling agent: %s", e, exc_info=True)
+        msg.content = f"Error communicating with the agent: {e}"
         await msg.send()
         return
 
-    # ---- Post-process: expand refs, convert inline images to HTML ----
-    # Debug: log raw LLM output to diagnose image markdown format
+    # ---- Post-process: expand refs, normalise inline images ----
     _img_lines = [ln for ln in msg.content.splitlines() if "![" in ln or "/api/images/" in ln]
     if _img_lines:
         for ln in _img_lines:
@@ -328,24 +609,35 @@ async def on_message(message: cl.Message) -> None:
     else:
         logger.info("LLM output contains no image references")
 
-    # ---- Remap ref numbers to match de-duplicated citations ----
-    unique_citations, ref_mapping = _build_ref_map(response.citations)
-    if ref_mapping:
-        msg.content = _remap_ref_numbers(msg.content, ref_mapping)
+    # Build Citation objects from the metadata returned by the agent
+    citations: list[Citation] = []
+    for c in raw_citations:
+        citations.append(Citation(
+            article_id=c.get("article_id", ""),
+            title=c.get("title", ""),
+            section_header=c.get("section_header", ""),
+            chunk_index=c.get("chunk_index", 0),
+            content=c.get("content", ""),
+            image_urls=c.get("image_urls", []),
+        ))
 
+    # Expand ref markers so Chainlit can auto-link them
+    # (no de-dup/remap — the agent assigns ref numbers 1..N directly)
     msg.content = _expand_ref_markers(msg.content)
-    msg.content = _normalise_inline_images(msg.content, response.citations)
+    msg.content = _normalise_inline_images(msg.content, [])
 
-    elements: list[cl.Element] = []
-    for idx, cit in enumerate(unique_citations, 1):
-        elements.append(
-            cl.Text(
-                name=f"Ref #{idx}",
-                content=_build_citation_content(cit, idx),
-                display="side",
-            )
-        )
+    # Create cl.Text elements for each citation — Chainlit auto-links
+    # element names that appear literally in the message content
+    elements: list[cl.Text] = []
+    for idx, cit in enumerate(citations, 1):
+        content = _build_citation_content(cit, idx)
+        elements.append(cl.Text(
+            name=f"Ref #{idx}",
+            content=content,
+            display="side",
+        ))
+    if elements:
+        msg.elements = elements  # type: ignore[assignment]
+        logger.info("Attached %d citation elements to message", len(elements))
 
-    # ---- Attach elements and send final update ----
-    msg.elements = elements
     await msg.update()

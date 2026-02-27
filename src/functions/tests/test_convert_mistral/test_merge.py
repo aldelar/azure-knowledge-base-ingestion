@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from fn_convert_mistral.merge import (
+    _clean_description,
     extract_link_map,
     merge_article,
     recover_links,
@@ -173,3 +174,61 @@ class TestMergeArticle:
 
             article = (output / "article.md").read_text()
             assert "> **[Image: missing](images/missing.png)**" in article
+
+
+# ---------------------------------------------------------------------------
+# _clean_description
+# ---------------------------------------------------------------------------
+
+
+class TestCleanDescription:
+    """Tests for the GPT description cleanup helper."""
+
+    def test_structured_description_extracted(self):
+        raw = (
+            "1. **Description**: A diagram showing the data flow.\n"
+            "2. **UIElements**: None.\n"
+            "3. **NavigationPath**: N/A."
+        )
+        result = _clean_description(raw)
+        assert result == "A diagram showing the data flow"
+
+    def test_ui_elements_included_when_meaningful(self):
+        raw = (
+            "1. **Description**: A screenshot of the settings page.\n"
+            "2. **UIElements**: Save button, Cancel button.\n"
+            "3. **NavigationPath**: Settings > General."
+        )
+        result = _clean_description(raw)
+        assert "A screenshot of the settings page" in result
+        assert "**UI Elements**: Save button, Cancel button" in result
+        assert "**Navigation Path**: Settings > General" in result
+
+    def test_ui_elements_excluded_when_none(self):
+        raw = (
+            "1. **Description**: An architecture diagram.\n"
+            "2. **UIElements**: None.\n"
+            "3. **NavigationPath**: N/A."
+        )
+        result = _clean_description(raw)
+        assert "UI Elements" not in result
+        assert "Navigation Path" not in result
+
+    def test_unstructured_text_returned_as_is(self):
+        raw = "This is just a plain description with no structured headers."
+        result = _clean_description(raw)
+        assert result == raw.strip()
+
+    def test_empty_string(self):
+        result = _clean_description("")
+        assert result == ""
+
+    def test_without_numbering(self):
+        raw = (
+            "**Description**: A flowchart.\n"
+            "**UIElements**: None.\n"
+            "**NavigationPath**: N/A."
+        )
+        result = _clean_description(raw)
+        assert "A flowchart" in result
+        assert "UI Elements" not in result

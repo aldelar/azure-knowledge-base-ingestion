@@ -19,7 +19,7 @@ help: ## Show available targets
 	@echo ""
 	@echo "  Local Development"
 	@echo "  ─────────────────"
-	@grep -E '^(dev-|convert|index|test|validate|grant|app)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^(dev-|convert|index|test|validate|grant|app|agent)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-44s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  Azure Operations"
@@ -64,30 +64,38 @@ dev-setup: ## Install required dev tools and Python dependencies
 	@cd src/functions && uv sync --extra dev
 	@echo "Installing Python dependencies (web app)..."
 	@cd src/web-app && uv sync --extra dev
+	@echo "Installing Python dependencies (agent)..."
+	@cd src/agent && uv sync --extra dev
 	@echo "Python dependencies installed."
 
-dev-setup-env: ## Populate .env files from AZD environment (functions + web app)
+dev-setup-env: ## Populate .env files from AZD environment (functions + web app + agent)
 	@echo "Writing AZD environment values to src/functions/.env..."
 	@azd env get-values > src/functions/.env
 	@echo "Done. $(shell wc -l < src/functions/.env 2>/dev/null || echo 0) variables written."
 	@echo "Writing AZD environment values to src/web-app/.env..."
 	@azd env get-values > src/web-app/.env
 	@echo "Done. $(shell wc -l < src/web-app/.env 2>/dev/null || echo 0) variables written."
+	@echo "Writing AZD environment values to src/agent/.env..."
+	@azd env get-values > src/agent/.env
+	@echo "Done. $(shell wc -l < src/agent/.env 2>/dev/null || echo 0) variables written."
 
 # ------------------------------------------------------------------------------
 # Local Development — Storage Access
 # ------------------------------------------------------------------------------
-.PHONY: dev-enable-storage
+.PHONY: dev-enable-storage dev-enable-cosmos
 
 dev-enable-storage: ## Re-enable public access on storage accounts (disabled nightly)
 	@bash scripts/enable-storage-public-access.sh
+
+dev-enable-cosmos: ## Enable public access on Cosmos DB + add developer IP to firewall
+	@bash scripts/enable-cosmos-public-access.sh
 
 # ------------------------------------------------------------------------------
 # Local Development — Pipeline
 # ------------------------------------------------------------------------------
 .PHONY: convert index test validate-infra
 
-test: ## Run unit tests (pytest)
+test: test-agent test-app ## Run all fast tests (unit + endpoint, no Azure needed)
 	@cd src/functions && uv run pytest tests/ -v || test $$? -eq 5
 
 validate-infra: ## Validate Azure infra is ready for local dev
@@ -108,29 +116,59 @@ index: ## Run fn-index locally (kb/serving → Azure AI Search)
 # ------------------------------------------------------------------------------
 # Local Development — Web App
 # ------------------------------------------------------------------------------
-.PHONY: app app-test
+.PHONY: app test-app
 
 app: ## Run Context Aware & Vision Grounded KB Agent locally (http://localhost:8080)
 	@cd src/web-app && uv run chainlit run app/main.py -w --port 8080
 
-app-test: ## Run web app unit tests
-	@cd src/web-app && uv run pytest tests/ -v || test $$? -eq 5
+test-app: ## Run web app unit tests (no Azure needed)
+	@cd src/web-app && uv run pytest tests/ -v -m "not integration" || test $$? -eq 5
+
+# ------------------------------------------------------------------------------
+# Local Development — Agent
+# ------------------------------------------------------------------------------
+.PHONY: agent test-agent test-agent-integration
+
+agent: ## Run KB Agent locally (http://localhost:8088)
+	@cd src/agent && uv run python main.py
+
+test-agent: ## Run agent unit + endpoint tests (no Azure needed)
+	@cd src/agent && uv run pytest tests/ -v -m "not integration" || test $$? -eq 5
+
+test-agent-integration: ## Run agent integration tests (needs running local agent)
+	@cd src/agent && AGENT_ENDPOINT=http://localhost:8088 uv run pytest tests/ -v -m integration || test $$? -eq 5
 
 # ------------------------------------------------------------------------------
 # Local Development — RBAC
 # ------------------------------------------------------------------------------
 .PHONY: grant-dev-roles
 
-grant-dev-roles: ## Verify developer RBAC roles (provisioned via Bicep)
-	@echo "Developer RBAC roles are now managed declaratively via Bicep (infra/)."
-	@echo "Run 'make azure-provision' to apply. Checking current assignments..."
+grant-dev-roles: ## Grant Cosmos DB native RBAC to current developer + verify ARM roles
+	@echo "Granting developer RBAC roles..."
 	@echo ""
 	@set -a && . src/functions/.env && set +a && \
 	USER_OID=$$(az ad signed-in-user show --query id -o tsv) && \
 	echo "  User: $$USER_OID" && \
 	echo "" && \
-	echo "  Roles are assigned during 'azd provision' via the principalId parameter." && \
-	echo "  If missing, run: make azure-provision"
+	ENV=$$(azd env get-value AZURE_ENV_NAME 2>/dev/null || echo "dev") && \
+	COSMOS_ACCOUNT="cosmos-kbidx-$$ENV" && \
+	RG="rg-kbidx-$$ENV" && \
+	SUB=$$(az account show --query id -o tsv) && \
+	SCOPE="/subscriptions/$$SUB/resourceGroups/$$RG/providers/Microsoft.DocumentDB/databaseAccounts/$$COSMOS_ACCOUNT" && \
+	echo "  Cosmos DB: $$COSMOS_ACCOUNT ($$RG)" && \
+	echo "  Assigning Cosmos DB Built-in Data Contributor (native RBAC)..." && \
+	az cosmosdb sql role assignment create \
+		--account-name "$$COSMOS_ACCOUNT" \
+		--resource-group "$$RG" \
+		--role-definition-id "00000000-0000-0000-0000-000000000002" \
+		--principal-id "$$USER_OID" \
+		--scope "$$SCOPE" \
+		-o none 2>/dev/null && \
+	echo "  ✓ Cosmos DB data-plane role assigned." || \
+	echo "  ✓ Cosmos DB data-plane role already assigned (or assignment skipped)."
+	@echo ""
+	@echo "  ARM-level roles are managed via Bicep (infra/)."
+	@echo "  If missing, run: make azure-provision"
 
 # ------------------------------------------------------------------------------
 # Azure — Provision & Deploy
@@ -201,6 +239,9 @@ azure-index-summarize: ## Show AI Search index contents summary
 azure-deploy-app: ## Build & deploy the web app to Azure Container Apps
 	azd deploy --service web-app
 
+azure-setup-auth: ## Add Entra redirect URIs (Easy Auth + Chainlit OAuth) — idempotent, CI/CD-safe
+	@bash scripts/setup-redirect-uris.sh
+
 azure-app-url: ## Print the deployed web app URL
 	@azd env get-value WEBAPP_URL
 
@@ -208,6 +249,49 @@ azure-app-logs: ## Stream live logs from the deployed web app
 	@APP=$$(azd env get-value WEBAPP_NAME) && \
 	RG=$$(azd env get-value RESOURCE_GROUP) && \
 	az containerapp logs show --name $$APP --resource-group $$RG --type console --follow
+
+# ------------------------------------------------------------------------------
+# Azure — Agent (Foundry Hosted Agent)
+# ------------------------------------------------------------------------------
+.PHONY: azure-agent-deploy azure-agent-publish azure-agent azure-agent-logs azure-test-agent-dev azure-test-agent azure-test-app azure-test
+
+azure-agent-deploy: ## Deploy the KB Agent to Foundry (dev mode)
+	AZD_EXT_TIMEOUT=180 azd deploy --service agent
+
+azure-agent-publish: ## Publish the agent (dedicated identity + stable endpoint)
+	@bash scripts/publish-agent.sh
+
+azure-agent: azure-agent-deploy azure-agent-publish ## Deploy + publish agent in one step
+
+azure-test-agent-dev: ## Run agent integration tests against dev (unpublished) endpoint
+	@cd src/agent && AGENT_ENDPOINT=$$(azd env get-value AGENT_AGENT_ENDPOINT) uv run pytest tests/ -v -m integration || test $$? -eq 5
+
+azure-test-agent: ## Run agent integration tests against published Foundry endpoint
+	@cd src/agent && AGENT_ENDPOINT=$$(azd env get-value AGENT_ENDPOINT) uv run pytest tests/ -v -m integration || test $$? -eq 5
+
+azure-test-app: ## Run web app integration tests (Cosmos DB + Blob Storage)
+	@cd src/web-app && \
+	  SERVING_BLOB_ENDPOINT=$$(azd env get-value SERVING_BLOB_ENDPOINT) \
+	  COSMOS_ENDPOINT=$$(azd env get-value COSMOS_ENDPOINT) \
+	  COSMOS_DATABASE_NAME=$$(azd env get-value COSMOS_DATABASE_NAME) \
+	  AGENT_ENDPOINT=$$(azd env get-value AGENT_ENDPOINT) \
+	  uv run pytest tests/ -v -m integration || test $$? -eq 5
+
+azure-test: azure-test-agent azure-test-app ## Run all Azure integration tests
+
+azure-agent-logs: ## Stream agent logs from Foundry
+	@AI_NAME=$$(azd env get-value AI_SERVICES_NAME) && \
+	RG=$$(azd env get-value RESOURCE_GROUP) && \
+	echo "Agent logs — use the Foundry portal for full tracing:" && \
+	echo "  https://ai.azure.com" && \
+	echo "" && \
+	echo "Or query via CLI:" && \
+	az monitor app-insights events show \
+		--app $$(azd env get-value APPINSIGHTS_NAME) \
+		--resource-group $$RG \
+		--type traces \
+		--order-by timestamp \
+		--top 50
 
 # ------------------------------------------------------------------------------
 # Azure — Cleanup

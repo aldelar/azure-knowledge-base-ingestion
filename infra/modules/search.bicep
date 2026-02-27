@@ -28,7 +28,7 @@ param indexReaderPrincipalId string = ''
 // ---------------------------------------------------------------------------
 // Azure AI Search
 // ---------------------------------------------------------------------------
-resource search 'Microsoft.Search/searchServices@2024-06-01-preview' = {
+resource search 'Microsoft.Search/searchServices@2023-11-01' = {
   name: 'srch-${baseName}'
   location: location
   tags: tags

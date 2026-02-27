@@ -21,6 +21,9 @@ kb/ - Knowledge base articles samples
 kb_snapshot/ - Snapshots of each analyzer's convert step output (serving_content-understanding, serving_mistral-doc-ai) for comparison
 scripts/ - Ad-hoc scripts for data processing, testing, etc.
 src/ - Application source code
+- agent/ - Foundry hosted agent (FastAPI + Agent Framework, deployed via `host: ai.agent`)
+- functions/ - Azure Functions (convert + index pipeline)
+- web-app/ - Chainlit thin client (OpenAI SDK + Cosmos DB data layer)
 - spikes/ - Spike implementations and prototypes (not part of the solution, code for research and experimentation only)
 
 ## Environment & Setup

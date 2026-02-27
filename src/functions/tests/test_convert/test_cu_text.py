@@ -40,8 +40,7 @@ def _find_html_file(article_dir: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 _ARTICLE_IDS = [
-    "content-understanding-html_en-us",
-    "ymr1770823224196_en-us",
+    "content-understanding-overview-html_en-us",
 ]
 
 # Repo root → kb/staging (computed once, no fixture dependency)
