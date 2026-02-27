@@ -101,13 +101,13 @@ flowchart LR
         subgraph Pipeline["Ingestion Pipeline — Azure Functions"]
             direction TB
             CONV["<b>fn-convert</b><br/>HTML → MD + images"]
+            AN["Analyzer ✱<br/>HTML + image analysis"]
             IDX["<b>fn-index</b><br/>MD → chunks → index"]
-            CONV --> IDX
+            CONV --> AN --> IDX
         end
-        subgraph Sources["Storage & Analysis"]
+        subgraph Sources["Storage"]
             direction TB
             SA1["Staging Storage<br/>Source articles"]
-            CU["Content Understanding<br/>HTML + image analysis"]
             SA2["Serving Storage<br/>Processed articles"]
         end
     end
@@ -118,35 +118,34 @@ flowchart LR
             direction TB
             AF["AI Foundry<br/>GPT-4.1 + Embeddings"]
             AIS["AI Search<br/>kb-articles index"]
-        end
-        subgraph Agent["KB Agent — Foundry Hosted Agent"]
-            direction TB
-            VIS["<b>Vision Middleware</b><br/>Image injection"]
-            AGT["<b>ChatAgent</b><br/>Search tool + reasoning"]
-        end
-        subgraph WebApp["Web App — Chainlit Thin Client"]
-            direction TB
-            CL["Chainlit UI"]
-            PROXY["Image Proxy"]
             COSMOS["Cosmos DB<br/>Conversation history"]
+        end
+        subgraph AgentSvc["KB Agent — Foundry Hosted Agent"]
+            direction TB
+            AGENT["<b>ChatAgent</b><br/>search tool + reasoning"]
+            VIS["<b>Vision Middleware</b><br/>Image injection"]
+        end
+        subgraph WebApp["Web App — Container Apps"]
+            direction TB
+            PROXY["<b>Image Proxy</b><br/>/api/images/*"]
+            CHAT["<b>Chainlit UI</b><br/>Streaming chat"]
         end
     end
 
     CONV -->|read| SA1
-    CONV -->|analyze| CU
     CONV -->|write| SA2
     IDX -->|read| SA2
 
     IDX -->|embed| AF
     IDX -->|index| AIS
 
-    AGT -->|reason| AF
-    AGT -->|query| AIS
+    AGENT -->|reason| AF
+    AGENT -->|query| AIS
     VIS -->|fetch images| SA2
-    PROXY -->|serve images| SA2
 
-    CL -->|"Responses API"| AGT
-    CL -->|persist| COSMOS
+    CHAT -->|Responses API| AGENT
+    CHAT -->|read/write| COSMOS
+    PROXY -->|serve images| SA2
 
     classDef invisible fill:none,stroke:none;
     class left,right invisible;
