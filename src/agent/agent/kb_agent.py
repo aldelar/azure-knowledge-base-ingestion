@@ -18,6 +18,7 @@ from typing import Any, Annotated
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from agent_framework import ChatAgent
+from agent_framework._types import AgentRunResponse, AgentRunResponseUpdate
 from agent_framework.azure import AzureOpenAIChatClient
 
 from agent.request_context import get_user_id, set_user_id
@@ -151,11 +152,11 @@ class KBSearchAgent(ChatAgent):
         set_user_id(str(uid))
         logger.debug("Request context: user_id=%s", uid)
 
-    async def run(self, messages=None, **kwargs):  # type: ignore[override]
+    async def run(self, messages=None, **kwargs: Any) -> AgentRunResponse:  # type: ignore[override]
         self._apply_request_context()
         return await super().run(messages, **kwargs)
 
-    async def run_stream(self, messages=None, **kwargs) -> AsyncIterable:  # type: ignore[override]
+    async def run_stream(self, messages=None, **kwargs: Any) -> AsyncIterable[AgentRunResponseUpdate]:  # type: ignore[override]
         self._apply_request_context()
         return await super().run_stream(messages, **kwargs)
 

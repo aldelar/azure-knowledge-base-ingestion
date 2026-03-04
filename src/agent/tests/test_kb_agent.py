@@ -301,11 +301,12 @@ class TestRequestContext:
 class TestKBSearchAgent:
     """Test that KBSearchAgent propagates user_id from _request_headers."""
 
-    def test_apply_request_context_sets_user_id(self) -> None:
+    @patch("agent.kb_agent.ChatAgent.__init__", return_value=None)
+    def test_apply_request_context_sets_user_id(self, mock_init: MagicMock) -> None:
         """_apply_request_context copies user_id to ContextVar."""
         from agent.request_context import get_user_id, _user_id_var
 
-        agent = KBSearchAgent.__new__(KBSearchAgent)
+        agent = KBSearchAgent(chat_client=MagicMock())
         agent._request_headers = {"user_id": "uid-abc"}  # type: ignore[attr-defined]
         agent._apply_request_context()
 
@@ -314,11 +315,12 @@ class TestKBSearchAgent:
         finally:
             _user_id_var.set("anonymous")
 
-    def test_apply_request_context_defaults_to_anonymous(self) -> None:
+    @patch("agent.kb_agent.ChatAgent.__init__", return_value=None)
+    def test_apply_request_context_defaults_to_anonymous(self, mock_init: MagicMock) -> None:
         """Missing user_id defaults to 'anonymous'."""
         from agent.request_context import get_user_id, _user_id_var
 
-        agent = KBSearchAgent.__new__(KBSearchAgent)
+        agent = KBSearchAgent(chat_client=MagicMock())
         agent._request_headers = {}  # type: ignore[attr-defined]
         agent._apply_request_context()
 
@@ -327,12 +329,13 @@ class TestKBSearchAgent:
         finally:
             _user_id_var.set("anonymous")
 
-    def test_apply_request_context_no_headers_attr(self) -> None:
+    @patch("agent.kb_agent.ChatAgent.__init__", return_value=None)
+    def test_apply_request_context_no_headers_attr(self, mock_init: MagicMock) -> None:
         """No _request_headers attribute defaults to 'anonymous'."""
         from agent.request_context import get_user_id, _user_id_var
 
-        agent = KBSearchAgent.__new__(KBSearchAgent)
-        # Don't set _request_headers at all
+        agent = KBSearchAgent(chat_client=MagicMock())
+        # Don't set _request_headers — relies on getattr default
         agent._apply_request_context()
 
         try:
