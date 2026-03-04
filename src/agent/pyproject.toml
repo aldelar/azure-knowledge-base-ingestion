@@ -2,7 +2,7 @@
 name = "kb-agent"
 version = "0.1.0"
 description = "KB Search Agent — hosted agent on Microsoft Foundry with vision-grounded search"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "agent-framework-core>=1.0.0b260107",
     "agent-framework-azure-ai>=1.0.0b260107",

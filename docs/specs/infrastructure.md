@@ -26,7 +26,7 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | → CU Internal: Analysis † | `ai-services.bicep` | `gpt-4.1-mini` | GlobalStandard, 30K TPM |
 | → Mistral OCR Deployment | `ai-services.bicep` | `mistral-document-ai-2512` | GlobalStandard, capacity 1 |
 | Azure AI Search | `search.bicep` | `srch-kbidx-{env}` | Free, 1 partition, 1 replica |
-| Function App (Container App) | `function-app.bicep` | `func-kbidx-{env}` | Container App, 1.0 vCPU / 2 GiB, Python 3.11 custom Docker |
+| Function App (Container App) | `function-app.bicep` | `func-kbidx-{env}` | Container App, 1.0 vCPU / 2 GiB, Python 3.12 custom Docker |
 | Container Registry | `container-registry.bicep` | `crkbidx{env}` | Basic |
 | Container Apps Environment | `container-app.bicep` | `cae-kbidx-{env}` | Consumption |
 | Container App (Web App) | `container-app.bicep` | `webapp-kbidx-{env}` | 0.5 vCPU, 1 GiB |
@@ -35,6 +35,10 @@ All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via 
 | → Database | `cosmos-db.bicep` | `kb-agent` | — |
 | → Container | `cosmos-db.bicep` | `conversations` | Partition key `/userId` |
 | Entra App Registration | Pre-provision hook | `webapp-kbidx-{env}` | — |
+| Action Group (Eval Alerts) | `alerts.bicep` | `ag-eval-kbidx-{env}` | — |
+| Alert: Latency Degradation | `alerts.bicep` | `alert-latency-kbidx-{env}` | Scheduled Query Rule |
+| Alert: Eval Regression | `alerts.bicep` | `alert-eval-regression-kbidx-{env}` | Scheduled Query Rule |
+| Alert: Safety Risk Finding | `alerts.bicep` | `alert-safety-kbidx-{env}` | Scheduled Query Rule |
 
 > `{env}` is the AZD environment name (e.g., `dev`, `staging`, `prod`).
 
@@ -54,7 +58,8 @@ infra/
     ├── cosmos-db-role.bicep      # Cosmos DB Built-in Data Contributor role assignment
     ├── function-app.bicep       # Functions on Container Apps (custom Docker) + runtime storage + AcrPull RBAC
     ├── container-registry.bicep # Azure Container Registry (Basic) + AcrPull RBAC (web app + Foundry project)
-    └── container-app.bicep      # Container Apps Environment + Container App + Easy Auth
+    ├── container-app.bicep      # Container Apps Environment + Container App + Easy Auth
+    └── alerts.bicep             # Azure Monitor alerts (latency, eval regression, safety) + Action Group
 ```
 
 ---
@@ -155,7 +160,7 @@ The search index (`kb-articles`) is created by application code at runtime, not 
 | Setting | Value |
 |---------|-------|
 | Plan | Flex Consumption (FC1) |
-| Runtime | Python 3.11 |
+| Runtime | Python 3.12 |
 | OS | Linux |
 | Max Instance Count | 40 |
 | Instance Memory | 2048 MB |
@@ -293,6 +298,47 @@ Authentication uses two complementary layers:
 | Redirect URIs | `https://<fqdn>/.auth/login/aad/callback` (Easy Auth) + `https://<fqdn>/auth/oauth/azure-ad/callback` (Chainlit OAuth) |
 
 The Entra App Registration is created by the AZD `preprovision` hook script (`scripts/setup-entra-auth.sh`). The client ID, secret, and tenant ID are stored as AZD environment variables and passed to the Bicep template as parameters. The `postprovision` hook adds both redirect URIs to the app registration.
+
+### Alerts (`alerts.bicep`)
+
+Provisions Azure Monitor alerting for evaluation regressions, latency degradation, and safety risk findings. All alerts route through a shared Action Group.
+
+**Action Group:**
+
+| Setting | Value |
+|---------|-------|
+| Name | `ag-eval-{baseName}` |
+| Short Name | `EvalAlerts` |
+| Receiver | Email (configurable via `alertEmailAddress` parameter) |
+
+**Scheduled Query Alert Rules:**
+
+| Alert | Severity | Frequency | Window | Scope | Condition |
+|-------|----------|-----------|--------|-------|-----------|
+| **Latency Degradation** (`alert-latency-{baseName}`) | 2 (Warning) | 5 min | 15 min | Application Insights | P95 agent request duration > 30 s (2 of 3 failing periods) |
+| **Eval Regression** (`alert-eval-regression-{baseName}`) | 2 (Warning) | 1 hour | 24 hours | Log Analytics | > 5 evaluation scores below 3.0 in AppTraces |
+| **Safety Risk Finding** (`alert-safety-{baseName}`) | 1 (Error) | 1 hour | 24 hours | Log Analytics | Any violence / hate / sexual / self_harm finding (medium or high) in AppTraces |
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `location` | string | Azure region |
+| `baseName` | string | Base name for resource naming |
+| `tags` | object | Resource tags |
+| `alertEmailAddress` | string | Email for alert notifications (optional — empty disables email receiver) |
+| `appInsightsId` | string | Application Insights resource ID (latency alert scope) |
+| `logAnalyticsWorkspaceId` | string | Log Analytics workspace resource ID (eval + safety alert scope) |
+
+**Outputs:**
+
+| Output | Description |
+|--------|-------------|
+| `actionGroupId` | Action Group resource ID |
+| `actionGroupName` | Action Group name (exported as `ALERT_ACTION_GROUP_NAME` AZD env var) |
+| `latencyAlertId` | Latency alert resource ID |
+| `evalRegressionAlertId` | Eval regression alert resource ID |
+| `safetyAlertId` | Safety alert resource ID |
 
 ---
 
@@ -455,6 +501,7 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `AZURE_OPENAI_ENDPOINT` | `https://ai-kbidx-dev.openai.azure.com/` |
 | `COSMOS_ENDPOINT` | `https://cosmos-kbidx-dev.documents.azure.com:443/` |
 | `COSMOS_DATABASE_NAME` | `kb-agent` |
+| `ALERT_ACTION_GROUP_NAME` | `ag-eval-kbidx-dev` |
 
 ---
 

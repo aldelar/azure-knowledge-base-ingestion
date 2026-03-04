@@ -61,7 +61,7 @@ param imageName string = ''
 
 // Use a public placeholder image on first deploy (before AZD pushes the real image)
 var useAcrImage = !empty(imageName)
-var containerImage = useAcrImage ? '${acrLoginServer}/${imageName}' : 'mcr.microsoft.com/azure-functions/python:4-python3.11'
+var containerImage = useAcrImage ? '${acrLoginServer}/${imageName}' : 'mcr.microsoft.com/azure-functions/python:4-python3.12'
 
 // ---------------------------------------------------------------------------
 // Storage account for Functions runtime

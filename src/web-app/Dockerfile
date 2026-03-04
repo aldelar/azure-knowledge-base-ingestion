@@ -4,7 +4,7 @@
 # Uses UV for fast, reproducible dependency installation.
 # ==============================================================================
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Install UV (official installer)
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \

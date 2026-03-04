@@ -252,7 +252,7 @@ The solution deploys two services:
 
 #### Agent Deployment (Foundry)
 
-- **Container image** built from `src/agent/Dockerfile` (Python 3.11, FastAPI + uvicorn, port 8088)
+- **Container image** built from `src/agent/Dockerfile` (Python 3.12, FastAPI + uvicorn, port 8088)
 - **AZD service** defined in `azure.yaml` as `host: azure.ai.agent`, `language: docker`, `docker.remoteBuild: true`
 - **Config block** specifies container resources (CPU, memory), scale settings, and model deployments (gpt-4.1)
 - **Agent manifest** (`src/agent/agent.yaml`) uses the `ContainerAgent` schema: `kind: hosted`, `protocols: [responses v1]`, `environment_variables` for runtime config
@@ -712,6 +712,89 @@ Content recording is **opt-in** via `AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENAB
 When deployed to Foundry, `APPLICATIONINSIGHTS_CONNECTION_STRING` is set automatically via Bicep. Traces are visible in:
 - **Foundry portal** → Project → Tracing tab
 - **Application Insights** → Transaction search / End-to-end transaction details
+
+---
+
+## Evaluation & Safety Automation
+
+The solution includes deployment-time evaluation automation for the Foundry hosted agent. All eval artifacts are provisioned programmatically — no portal/manual setup required.
+
+### SDK Approach
+
+Evaluation automation uses the **New Foundry SDK** (`azure-ai-projects >= 2.0.0b4`) with its OpenAI-compatible Evals wire protocol:
+
+1. `project_client.get_openai_client()` returns an OpenAI client scoped to the Foundry project (all traffic stays in Azure).
+2. `openai_client.evals.create()` creates eval definitions with `testing_criteria` (built-in evaluators) and returns an `eval_id`.
+3. That `eval_id` is referenced by `ContinuousEvaluationRuleAction` (continuous rules) and `EvaluationScheduleTask` (scheduled runs).
+
+The eval scripts are isolated in `src/agent/evals/` — a separate UV project with its own `.venv` and SDK pinning.
+
+### Evaluation Flow
+
+```mermaid
+flowchart TD
+    A[azd provision] --> B[Bicep: App Insights + Foundry project + alert rules]
+    B --> C[azd deploy — post-deploy hook]
+    C --> D[bootstrap.py: create 2 eval definitions]
+    D --> E1[continuous.py: quality eval → ContinuousEvaluationRuleAction]
+    D --> E2[scheduled_eval.py: dataset eval → daily EvaluationScheduleTask]
+    E2 --> F[Upload seed dataset via datasets.upload_file]
+```
+
+> **Note:** Red-team scheduling was originally planned but is **not implemented** — see [Platform Limitation: Red Teaming](../../docs/epics/006-foundry-agent-evaluations.md#platform-limitation-red-teaming).
+
+### Eval Definitions (bootstrap)
+
+| Name | Purpose | Evaluators | Data Source |
+|------|---------|------------|-------------|
+| **Quality** | Continuous rule (live traffic) | `task_adherence`, `coherence`, `violence` | `azure_ai_source/responses` |
+| **Dataset** | Daily schedule (seed dataset) | `task_adherence`, `coherence`, `violence`, `f1_score` | Custom JSONL schema |
+
+### Continuous Evaluation
+
+- Triggered on `RESPONSE_COMPLETED` events for `kb-agent`
+- Sampling: dev 100% / prod 10%, `max_hourly_runs=100`
+- Uses the quality eval definition
+
+### Scheduled Runs
+
+| Schedule | Cadence | Mechanism |
+|----------|---------|-----------|
+| Daily dataset eval | 06:00 UTC daily | `DailyRecurrenceSchedule`, `azure_ai_target_completions` data source with seed JSONL |
+
+
+### Dataset Generation
+
+Two scripts generate synthetic datasets for offline evaluation:
+
+- **`generate_eval_dataset.py`** — Uses `azure.ai.evaluation.simulator.Simulator` to produce multi-turn conversations from KB tasks, exported as JSONL.
+- **`generate_adversarial_dataset.py`** — Uses `AdversarialSimulator` with `ADVERSARIAL_QA` and `ADVERSARIAL_CONVERSATION` scenarios for safety regression testing.
+
+### Alerting
+
+Azure Monitor alerts (provisioned via Bicep in `alerts.bicep`):
+
+| Alert | Severity | Window | Condition |
+|-------|----------|--------|-----------|
+| Latency Degradation | Warning | 15 min | Agent P95 request duration > 30s |
+| Eval Regression | Warning | 24 h | Evaluation scores below threshold (> 5 low-score events) |
+| Safety Risk Finding | Error | 24 h | Safety evaluator flags risk |
+
+All alerts route to an Action Group with email receiver(s), configured via Bicep parameter `alertEmailAddress`.
+
+### Makefile Targets
+
+| Target | Purpose |
+|--------|---------|
+| `make eval-setup` | Orchestrate full evaluation setup (bootstrap + continuous + schedules) |
+| `make eval-verify` | Verification gate — confirm all automation artifacts are active |
+| `make eval-bootstrap` | Create/update baseline eval definitions |
+| `make eval-continuous` | Create/update continuous evaluation rule |
+| `make eval-schedule-daily` | Create/update daily scheduled evaluation |
+| `make eval-generate-dataset` | Generate synthetic eval dataset from KB content |
+| `make eval-generate-adversarial-dataset` | Generate adversarial test dataset |
+| `make eval-connect-appi` | Verify Foundry ↔ App Insights connection |
+| `make eval-alerts-verify` | Verify alert resources exist |
 
 ---
 

@@ -2,7 +2,7 @@
 name = "context-aware-vision-grounded-kb-agent"
 version = "0.1.0"
 description = "Context Aware & Vision Grounded KB Agent — conversational agent with structure-preserving chunking and image-aware search over Azure AI Search"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "chainlit>=2.0",
     "azure-identity>=1.19.0",

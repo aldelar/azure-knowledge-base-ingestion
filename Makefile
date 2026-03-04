@@ -22,6 +22,11 @@ help: ## Show available targets
 	@grep -E '^(dev-|convert|index|test|validate|grant|app|agent)[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-44s\033[0m %s\n", $$1, $$2}'
 	@echo ""
+	@echo "  Evaluations"
+	@echo "  ─────────────────"
+	@grep -E '^eval-[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-44s\033[0m %s\n", $$1, $$2}'
+	@echo ""
 	@echo "  Azure Operations"
 	@echo "  ─────────────────"
 	@grep -E '^azure-[a-zA-Z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -66,6 +71,8 @@ dev-setup: ## Install required dev tools and Python dependencies
 	@cd src/web-app && uv sync --extra dev
 	@echo "Installing Python dependencies (agent)..."
 	@cd src/agent && uv sync --extra dev
+	@echo "Installing Python dependencies (agent evals)..."
+	@cd src/agent/evals && uv sync
 	@echo "Python dependencies installed."
 
 dev-setup-env: ## Populate .env files from AZD environment (functions + web app + agent)
@@ -78,6 +85,9 @@ dev-setup-env: ## Populate .env files from AZD environment (functions + web app 
 	@echo "Writing AZD environment values to src/agent/.env..."
 	@azd env get-values > src/agent/.env
 	@echo "Done. $(shell wc -l < src/agent/.env 2>/dev/null || echo 0) variables written."
+	@echo "Writing AZD environment values to src/agent/evals/.env..."
+	@azd env get-values > src/agent/evals/.env
+	@echo "Done. $(shell wc -l < src/agent/evals/.env 2>/dev/null || echo 0) variables written."
 
 # ------------------------------------------------------------------------------
 # Local Development — Storage Access
@@ -292,6 +302,50 @@ azure-agent-logs: ## Stream agent logs from Foundry
 		--type traces \
 		--order-by timestamp \
 		--top 50
+
+# ------------------------------------------------------------------------------
+# Evaluations — Foundry Agent Evaluations & Safety Automation
+# ------------------------------------------------------------------------------
+.PHONY: eval-connect-appi eval-bootstrap eval-continuous eval-schedule-daily
+.PHONY: eval-generate-dataset eval-generate-adversarial-dataset
+.PHONY: eval-setup eval-verify eval-alerts-verify
+
+eval-connect-appi: ## Verify Foundry ↔ Application Insights connection
+	@cd src/agent/evals && uv run python -m kb_agent_evals.verify_appinsights
+
+eval-bootstrap: ## Create/update baseline evaluation artifacts (task_adherence + coherence + violence)
+	@cd src/agent/evals && uv run python -m kb_agent_evals.bootstrap
+
+eval-continuous: ## Create/update continuous evaluation rule for kb-agent
+	@cd src/agent/evals && uv run python -m kb_agent_evals.continuous
+
+eval-schedule-daily: ## Create/update daily scheduled evaluation
+	@cd src/agent/evals && uv run python -m kb_agent_evals.scheduled_eval
+
+eval-generate-dataset: ## Generate synthetic evaluation dataset from KB content
+	@cd src/agent/evals && uv run python -m kb_agent_evals.generate_eval_dataset
+
+eval-generate-adversarial-dataset: ## Generate adversarial test dataset
+	@cd src/agent/evals && uv run python -m kb_agent_evals.generate_adversarial_dataset
+
+eval-setup: ## Orchestrate full evaluation setup (Stories 1-4)
+	@cd src/agent/evals && uv run python -m kb_agent_evals.setup
+
+eval-verify: ## Verification gate — confirm all eval automation is active
+	@cd src/agent/evals && uv run python -m kb_agent_evals.verify
+
+eval-alerts-verify: ## Verify alert resources exist (requires azd provision)
+	@echo "Checking alert resources..."
+	@AG=$$(azd env get-value ALERT_ACTION_GROUP_NAME 2>/dev/null) && \
+	if [ -n "$$AG" ]; then \
+		echo "  ✓ Action Group: $$AG"; \
+		RG=$$(azd env get-value RESOURCE_GROUP) && \
+		az monitor action-group show --name "$$AG" --resource-group "$$RG" --query "{name:name, enabled:enabled}" -o table 2>/dev/null || \
+		echo "  ⚠ Could not query action group details (check RBAC)"; \
+	else \
+		echo "  ✘ ALERT_ACTION_GROUP_NAME not set. Run 'azd provision' first."; \
+		exit 1; \
+	fi
 
 # ------------------------------------------------------------------------------
 # Azure — Cleanup

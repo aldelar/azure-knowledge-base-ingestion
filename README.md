@@ -72,6 +72,7 @@ Teams and organizations that:
 │   ├── agent/           KB Agent — standalone Foundry hosted agent (FastAPI + uvicorn)
 │   │   ├── main.py      FastAPI server exposing Responses API (port 8088)
 │   │   ├── agent/       Agent modules (kb_agent, search_tool, vision_middleware, image_service)
+│   │   ├── evals/       Evaluation & safety automation (separate UV project — Foundry Evals API)
 │   │   └── tests/       pytest test suite
 │   ├── functions/       Azure Functions project (fn-convert, fn-index, shared utils)
 │   │   ├── fn_convert_cu/       Stage 1 backend — Content Understanding (HTML → MD)
@@ -250,6 +251,16 @@ Run `make help` to see all targets. Here is the full list:
 | `make azure-clean-storage` | Empty staging and serving blob containers in Azure |
 | `make azure-clean-index` | Delete the AI Search index |
 | `make azure-clean` | Clean all Azure data (storage + index + analyzer) |
+| **Evaluation & Safety** | |
+| `make eval-setup` | Orchestrate full evaluation setup (Stories 1-5) |
+| `make eval-connect-appi` | Verify Foundry ↔ Application Insights connection |
+| `make eval-bootstrap` | Create/update baseline evaluation artifacts (task_adherence + coherence + violence) |
+| `make eval-continuous` | Create/update continuous evaluation rule for kb-agent |
+| `make eval-schedule-daily` | Create/update daily scheduled evaluation |
+| `make eval-generate-dataset` | Generate synthetic evaluation dataset from KB content |
+| `make eval-generate-adversarial-dataset` | Generate adversarial test dataset |
+| `make eval-verify` | Verification gate — confirm all eval automation is active |
+| `make eval-alerts-verify` | Verify alert resources exist (requires azd provision) |
 
 ---
 
@@ -257,7 +268,7 @@ Run `make help` to see all targets. Here is the full list:
 
 ### Prerequisites
 
-- **Python 3.11+** and **[UV](https://docs.astral.sh/uv/)** package manager
+- **Python 3.12+** and **[UV](https://docs.astral.sh/uv/)** package manager
 - **Azure CLI** (`az`) — authenticated via `az login`
 - **Azure Developer CLI** (`azd`) — for provisioning infrastructure
 - **Azure Functions Core Tools** (`func`) — for Azure deployment
@@ -413,11 +424,59 @@ The Docker image is built and pushed to Azure Container Registry automatically d
 
 ---
 
+## 6. Evaluation & Safety Automation
+
+The project includes an evaluation and safety automation framework for the Foundry hosted agent, implemented as a separate UV project in `src/agent/evals/`. It uses the **Foundry Evals API** (OpenAI-compatible wire protocol via `azure-ai-projects` SDK) to define evaluators, register continuous monitoring, and schedule recurring evaluation runs.
+
+> **Note:** Red-team scheduling is **not implemented** — Foundry red teaming is in preview and does not currently support hosted (container-based) agents. The backend raises `ValueError` for agents whose `definition.model` is `None`. To be revisited when the preview stabilises. See [Epic 006 — Story 5](docs/epics/006-foundry-agent-evaluations.md#story-5--red-team-dataset-generation--scheduled-runs-weekly-⛔-not-implemented) for details.
+
+### Quick Start
+
+```bash
+# Full setup — creates evaluators, continuous rule, scheduled runs
+make eval-setup
+
+# Verify everything is active
+make eval-verify
+```
+
+### What `eval-setup` Does
+
+1. **Verifies** the Foundry ↔ Application Insights connection (provisioned via Bicep)
+2. **Bootstraps** baseline evaluators: `task_adherence`, `coherence`, `violence` (via `openai_client.evals.create()`)
+3. **Registers** a continuous evaluation rule that monitors every agent response in real time
+4. **Schedules** a daily quality evaluation (task adherence + coherence against a seed dataset)
+
+### Ad-Hoc Operations
+
+```bash
+# Generate a synthetic evaluation dataset from indexed KB content
+make eval-generate-dataset
+
+# Generate adversarial prompts for safety testing
+make eval-generate-adversarial-dataset
+
+# Verify alert resources are provisioned
+make eval-alerts-verify
+```
+
+### Alerting
+
+Azure Monitor alerts (provisioned via `infra/modules/alerts.bicep`) fire on:
+- **Latency degradation** — P95 agent response time > 30s (15-min window)
+- **Eval regression** — evaluation scores drop below 3.0 (24h window)
+- **Safety risk finding** — safety evaluator flags violence/hate/sexual/self_harm (24h window)
+
+For full details, see the [Evaluation & Safety Automation section in Architecture](docs/specs/architecture.md#evaluation--safety-automation).
+
+---
+
 ## Sample Articles
 
 The `kb/staging/` folder contains sample articles (HTML + images) used for development and testing. After running the pipeline, processed output appears in `kb/serving/` and chunks are searchable in the `kb-articles` AI Search index.
 
 ## Documentation
 
-- [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema, observability
-- [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC, Foundry project, Cosmos DB
+- [Architecture](docs/specs/architecture.md) — pipeline design, Azure services map, index schema, evaluation automation, observability
+- [Infrastructure](docs/specs/infrastructure.md) — Bicep modules, model deployments, RBAC, alerts, Foundry project, Cosmos DB
+- [Epic 006: Foundry Agent Evaluations](docs/epics/006-foundry-agent-evaluations.md) — evaluation epic tracking (stories, acceptance criteria, implementation details)

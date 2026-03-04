@@ -53,6 +53,16 @@ hooks:
             # If it fails (e.g. Graph API CAE), run standalone: make azure-setup-auth
             bash scripts/setup-redirect-uris.sh || \
               echo "WARNING: Could not update redirect URIs. Run 'make azure-setup-auth' after fixing Graph API auth."
+    postdeploy:
+        shell: sh
+        run: |
+            # Populate evals .env from AZD env values
+            azd env get-values > src/agent/evals/.env
+
+            # Run evaluation setup (soft-fail in dev)
+            echo "Running evaluation setup..."
+            cd src/agent/evals && uv run python -m kb_agent_evals.setup || \
+              echo "WARNING: Evaluation setup had issues. Run 'make eval-setup' to retry, 'make eval-verify' to diagnose."
     preprovision:
         name: preprovision
         shell: sh

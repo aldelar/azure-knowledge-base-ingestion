@@ -1,0 +1,18 @@
+[project]
+name = "kb-agent-evals"
+version = "0.1.0"
+description = "Evaluation automation for KB Agent — separate from core agent to avoid SDK version conflicts"
+requires-python = ">=3.12"
+dependencies = [
+    "azure-ai-projects>=2.0.0b4",
+    "azure-ai-evaluation>=1.15.0",
+    "azure-identity>=1.19.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+prerelease = "allow"

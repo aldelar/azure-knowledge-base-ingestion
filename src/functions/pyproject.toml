@@ -2,7 +2,7 @@
 name = "kb-ingestion-functions"
 version = "0.1.0"
 description = "Azure Functions for KB article ingestion — convert HTML to Markdown and index into AI Search"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "azure-ai-contentunderstanding>=1.0.0b1",
     "azure-identity>=1.19.0",

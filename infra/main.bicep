@@ -49,6 +49,9 @@ param chainlitAuthSecret string = ''
 @description('Published agent endpoint URL (set by scripts/publish-agent.sh)')
 param agentEndpoint string = ''
 
+@description('Email address for evaluation alert notifications')
+param alertEmailAddress string = ''
+
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -209,6 +212,21 @@ module foundryProject 'modules/foundry-project.bicep' = {
     webAppPrincipalId: containerApp.outputs.containerAppPrincipalId
   }
   dependsOn: [containerApp]
+}
+
+// ---------------------------------------------------------------------------
+// Module: Alerts (evaluation & safety monitoring)
+// ---------------------------------------------------------------------------
+module alerts 'modules/alerts.bicep' = {
+  name: 'alerts'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    alertEmailAddress: alertEmailAddress
+    appInsightsId: monitoring.outputs.appInsightsId
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +495,9 @@ output WEBAPP_URL string = containerApp.outputs.containerAppUrl
 // Foundry Project
 output FOUNDRY_PROJECT_NAME string = foundryProject.outputs.projectName
 output FOUNDRY_PROJECT_ENDPOINT string = foundryProject.outputs.projectEndpoint
+
+// Alerts
+output ALERT_ACTION_GROUP_NAME string = alerts.outputs.actionGroupName
 
 // Cosmos DB
 output COSMOS_ENDPOINT string = cosmosDb.outputs.cosmosEndpoint
