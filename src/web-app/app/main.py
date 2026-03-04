@@ -405,6 +405,7 @@ if _is_oauth_configured():
             display = raw_user_data.get("name", oid)
             return cl.User(
                 identifier=oid,
+                display_name=display,
                 metadata={
                     "provider": "azure-ad",
                     "display_name": display,
@@ -427,7 +428,7 @@ async def header_auth_callback(headers: dict) -> cl.User | None:
     principal = headers.get("x-ms-client-principal-id")
     if principal:
         display = headers.get("x-ms-client-principal-name", principal)
-        return cl.User(identifier=principal, metadata={"provider": "azure-ad", "display_name": display})
+        return cl.User(identifier=principal, display_name=display, metadata={"provider": "azure-ad", "display_name": display})
     # Local dev — no auth headers, auto-accept as local-user
     return cl.User(identifier="local-user", metadata={"provider": "header"})
 

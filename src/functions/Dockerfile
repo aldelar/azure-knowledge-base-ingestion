@@ -19,4 +19,4 @@ COPY . .
 RUN pip install --no-cache-dir .
 
 # Install Playwright Chromium with all required system libraries
-RUN playwright install --with-deps chromium
+RUN python -m playwright install --with-deps chromium

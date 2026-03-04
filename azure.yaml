@@ -45,14 +45,6 @@ infra:
     path: infra
     module: main
 hooks:
-    postprovision:
-        shell: sh
-        run: |
-            # Add redirect URIs to the Entra App Registration.
-            # This script is idempotent and CI/CD-safe.
-            # If it fails (e.g. Graph API CAE), run standalone: make azure-setup-auth
-            bash scripts/setup-redirect-uris.sh || \
-              echo "WARNING: Could not update redirect URIs. Run 'make azure-setup-auth' after fixing Graph API auth."
     postdeploy:
         shell: sh
         run: |
@@ -63,6 +55,14 @@ hooks:
             echo "Running evaluation setup..."
             cd src/agent/evals && uv run python -m kb_agent_evals.setup || \
               echo "WARNING: Evaluation setup had issues. Run 'make eval-setup' to retry, 'make eval-verify' to diagnose."
+    postprovision:
+        shell: sh
+        run: |
+            # Add redirect URIs to the Entra App Registration.
+            # This script is idempotent and CI/CD-safe.
+            # If it fails (e.g. Graph API CAE), run standalone: make azure-setup-auth
+            bash scripts/setup-redirect-uris.sh || \
+              echo "WARNING: Could not update redirect URIs. Run 'make azure-setup-auth' after fixing Graph API auth."
     preprovision:
         name: preprovision
         shell: sh
