@@ -263,6 +263,35 @@ Run `make help` to see all targets. Here is the full list:
 - **Azure Functions Core Tools** (`func`) — for Azure deployment
 - An Azure subscription with access to AI Services, AI Search, and model deployments
 
+### Resource Naming
+
+All Azure resources are named using a **project name** (`PROJECT_NAME`) and an **environment name** (`AZURE_ENV_NAME`):
+
+```
+{resource-prefix}-{projectName}-{env}
+```
+
+For example, with `PROJECT_NAME=kbagent` and `AZURE_ENV_NAME=dev`:
+
+| Resource | Name |
+|---|---|
+| Resource Group | `rg-kbagent-dev` |
+| AI Services | `ai-kbagent-dev` |
+| AI Search | `srch-kbagent-dev` |
+| Cosmos DB | `cosmos-kbagent-dev` |
+| Storage (staging) | `stkbagentstaging dev` |
+
+On first `azd provision`, a preprovision hook prompts for `PROJECT_NAME` if not already set (default: `kbagent`). Constraints:
+
+- **`PROJECT_NAME`**: 2–8 characters (alphanumeric + hyphens). Kept short to fit the 24-char Azure Storage Account limit.
+- **`AZURE_ENV_NAME`**: 2–7 characters. Use `dev`, `staging`, or `prod` (not `production`).
+
+You can also set these manually:
+
+```bash
+azd env set PROJECT_NAME kbagent
+```
+
 ### Steps
 
 ```bash

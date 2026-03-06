@@ -60,7 +60,7 @@ EOF
 azd ai agent init \
   -m /tmp/agent-manifest/agent.yaml \
   -e test-env \
-  --project-id "/subscriptions/.../projects/proj-kbidx-dev" \
+  --project-id "/subscriptions/.../projects/proj-kbagent-dev" \
   --no-prompt
 ```
 
@@ -134,17 +134,17 @@ The init command automatically sets these env vars from the Foundry project:
 | Variable | Value | Source |
 |----------|-------|--------|
 | `AZURE_AI_PROJECT_ID` | Full ARM resource ID | From `--project-id` |
-| `AZURE_AI_PROJECT_ENDPOINT` | `https://ai-kbidx-dev.services.ai.azure.com/api/projects/proj-kbidx-dev` | Queried from project |
-| `AZURE_AI_ACCOUNT_NAME` | `ai-kbidx-dev` | Parsed from resource ID |
-| `AZURE_AI_PROJECT_NAME` | `proj-kbidx-dev` | Parsed from resource ID |
-| `AZURE_OPENAI_ENDPOINT` | `https://ai-kbidx-dev.openai.azure.com/` | Queried from account |
-| `AZURE_RESOURCE_GROUP` | `rg-kbidx-dev` | Parsed from resource ID |
+| `AZURE_AI_PROJECT_ENDPOINT` | `https://ai-kbagent-dev.services.ai.azure.com/api/projects/proj-kbagent-dev` | Queried from project |
+| `AZURE_AI_ACCOUNT_NAME` | `ai-kbagent-dev` | Parsed from resource ID |
+| `AZURE_AI_PROJECT_NAME` | `proj-kbagent-dev` | Parsed from resource ID |
+| `AZURE_OPENAI_ENDPOINT` | `https://ai-kbagent-dev.openai.azure.com/` | Queried from account |
+| `AZURE_RESOURCE_GROUP` | `rg-kbagent-dev` | Parsed from resource ID |
 
 ### Prerequisites Warning
 
 The extension checks for:
-1. **Azure Container Registry (ACR)** — needed for remote image build. We already have `crkbidxdev`.
-2. **Application Insights** — needed for telemetry. We already have `appi-kbidx-dev`.
+1. **Azure Container Registry (ACR)** — needed for remote image build. We already have `crkbagentdev`.
+2. **Application Insights** — needed for telemetry. We already have `appi-kbagent-dev`.
 
 Both exist in our infrastructure but the temp project wasn't connected to them, hence the warnings.
 

@@ -5,16 +5,24 @@
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "10095571978894685093"
+      "templateHash": "15913021376041854366"
     }
   },
   "parameters": {
+    "projectName": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 8,
+      "metadata": {
+        "description": "Short project identifier used in all resource names (e.g. \"kbagent\"). Alphanumeric and hyphens only. Max 8 chars to fit Azure Storage 24-char limit."
+      }
+    },
     "environmentName": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 64,
+      "minLength": 2,
+      "maxLength": 7,
       "metadata": {
-        "description": "Name of the environment (e.g., dev, staging, prod). Used for resource naming."
+        "description": "Name of the environment (e.g., dev, staging, prod). Use \"prod\" for production."
       }
     },
     "location": {
@@ -63,13 +71,27 @@
       "metadata": {
         "description": "Entra App Registration client secret for web app Easy Auth"
       }
+    },
+    "chainlitAuthSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Chainlit auth secret for JWT signing"
+      }
+    },
+    "agentEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Published agent endpoint URL (set by scripts/publish-agent.sh)"
+      }
     }
   },
   "variables": {
-    "baseName": "[format('kbidx-{0}', parameters('environmentName'))]",
-    "stagingStorageName": "[replace(format('stkbidxstaging{0}', parameters('environmentName')), '-', '')]",
-    "servingStorageName": "[replace(format('stkbidxserving{0}', parameters('environmentName')), '-', '')]",
-    "functionsStorageName": "[replace(format('stkbidxfunc{0}', parameters('environmentName')), '-', '')]",
+    "baseName": "[format('{0}-{1}', parameters('projectName'), parameters('environmentName'))]",
+    "stagingStorageName": "[replace(format('st{0}staging{1}', parameters('projectName'), parameters('environmentName')), '-', '')]",
+    "servingStorageName": "[replace(format('st{0}serving{1}', parameters('projectName'), parameters('environmentName')), '-', '')]",
+    "functionsStorageName": "[replace(format('st{0}func{1}', parameters('projectName'), parameters('environmentName')), '-', '')]",
     "defaultTags": "[union(parameters('tags'), createObject('azd-env-name', parameters('environmentName'), 'project', 'kb-ingestion'))]"
   },
   "resources": [
@@ -91,6 +113,9 @@
           },
           "tags": {
             "value": "[variables('defaultTags')]"
+          },
+          "deployerPrincipalId": {
+            "value": "[parameters('principalId')]"
           }
         },
         "template": {
@@ -100,7 +125,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "2312825422188970928"
+              "templateHash": "15446417664397115034"
             }
           },
           "parameters": {
@@ -122,7 +147,17 @@
               "metadata": {
                 "description": "Tags to apply to all resources"
               }
+            },
+            "deployerPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID of the deployer (human user) for Log Analytics Reader role on App Insights"
+              }
             }
+          },
+          "variables": {
+            "logAnalyticsReaderRoleId": "73c42c96-874c-492b-b04d-ab87d138a893"
           },
           "resources": [
             {
@@ -151,6 +186,21 @@
               },
               "dependsOn": [
                 "[resourceId('Microsoft.OperationalInsights/workspaces', format('log-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Insights/components', format('appi-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Insights/components', format('appi-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('logAnalyticsReaderRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('deployerPrincipalId')]",
+                "principalType": "User",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('logAnalyticsReaderRoleId'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/components', format('appi-{0}', parameters('baseName')))]"
               ]
             }
           ],
@@ -1178,7 +1228,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "10855008344160120112"
+              "templateHash": "9861251624938294511"
             }
           },
           "parameters": {
@@ -1273,7 +1323,7 @@
             "acrLoginServer": {
               "type": "string",
               "metadata": {
-                "description": "ACR login server (e.g., crkbidxdev.azurecr.io)"
+                "description": "ACR login server (e.g., crkbagentdev.azurecr.io)"
               }
             },
             "acrResourceId": {
@@ -1524,7 +1574,7 @@
             "value": "[parameters('location')]"
           },
           "baseName": {
-            "value": "[parameters('environmentName')]"
+            "value": "[variables('baseName')]"
           },
           "tags": {
             "value": "[variables('defaultTags')]"
@@ -1537,7 +1587,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "14278417485004414581"
+              "templateHash": "16898172223381053099"
             }
           },
           "parameters": {
@@ -1569,7 +1619,7 @@
             }
           },
           "variables": {
-            "acrName": "[replace(format('crkbidx{0}', parameters('baseName')), '-', '')]",
+            "acrName": "[replace(format('cr{0}', parameters('baseName')), '-', '')]",
             "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
           },
           "resources": [
@@ -1663,6 +1713,12 @@
           "entraClientSecret": {
             "value": "[parameters('entraClientSecret')]"
           },
+          "chainlitAuthSecret": {
+            "value": "[parameters('chainlitAuthSecret')]"
+          },
+          "agentEndpoint": {
+            "value": "[parameters('agentEndpoint')]"
+          },
           "cosmosEndpoint": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos-db'), '2025-04-01').outputs.cosmosEndpoint.value]"
           },
@@ -1677,7 +1733,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "7780180558536939228"
+              "templateHash": "8244699674750702538"
             }
           },
           "parameters": {
@@ -1709,14 +1765,14 @@
             "acrLoginServer": {
               "type": "string",
               "metadata": {
-                "description": "ACR login server (e.g., crkbidxdev.azurecr.io)"
+                "description": "ACR login server (e.g., crkbagentdev.azurecr.io)"
               }
             },
             "imageName": {
               "type": "string",
               "defaultValue": "",
               "metadata": {
-                "description": "Docker image name and tag (e.g., webapp-kbidx:latest). Leave empty for initial provisioning."
+                "description": "Docker image name and tag (e.g., webapp-kbagent:latest). Leave empty for initial provisioning."
               }
             },
             "aiServicesEndpoint": {
@@ -1784,6 +1840,13 @@
               "defaultValue": "kb-agent",
               "metadata": {
                 "description": "Cosmos DB database name"
+              }
+            },
+            "chainlitAuthSecret": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Chainlit auth secret for JWT signing"
               }
             },
             "entraClientId": {
@@ -1905,6 +1968,22 @@
                         {
                           "name": "COSMOS_DATABASE_NAME",
                           "value": "[parameters('cosmosDatabaseName')]"
+                        },
+                        {
+                          "name": "OAUTH_AZURE_AD_CLIENT_ID",
+                          "value": "[parameters('entraClientId')]"
+                        },
+                        {
+                          "name": "OAUTH_AZURE_AD_CLIENT_SECRET",
+                          "value": "[parameters('entraClientSecret')]"
+                        },
+                        {
+                          "name": "OAUTH_AZURE_AD_TENANT_ID",
+                          "value": "[parameters('tenantId')]"
+                        },
+                        {
+                          "name": "CHAINLIT_AUTH_SECRET",
+                          "value": "[parameters('chainlitAuthSecret')]"
                         }
                       ]
                     }
@@ -2035,6 +2114,9 @@
           },
           "appInsightsConnectionString": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsConnectionString.value]"
+          },
+          "webAppPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.containerAppPrincipalId.value]"
           }
         },
         "template": {
@@ -2044,7 +2126,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "8730732010052546710"
+              "templateHash": "6478704037464481443"
             }
           },
           "parameters": {
@@ -2078,7 +2160,7 @@
               "type": "string",
               "defaultValue": "",
               "metadata": {
-                "description": "ACR login server (e.g. crkbidxdev.azurecr.io) for the container registry connection"
+                "description": "ACR login server (e.g. crkbagentdev.azurecr.io) for the container registry connection"
               }
             },
             "acrResourceId": {
@@ -2101,11 +2183,19 @@
               "metadata": {
                 "description": "Application Insights connection string (used as credential key)"
               }
+            },
+            "webAppPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID of the web app Container App MI — gets Azure AI User role to call the agent Responses API"
+              }
             }
           },
           "variables": {
             "azureAIUserRoleId": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
-            "azureAIDeveloperRoleId": "64702f94-c441-49e6-a78b-ef80e0188fee"
+            "azureAIDeveloperRoleId": "64702f94-c441-49e6-a78b-ef80e0188fee",
+            "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7"
           },
           "resources": [
             {
@@ -2137,6 +2227,18 @@
               ]
             },
             {
+              "condition": "[not(empty(parameters('webAppPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName'))), parameters('webAppPrincipalId'), variables('azureAIUserRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('webAppPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAIUserRoleId'))]"
+              }
+            },
+            {
               "condition": "[not(empty(parameters('deployerPrincipalId')))]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
@@ -2145,6 +2247,17 @@
                 "principalId": "[parameters('deployerPrincipalId')]",
                 "principalType": "User",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAIDeveloperRoleId'))]"
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('deployerPrincipalId'), variables('readerRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('deployerPrincipalId')]",
+                "principalType": "User",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]"
               }
             },
             {
@@ -2215,6 +2328,7 @@
         }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
         "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
       ]
@@ -3361,7 +3475,7 @@
             "value": "[parameters('location')]"
           },
           "baseName": {
-            "value": "[parameters('environmentName')]"
+            "value": "[variables('baseName')]"
           },
           "tags": {
             "value": "[variables('defaultTags')]"
@@ -3377,7 +3491,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "14278417485004414581"
+              "templateHash": "16898172223381053099"
             }
           },
           "parameters": {
@@ -3409,7 +3523,7 @@
             }
           },
           "variables": {
-            "acrName": "[replace(format('crkbidx{0}', parameters('baseName')), '-', '')]",
+            "acrName": "[replace(format('cr{0}', parameters('baseName')), '-', '')]",
             "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
           },
           "resources": [
@@ -3477,7 +3591,7 @@
             "value": "[parameters('location')]"
           },
           "baseName": {
-            "value": "[parameters('environmentName')]"
+            "value": "[variables('baseName')]"
           },
           "tags": {
             "value": "[variables('defaultTags')]"
@@ -3493,7 +3607,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "14278417485004414581"
+              "templateHash": "16898172223381053099"
             }
           },
           "parameters": {
@@ -3525,7 +3639,7 @@
             }
           },
           "variables": {
-            "acrName": "[replace(format('crkbidx{0}', parameters('baseName')), '-', '')]",
+            "acrName": "[replace(format('cr{0}', parameters('baseName')), '-', '')]",
             "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
           },
           "resources": [

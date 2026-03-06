@@ -17,9 +17,14 @@ targetScope = 'resourceGroup'
 // Parameters
 // ---------------------------------------------------------------------------
 
-@minLength(1)
-@maxLength(64)
-@description('Name of the environment (e.g., dev, staging, prod). Used for resource naming.')
+@minLength(2)
+@maxLength(8)
+@description('Short project identifier used in all resource names (e.g. "kbagent"). Alphanumeric and hyphens only. Max 8 chars to fit Azure Storage 24-char limit.')
+param projectName string
+
+@minLength(2)
+@maxLength(7)
+@description('Name of the environment (e.g., dev, staging, prod). Use "prod" for production.')
 param environmentName string
 
 @description('Primary Azure region for all resources')
@@ -53,13 +58,14 @@ param agentEndpoint string = ''
 // Variables
 // ---------------------------------------------------------------------------
 
-// Base name for resources: kebab-case, max ~20 chars to stay within limits
-var baseName = 'kbidx-${environmentName}'
+// Base name for resources: kebab-case, e.g. 'kbagent-dev'
+var baseName = '${projectName}-${environmentName}'
 
 // Storage account names: lowercase alphanumeric, max 24 chars
-var stagingStorageName = replace('stkbidxstaging${environmentName}', '-', '')
-var servingStorageName = replace('stkbidxserving${environmentName}', '-', '')
-var functionsStorageName = replace('stkbidxfunc${environmentName}', '-', '')
+// Worst case: st(2) + projectName(8) + staging(7) + env(7) = 24
+var stagingStorageName = replace('st${projectName}staging${environmentName}', '-', '')
+var servingStorageName = replace('st${projectName}serving${environmentName}', '-', '')
+var functionsStorageName = replace('st${projectName}func${environmentName}', '-', '')
 
 // Merge default tags
 var defaultTags = union(tags, {
@@ -163,7 +169,7 @@ module containerRegistry 'modules/container-registry.bicep' = {
   name: 'container-registry'
   params: {
     location: location
-    baseName: environmentName
+    baseName: baseName
     tags: defaultTags
   }
 }
@@ -287,7 +293,7 @@ module containerRegistryRole 'modules/container-registry.bicep' = {
   name: 'container-registry-role'
   params: {
     location: location
-    baseName: environmentName
+    baseName: baseName
     tags: defaultTags
     acrPullPrincipalId: containerApp.outputs.containerAppPrincipalId
   }
@@ -298,7 +304,7 @@ module containerRegistryFoundryRole 'modules/container-registry.bicep' = {
   name: 'container-registry-foundry-role'
   params: {
     location: location
-    baseName: environmentName
+    baseName: baseName
     tags: defaultTags
     acrPullPrincipalId: foundryProject.outputs.projectPrincipalId
   }

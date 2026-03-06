@@ -57,6 +57,17 @@ hooks:
         name: preprovision
         shell: sh
         run: |
+            # Ensure PROJECT_NAME is set (required for resource naming).
+            if [ -z "$(azd env get-value PROJECT_NAME 2>/dev/null)" ]; then
+              printf 'Enter a short project name (2-8 chars, alphanumeric/hyphens, e.g. kbagent): '
+              read pname
+              if [ -z "$pname" ]; then
+                pname="kbagent"
+                echo "Defaulting to PROJECT_NAME=kbagent"
+              fi
+              azd env set PROJECT_NAME "$pname"
+            fi
+
             # Ensure AZURE_PRINCIPAL_ID is set for deployer RBAC role assignments.
             # AZD uses this to grant the logged-in user access to deploy + interact with resources.
             if [ -z "$(azd env get-value AZURE_PRINCIPAL_ID 2>/dev/null)" ]; then

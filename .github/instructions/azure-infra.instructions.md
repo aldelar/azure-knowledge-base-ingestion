@@ -32,7 +32,7 @@ infra/
 
 ## Conventions
 
-- **Naming pattern:** `{resource-prefix}-kbidx-{env}` (e.g., `func-kbidx-dev`, `cosmos-kbidx-dev`)
+- **Naming pattern:** `{resource-prefix}-{projectName}-{env}` (e.g., `func-kbagent-dev`, `cosmos-kbagent-dev`)
 - **Region:** East US 2 — selected for availability of all required services
 - **Authentication:** Managed identity only — no keys or secrets in app settings
 - **RBAC:** Role assignments defined in `main.bicep`, native Cosmos RBAC via `cosmos-db-role.bicep`

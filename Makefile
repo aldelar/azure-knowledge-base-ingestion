@@ -157,8 +157,9 @@ grant-dev-roles: ## Grant Cosmos DB native RBAC to current developer
 	echo "  User: $$USER_OID" && \
 	echo "" && \
 	ENV=$$(azd env get-value AZURE_ENV_NAME 2>/dev/null || echo "dev") && \
-	COSMOS_ACCOUNT="cosmos-kbidx-$$ENV" && \
-	RG="rg-kbidx-$$ENV" && \
+	PROJECT=$$(azd env get-value PROJECT_NAME 2>/dev/null || echo "kbagent") && \
+	COSMOS_ACCOUNT="cosmos-$$PROJECT-$$ENV" && \
+	RG="rg-$$PROJECT-$$ENV" && \
 	SUB=$$(az account show --query id -o tsv) && \
 	SCOPE="/subscriptions/$$SUB/resourceGroups/$$RG/providers/Microsoft.DocumentDB/databaseAccounts/$$COSMOS_ACCOUNT" && \
 	echo "  Cosmos DB: $$COSMOS_ACCOUNT ($$RG)" && \
@@ -313,7 +314,7 @@ azure-agent-logs: ## Stream agent logs from Foundry
 
 azure-clean-orphan-roles: ## Delete orphaned role assignments
 	@echo "Scanning for orphaned role assignments in resource group..."
-	@RG=$$(azd env get-value RESOURCE_GROUP 2>/dev/null || echo "rg-kbidx-dev") && \
+	@RG=$$(azd env get-value RESOURCE_GROUP 2>/dev/null || echo "rg-kbagent-dev") && \
 	ORPHANS=$$(az role assignment list --resource-group "$$RG" --query "[?principalName==''].[id]" -o tsv) && \
 	if [ -z "$$ORPHANS" ]; then \
 		echo "  No orphaned role assignments found."; \
