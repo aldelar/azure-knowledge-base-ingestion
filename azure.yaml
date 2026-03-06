@@ -63,6 +63,24 @@ hooks:
               exit 1
             fi
 
+            # Ensure AZURE_SUBSCRIPTION_ID is set (use current az CLI subscription).
+            if ! azd env get-value AZURE_SUBSCRIPTION_ID >/dev/null 2>&1; then
+              SUB_ID=$(az account show --query id -o tsv 2>/dev/null || true)
+              if [ -n "$SUB_ID" ]; then
+                azd env set AZURE_SUBSCRIPTION_ID "$SUB_ID"
+                echo "Set AZURE_SUBSCRIPTION_ID=$SUB_ID"
+              else
+                echo "ERROR: Could not determine Azure subscription. Run: az login"
+                exit 1
+              fi
+            fi
+
+            # Ensure AZURE_LOCATION is set (default: eastus2).
+            if ! azd env get-value AZURE_LOCATION >/dev/null 2>&1; then
+              azd env set AZURE_LOCATION "eastus2"
+              echo "Set AZURE_LOCATION=eastus2"
+            fi
+
             # Auto-set resource group name so AZD never prompts for it.
             # Convention: rg-{projectName}-{envName}
             PROJECT_NAME=$(azd env get-value PROJECT_NAME)
