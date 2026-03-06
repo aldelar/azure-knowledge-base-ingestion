@@ -309,7 +309,7 @@ azure-agent-logs: ## Stream agent logs from Foundry
 		--top 50
 
 # --- Cleanup ---
-.PHONY: azure-clean-orphan-roles azure-clean-storage azure-clean-index azure-clean
+.PHONY: azure-clean-orphan-roles azure-clean-storage azure-clean-index azure-clean azure-down
 
 azure-clean-orphan-roles: ## Delete orphaned role assignments
 	@echo "Scanning for orphaned role assignments in resource group..."
@@ -354,5 +354,63 @@ azure-clean: azure-clean-storage azure-clean-index ## Clean all Azure data (stor
 	@echo "Deleting kb-image-analyzer..."
 	@(cd src/functions && uv run python -m manage_analyzers delete) 2>/dev/null || true
 	@echo "All Azure data cleaned."
+
+azure-down: ## DELETE entire Azure resource group + purge all soft-deletes (irreversible!)
+	@RG=$$(azd env get-value RESOURCE_GROUP) && \
+	LOCATION=$$(azd env get-value AZURE_LOCATION 2>/dev/null || echo "eastus2") && \
+	echo "" && \
+	echo "  \033[31m⚠  This will permanently delete resource group: $$RG\033[0m" && \
+	echo "     All Azure resources will be destroyed and soft-deletes purged." && \
+	echo "" && \
+	read -p "  Type the resource group name to confirm: " CONFIRM && \
+	if [ "$$CONFIRM" = "$$RG" ]; then \
+		echo "" && \
+		echo "  Deleting $$RG (this may take several minutes)..." && \
+		az group delete --name "$$RG" --yes && \
+		echo "  ✓ Resource group deleted." && \
+		echo "" && \
+		echo "  Purging soft-deleted Cognitive Services accounts..." && \
+		for ACCT in $$(az cognitiveservices account list-deleted \
+			--query "[?contains(id, '$$RG')].name" -o tsv 2>/dev/null); do \
+			echo "    Purging $$ACCT..." && \
+			az cognitiveservices account purge \
+				--name "$$ACCT" \
+				--resource-group "$$RG" \
+				--location "$$LOCATION" 2>/dev/null && \
+			echo "    ✓ $$ACCT purged." || \
+			echo "    ⚠ Could not purge $$ACCT (may already be purged)."; \
+		done && \
+		echo "" && \
+		echo "  Purging soft-deleted Log Analytics workspaces..." && \
+		SUB=$$(az account show --query id -o tsv) && \
+		for WS in $$(az rest --method GET \
+			--url "/subscriptions/$$SUB/providers/Microsoft.OperationalInsights/deletedWorkspaces?api-version=2021-12-01-preview" \
+			--query "value[?contains(id, '$$RG')].[name]" -o tsv 2>/dev/null); do \
+			echo "    Purging $$WS..." && \
+			az monitor log-analytics workspace delete \
+				--resource-group "$$RG" \
+				--workspace-name "$$WS" \
+				--force true --yes 2>/dev/null && \
+			echo "    ✓ $$WS purged." || \
+			echo "    ⚠ Could not purge $$WS (may already be purged)."; \
+		done && \
+		echo "" && \
+		echo "  Purging soft-deleted App Insights components..." && \
+		for AI in $$(az rest --method GET \
+			--url "/subscriptions/$$SUB/providers/microsoft.insights/deletedComponents?api-version=2020-02-02-preview" \
+			--query "value[?contains(id, '$$RG')].[name]" -o tsv 2>/dev/null); do \
+			echo "    Purging $$AI..." && \
+			az monitor app-insights component delete \
+				--resource-group "$$RG" \
+				--app "$$AI" 2>/dev/null && \
+			echo "    ✓ $$AI purged." || \
+			echo "    ⚠ Could not purge $$AI (may already be purged)."; \
+		done && \
+		echo "" && \
+		echo "  ✓ azure-down complete — all resources destroyed and purged."; \
+	else \
+		echo "" && \
+		echo "  Aborted — name did not match."; \
+	fi
 
 ## UTIL-AZURE-END
