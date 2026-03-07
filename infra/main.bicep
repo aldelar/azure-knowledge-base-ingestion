@@ -476,7 +476,12 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.cont
 output WEBAPP_NAME string = containerApp.outputs.containerAppName
 output WEBAPP_URL string = containerApp.outputs.containerAppUrl
 
-// Foundry Project
+// Foundry Project (AZURE_AI_* outputs required by AZD agent extension)
+output AZURE_AI_PROJECT_ID string = foundryProject.outputs.projectId
+output AZURE_AI_PROJECT_ENDPOINT string = foundryProject.outputs.projectEndpoint
+output AZURE_AI_PROJECT_NAME string = foundryProject.outputs.projectName
+output AZURE_AI_ACCOUNT_NAME string = aiServices.outputs.aiServicesName
+output AZURE_OPENAI_ENDPOINT string = replace(aiServices.outputs.aiServicesEndpoint, '.cognitiveservices.azure.com/', '.openai.azure.com/')
 output FOUNDRY_PROJECT_NAME string = foundryProject.outputs.projectName
 output FOUNDRY_PROJECT_ENDPOINT string = foundryProject.outputs.projectEndpoint
 

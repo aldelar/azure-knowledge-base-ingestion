@@ -188,6 +188,7 @@ resource accountCapabilityHost 'Microsoft.CognitiveServices/accounts/capabilityH
 // ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
+output projectId string = project.id
 output projectName string = project.name
 output projectEndpoint string = project.properties.endpoints['AI Foundry API']
 output projectPrincipalId string = project.identity.principalId

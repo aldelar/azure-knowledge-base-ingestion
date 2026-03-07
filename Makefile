@@ -301,7 +301,7 @@ test-agent-integration: ## Run agent integration tests (needs running local agen
 .PHONY: azure-provision
 
 azure-provision: _check-project-name ## Provision all Azure resources (azd provision)
-	azd provision
+	azd provision --no-state
 
 # --- Deploy ---
 .PHONY: azure-deploy azure-deploy-app azure-setup-auth
