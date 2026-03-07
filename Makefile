@@ -57,9 +57,9 @@ setup: dev-doctor dev-setup ## Install tools + Python dependencies
 	@echo "    2. make setup-azure"
 	@echo ""
 
-setup-azure: _check-project-name azure-provision dev-setup-env grant-dev-roles validate-infra ## Provision Azure + configure local env (some Azure services required for dev)
+setup-azure: _check-project-name azure-provision dev-setup-env grant-dev-roles dev-enable-storage validate-infra ## Provision Azure + configure local env (some Azure services required for dev)
 
-kb: _check-env convert index ## Run full local KB pipeline (convert + index)
+kb: _check-env convert index upload-serving ## Run full local KB pipeline (convert + index + upload serving)
 
 test: test-agent test-app test-functions ## Run all fast tests (unit + endpoint, no Azure needed)
 
@@ -67,7 +67,12 @@ agent: _check-env ## Run KB Agent locally (http://localhost:8088)
 	@cd src/agent && uv run python main.py
 
 app: _check-env ## Run web app locally (http://localhost:8080)
-	@cd src/web-app && uv run chainlit run app/main.py -w --port 8080
+	@if ! grep -q '^CHAINLIT_AUTH_SECRET=.' src/web-app/.env 2>/dev/null; then \
+		SECRET=$$(python3 -c "import secrets; print(secrets.token_hex(32))"); \
+		echo "CHAINLIT_AUTH_SECRET=$$SECRET" >> src/web-app/.env; \
+		echo "Generated CHAINLIT_AUTH_SECRET in src/web-app/.env"; \
+	fi
+	@cd src/web-app && AGENT_ENDPOINT=http://localhost:8088 uv run chainlit run app/main.py -w --port 8080
 ## LOCAL-END
 
 # ==============================================================================
@@ -231,7 +236,7 @@ grant-dev-roles: ## Grant Cosmos DB native RBAC to current developer
 	@echo "  If missing, run: make azure-up"
 
 # --- KB ---
-.PHONY: convert index clean-kb
+.PHONY: convert index upload-serving clean-kb
 
 clean-kb: _check-env ## Clean local serving output + delete search index
 	@echo "Cleaning kb/serving/ article outputs..."
@@ -252,6 +257,23 @@ convert: ## Run fn-convert locally (analyzer=$(analyzer))
 
 index: ## Run fn-index locally (kb/serving → Azure AI Search)
 	@bash scripts/functions/index.sh
+
+upload-serving: _check-env ## Upload kb/serving/ images to Azure serving blob
+	@echo "Uploading kb/serving/ to Azure serving blob container..."
+	@ACCOUNT=$$(grep '^SERVING_STORAGE_ACCOUNT=' src/functions/.env | cut -d= -f2 | tr -d '"') && \
+	for dir in kb/serving/*/; do \
+		ARTICLE=$$(basename "$$dir") && \
+		echo "  ↑ $$ARTICLE" && \
+		az storage blob upload-batch \
+			--destination serving \
+			--source "$$dir" \
+			--destination-path "$$ARTICLE" \
+			--account-name "$$ACCOUNT" \
+			--auth-mode login \
+			--overwrite \
+			--only-show-errors; \
+	done
+	@echo "Done."
 
 # --- Test ---
 .PHONY: test-agent test-app test-functions test-agent-integration
