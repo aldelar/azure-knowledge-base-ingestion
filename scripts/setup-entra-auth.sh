@@ -75,9 +75,9 @@ echo "Setting up Entra App Registration: $APP_NAME"
 
 # ---------------------------------------------------------------------------
 # Ensure CHAINLIT_AUTH_SECRET is set (generate if missing)
+# Note: azd env get-value prints errors to stdout, so check exit code not output.
 # ---------------------------------------------------------------------------
-EXISTING_CHAINLIT_SECRET=$(azd env get-value CHAINLIT_AUTH_SECRET 2>/dev/null || echo "")
-if [ -z "$EXISTING_CHAINLIT_SECRET" ]; then
+if ! azd env get-value CHAINLIT_AUTH_SECRET >/dev/null 2>&1; then
   echo "Generating CHAINLIT_AUTH_SECRET..."
   CHAINLIT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
   azd env set CHAINLIT_AUTH_SECRET "$CHAINLIT_SECRET"
