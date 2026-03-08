@@ -60,10 +60,6 @@ param cosmosEndpoint string = ''
 param cosmosDatabaseName string = 'kb-agent'
 
 // --- Chainlit OAuth (Azure AD) ---
-@description('Chainlit auth secret for JWT signing')
-@secure()
-param chainlitAuthSecret string = ''
-
 // --- Easy Auth ---
 @description('Entra App Registration client ID for Easy Auth')
 param entraClientId string = ''
@@ -149,10 +145,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AGENT_ENDPOINT', value: agentEndpoint }
             { name: 'COSMOS_ENDPOINT', value: cosmosEndpoint }
             { name: 'COSMOS_DATABASE_NAME', value: cosmosDatabaseName }
-            { name: 'OAUTH_AZURE_AD_CLIENT_ID', value: entraClientId }
-            { name: 'OAUTH_AZURE_AD_CLIENT_SECRET', value: entraClientSecret }
-            { name: 'OAUTH_AZURE_AD_TENANT_ID', value: tenantId }
-            { name: 'CHAINLIT_AUTH_SECRET', value: chainlitAuthSecret }
+            { name: 'CHAINLIT_AUTH_SECRET', value: uniqueString(resourceGroup().id, 'chainlit-auth-secret') }
           ]
         }
       ]
