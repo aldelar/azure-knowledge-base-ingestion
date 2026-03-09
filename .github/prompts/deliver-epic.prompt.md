@@ -33,8 +33,14 @@ Complete an entire epic from current state to Done, story by story, delegating t
    - Expected test coverage
    - Definition of Done checklist
 2. Identify cross-story dependencies or shared changes
-3. Estimate if any story is too large and should be split
-4. Present the full plan and confirm with the user before proceeding
+3. **Produce a high-level dependency graph** — output a Mermaid diagram (or clear textual representation) showing which stories depend on which. This makes the execution order visible at a glance.
+4. **Maximize parallelism** — using the dependency graph, identify stories (or story phases) that can run concurrently because they have no mutual dependencies. Group independent work into parallel tracks where possible (e.g., a Bicep infra story and an unrelated code story can proceed simultaneously via @deployer and @coder). Present the parallelized execution plan alongside the dependency graph.
+5. Estimate if any story is too large and should be split
+6. **Create a TODO list** using the `manage_todo_list` tool that covers every step of the plan:
+   - One TODO per story phase (e.g., "Story 1 — Implement", "Story 1 — Test", "Story 1 — Review", "Story 1 — Update Epic")
+   - Include Phase 1 assessment and Phase 4 finalization as TODOs as well
+   - Mark completed items as you go — this TODO list is the live progress tracker for the entire epic delivery
+7. Present the full plan (dependency graph, parallel tracks, and TODO list) and confirm with the user before proceeding
 
 ## Phase 3: Deliver Each Story
 
@@ -112,9 +118,10 @@ Update the epic doc for this story:
 
 ## Rules
 
-- **Strict story ordering** — never start story N+1 until story N is fully ✅
+- **Respect the dependency graph** — never start a story until all its upstream dependencies are ✅. Independent stories may run in parallel when the dependency graph allows it.
 - **No skipped validation** — every story must pass @tester and @reviewer before marking done
 - **Epic doc is the source of truth** — update it at every step; it drives visibility
 - **Stop on blockers** — if @reviewer gives NO-GO twice on the same issue, escalate to the user
 - **Minimal changes** — implement exactly what each story requires, nothing more
 - **No secrets in code** — use `DefaultAzureCredential` and environment variables everywhere
+- **Always maintain a TODO list** — create it in Phase 2, update it throughout delivery; every phase and story step must be tracked as a TODO item using `manage_todo_list`
