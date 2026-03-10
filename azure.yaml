@@ -6,28 +6,10 @@ metadata:
 services:
     agent:
         project: ./src/agent
-        host: azure.ai.agent
-        language: docker
+        host: containerapp
+        language: python
         docker:
             path: ./Dockerfile
-            remoteBuild: true
-        config:
-            container:
-                resources:
-                    cpu: "1.0"
-                    memory: 2Gi
-                scale:
-                    maxReplicas: 1
-                    minReplicas: 1
-            deployments:
-                - model:
-                    format: OpenAI
-                    name: gpt-4.1
-                    version: "2025-04-14"
-                  name: gpt-4.1
-                  sku:
-                    capacity: 30
-                    name: GlobalStandard
     func-convert-cu:
         project: ./src/functions
         host: containerapp

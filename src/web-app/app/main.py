@@ -276,35 +276,21 @@ def _trim_context(messages: list[dict], max_tokens: int | None = None) -> list[d
 
 
 # ---------------------------------------------------------------------------
-# Agent client — dual-mode (local HTTP / Foundry with Entra auth)
+# Agent client — plain HTTP (internal Container App or local)
 # ---------------------------------------------------------------------------
 
 def _create_agent_client() -> OpenAI:
     """Create an OpenAI client pointing at the agent endpoint.
 
-    - ``http://`` scheme → local agent, no auth needed.
-    - ``https://`` scheme → Foundry hosted agent, Entra token auth.
+    Both local (``http://localhost:8088``) and deployed
+    (``http://agent-*.internal.*``) use plain HTTP — no auth needed.
     """
     endpoint = config.agent_endpoint.rstrip("/")
-
-    if endpoint.startswith("https://"):
-        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-        token_provider = get_bearer_token_provider(
-            DefaultAzureCredential(), "https://ai.azure.com/.default"
-        )
-        client = OpenAI(
-            base_url=endpoint,
-            api_key=token_provider(),
-            default_query={"api-version": "2025-11-15-preview"},
-        )
-        logger.info("Agent client: Foundry mode (Entra auth) → %s", endpoint)
-    else:
-        client = OpenAI(
-            base_url=endpoint,
-            api_key="local",
-        )
-        logger.info("Agent client: local mode (no auth) → %s", endpoint)
-
+    client = OpenAI(
+        base_url=endpoint,
+        api_key="local",
+    )
+    logger.info("Agent client → %s", endpoint)
     return client
 
 

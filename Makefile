@@ -138,7 +138,7 @@ azure-up: _check-project-name azure-provision azure-deploy azure-setup-auth ## F
 
 azure-kb: _check-project-name azure-upload-staging azure-convert azure-index ## Full Azure KB pipeline (upload + convert + index)
 
-azure-test: _check-project-name azure-test-agent azure-test-app ## Run all Azure integration tests
+azure-test: _check-project-name azure-test-app ## Run all Azure integration tests
 
 azure-app-url: _check-project-name ## Print the deployed web app URL
 	@azd env get-value WEBAPP_URL
@@ -304,17 +304,18 @@ azure-provision: _check-project-name ## Provision all Azure resources (azd provi
 	azd provision --no-state
 
 # --- Deploy ---
-.PHONY: azure-deploy azure-deploy-app azure-setup-auth
+.PHONY: azure-deploy azure-deploy-app azure-register-agent azure-setup-auth
 
-azure-deploy: _check-project-name ## Deploy all services + CU analyzer + publish agent
+azure-deploy: _check-project-name ## Deploy all services + CU analyzer
 	AZD_EXT_TIMEOUT=180 azd deploy
 	@echo "Configuring CU defaults and deploying kb-image-analyzer..."
 	@(cd src/analyzers && uv run python -m manage_analyzers deploy)
-	@echo "Publishing agent..."
-	@bash scripts/publish-agent.sh
 
 azure-deploy-app: ## Deploy web app only
 	azd deploy --service web-app
+
+azure-register-agent: ## Register agent in Foundry portal (idempotent)
+	@bash scripts/register-agent.sh
 
 azure-setup-auth: ## Configure Entra redirect URIs (idempotent)
 	@bash scripts/setup-redirect-uris.sh
@@ -365,13 +366,7 @@ azure-index-summarize: ## Show AI Search index contents summary
 	@cd src/functions && uv run python ../../scripts/functions/display-index-summary.py
 
 # --- Test ---
-.PHONY: azure-test-agent-dev azure-test-agent azure-test-app
-
-azure-test-agent-dev: ## Integration tests vs dev (unpublished) endpoint
-	@cd src/agent && AGENT_ENDPOINT=$$(azd env get-value AGENT_AGENT_ENDPOINT) uv run pytest tests/ -v -m integration || test $$? -eq 5
-
-azure-test-agent: ## Integration tests vs published Foundry endpoint
-	@cd src/agent && AGENT_ENDPOINT=$$(azd env get-value AGENT_ENDPOINT) uv run pytest tests/ -v -m integration || test $$? -eq 5
+.PHONY: azure-test-app
 
 azure-test-app: ## Web app integration tests (Cosmos + Blob + Agent)
 	@cd src/web-app && \
@@ -389,19 +384,10 @@ azure-app-logs: ## Stream live logs from deployed web app
 	RG=$$(azd env get-value RESOURCE_GROUP) && \
 	az containerapp logs show --name $$APP --resource-group $$RG --type console --follow
 
-azure-agent-logs: ## Stream agent logs from Foundry
-	@AI_NAME=$$(azd env get-value AI_SERVICES_NAME) && \
+azure-agent-logs: ## Stream agent logs from Container Apps
+	@APP=$$(azd env get-value AGENT_APP_NAME) && \
 	RG=$$(azd env get-value RESOURCE_GROUP) && \
-	echo "Agent logs — use the Foundry portal for full tracing:" && \
-	echo "  https://ai.azure.com" && \
-	echo "" && \
-	echo "Or query via CLI:" && \
-	az monitor app-insights events show \
-		--app $$(azd env get-value APPINSIGHTS_NAME) \
-		--resource-group $$RG \
-		--type traces \
-		--order-by timestamp \
-		--top 50
+	az containerapp logs show --name $$APP --resource-group $$RG --type console --follow
 
 # --- Cleanup ---
 .PHONY: azure-clean-orphan-roles azure-clean-storage azure-clean-index azure-clean azure-down

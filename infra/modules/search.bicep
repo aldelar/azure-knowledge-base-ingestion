@@ -25,6 +25,9 @@ param deployerPrincipalId string = ''
 @description('Principal ID to grant Search Index Data Reader role (e.g., Container App MI for read-only query access)')
 param indexReaderPrincipalId string = ''
 
+@description('Principal ID to grant Search Service Contributor role only (e.g., agent MI for agentic retrieval)')
+param serviceContributorOnlyPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Azure AI Search
 // ---------------------------------------------------------------------------
@@ -115,6 +118,19 @@ resource searchIndexReaderRole 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     principalId: indexReaderPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataReaderRoleId)
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role Assignment: Search Service Contributor only (e.g., agent MI for agentic retrieval)
+// ---------------------------------------------------------------------------
+resource searchServiceContributorOnlyRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(serviceContributorOnlyPrincipalId)) {
+  name: guid(search.id, serviceContributorOnlyPrincipalId, searchServiceContributorRoleId)
+  scope: search
+  properties: {
+    principalId: serviceContributorOnlyPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchServiceContributorRoleId)
     principalType: 'ServicePrincipal'
   }
 }

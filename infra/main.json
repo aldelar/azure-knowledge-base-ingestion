@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "6700646306191494708"
+      "templateHash": "8009336457202925982"
     }
   },
   "parameters": {
@@ -70,13 +70,6 @@
       "defaultValue": "",
       "metadata": {
         "description": "Entra App Registration client secret for web app Easy Auth"
-      }
-    },
-    "agentEndpoint": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Published agent endpoint URL (set by scripts/publish-agent.sh)"
       }
     }
   },
@@ -877,7 +870,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "3264015045705152047"
+              "templateHash": "16867847367994988261"
             }
           },
           "parameters": {
@@ -931,6 +924,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Principal ID to grant Search Index Data Reader role (e.g., Container App MI for read-only query access)"
+              }
+            },
+            "serviceContributorOnlyPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID to grant Search Service Contributor role only (e.g., agent MI for agentic retrieval)"
               }
             }
           },
@@ -1031,6 +1031,21 @@
               "properties": {
                 "principalId": "[parameters('indexReaderPrincipalId')]",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('serviceContributorOnlyPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('serviceContributorOnlyPrincipalId'), variables('searchServiceContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('serviceContributorOnlyPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
                 "principalType": "ServicePrincipal"
               },
               "dependsOn": [
@@ -1319,7 +1334,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
           },
           "containerAppsEnvId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.containerAppsEnvId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvId.value]"
           }
         },
         "template": {
@@ -1534,7 +1549,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'ai-services')]",
-        "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-apps-env')]",
         "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
         "[resourceId('Microsoft.Resources/deployments', 'functions-storage')]",
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
@@ -1612,7 +1627,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
           },
           "containerAppsEnvId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.containerAppsEnvId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvId.value]"
           }
         },
         "template": {
@@ -1827,7 +1842,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'ai-services')]",
-        "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-apps-env')]",
         "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
         "[resourceId('Microsoft.Resources/deployments', 'functions-storage')]",
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
@@ -1901,7 +1916,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
           },
           "containerAppsEnvId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.containerAppsEnvId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvId.value]"
           }
         },
         "template": {
@@ -2116,7 +2131,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'ai-services')]",
-        "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-apps-env')]",
         "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
         "[resourceId('Microsoft.Resources/deployments', 'functions-storage')]",
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
@@ -2198,7 +2213,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
           },
           "containerAppsEnvId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.containerAppsEnvId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvId.value]"
           }
         },
         "template": {
@@ -2413,7 +2428,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'ai-services')]",
-        "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-apps-env')]",
         "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
         "[resourceId('Microsoft.Resources/deployments', 'functions-storage')]",
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
@@ -2534,7 +2549,7 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "container-app",
+      "name": "container-apps-env",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -2552,39 +2567,6 @@
           },
           "logAnalyticsWorkspaceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
-          },
-          "acrLoginServer": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryLoginServer.value]"
-          },
-          "acrResourceId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
-          },
-          "aiServicesEndpoint": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.aiServicesEndpoint.value]"
-          },
-          "embeddingDeploymentName": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.embeddingDeploymentName.value]"
-          },
-          "searchEndpoint": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'search'), '2025-04-01').outputs.searchEndpoint.value]"
-          },
-          "servingBlobEndpoint": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'serving-storage'), '2025-04-01').outputs.blobEndpoint.value]"
-          },
-          "entraClientId": {
-            "value": "[parameters('entraClientId')]"
-          },
-          "entraClientSecret": {
-            "value": "[parameters('entraClientSecret')]"
-          },
-          "agentEndpoint": {
-            "value": "[parameters('agentEndpoint')]"
-          },
-          "cosmosEndpoint": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos-db'), '2025-04-01').outputs.cosmosEndpoint.value]"
-          },
-          "cosmosDatabaseName": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos-db'), '2025-04-01').outputs.cosmosDatabaseName.value]"
           }
         },
         "template": {
@@ -2594,7 +2576,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "14619455186072539143"
+              "templateHash": "17074814147335200935"
             }
           },
           "parameters": {
@@ -2621,6 +2603,137 @@
               "type": "string",
               "metadata": {
                 "description": "Log Analytics workspace ID for Container Apps Environment"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('cae-{0}', parameters('baseName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[reference(parameters('logAnalyticsWorkspaceId'), '2023-09-01').customerId]",
+                    "sharedKey": "[listKeys(parameters('logAnalyticsWorkspaceId'), '2023-09-01').primarySharedKey]"
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "containerAppsEnvId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', parameters('baseName')))]"
+            },
+            "containerAppsEnvName": {
+              "type": "string",
+              "value": "[format('cae-{0}', parameters('baseName'))]"
+            },
+            "containerAppsEnvDefaultDomain": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', parameters('baseName'))), '2024-03-01').defaultDomain]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-app",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "baseName": {
+            "value": "[variables('baseName')]"
+          },
+          "tags": {
+            "value": "[variables('defaultTags')]"
+          },
+          "containerAppsEnvId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvId.value]"
+          },
+          "acrLoginServer": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryLoginServer.value]"
+          },
+          "acrResourceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
+          },
+          "aiServicesEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.aiServicesEndpoint.value]"
+          },
+          "embeddingDeploymentName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.embeddingDeploymentName.value]"
+          },
+          "searchEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'search'), '2025-04-01').outputs.searchEndpoint.value]"
+          },
+          "servingBlobEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'serving-storage'), '2025-04-01').outputs.blobEndpoint.value]"
+          },
+          "entraClientId": {
+            "value": "[parameters('entraClientId')]"
+          },
+          "entraClientSecret": {
+            "value": "[parameters('entraClientSecret')]"
+          },
+          "agentEndpoint": {
+            "value": "[format('http://agent-{0}.internal.{1}', variables('baseName'), reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvDefaultDomain.value)]"
+          },
+          "cosmosEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos-db'), '2025-04-01').outputs.cosmosEndpoint.value]"
+          },
+          "cosmosDatabaseName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos-db'), '2025-04-01').outputs.cosmosDatabaseName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "12935231955892527279"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name used for resource naming"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to all resources"
+              }
+            },
+            "containerAppsEnvId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps Environment ID (from container-apps-env module)"
               }
             },
             "acrLoginServer": {
@@ -2738,22 +2851,6 @@
           },
           "resources": [
             {
-              "type": "Microsoft.App/managedEnvironments",
-              "apiVersion": "2024-03-01",
-              "name": "[format('cae-{0}', parameters('baseName'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "appLogsConfiguration": {
-                  "destination": "log-analytics",
-                  "logAnalyticsConfiguration": {
-                    "customerId": "[reference(parameters('logAnalyticsWorkspaceId'), '2023-09-01').customerId]",
-                    "sharedKey": "[listKeys(parameters('logAnalyticsWorkspaceId'), '2023-09-01').primarySharedKey]"
-                  }
-                }
-              }
-            },
-            {
               "type": "Microsoft.App/containerApps",
               "apiVersion": "2024-03-01",
               "name": "[format('webapp-{0}', parameters('baseName'))]",
@@ -2763,7 +2860,7 @@
                 "type": "SystemAssigned"
               },
               "properties": {
-                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', parameters('baseName')))]",
+                "managedEnvironmentId": "[parameters('containerAppsEnvId')]",
                 "configuration": {
                   "activeRevisionsMode": "Single",
                   "secrets": "[if(not(empty(parameters('entraClientSecret'))), createArray(createObject('name', 'microsoft-provider-authentication-secret', 'value', parameters('entraClientSecret'))), createArray())]",
@@ -2773,7 +2870,12 @@
                     "transport": "auto",
                     "allowInsecure": false
                   },
-                  "registries": "[if(variables('useAcrImage'), createArray(createObject('server', parameters('acrLoginServer'), 'identity', 'system')), createArray())]"
+                  "registries": [
+                    {
+                      "server": "[parameters('acrLoginServer')]",
+                      "identity": "system"
+                    }
+                  ]
                 },
                 "template": {
                   "containers": [
@@ -2837,10 +2939,7 @@
                     "maxReplicas": 1
                   }
                 }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', parameters('baseName')))]"
-              ]
+              }
             },
             {
               "condition": "[not(empty(parameters('entraClientId')))]",
@@ -2884,7 +2983,6 @@
               ]
             },
             {
-              "condition": "[variables('useAcrImage')]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.ContainerRegistry/registries', split(parameters('acrResourceId'), '/')[8])]",
@@ -2919,23 +3017,15 @@
             "containerAppUrl": {
               "type": "string",
               "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', format('webapp-{0}', parameters('baseName'))), '2024-03-01').configuration.ingress.fqdn)]"
-            },
-            "containerAppsEnvId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', parameters('baseName')))]"
-            },
-            "containerAppsEnvName": {
-              "type": "string",
-              "value": "[format('cae-{0}', parameters('baseName'))]"
             }
           }
         }
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'ai-services')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-apps-env')]",
         "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
         "[resourceId('Microsoft.Resources/deployments', 'cosmos-db')]",
-        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
         "[resourceId('Microsoft.Resources/deployments', 'search')]",
         "[resourceId('Microsoft.Resources/deployments', 'serving-storage')]"
       ]
@@ -2962,12 +3052,6 @@
           "deployerPrincipalId": {
             "value": "[parameters('principalId')]"
           },
-          "acrLoginServer": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryLoginServer.value]"
-          },
-          "acrResourceId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
-          },
           "appInsightsResourceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsId.value]"
           },
@@ -2985,7 +3069,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "9899925073224113035"
+              "templateHash": "16208843410036895751"
             }
           },
           "parameters": {
@@ -3013,20 +3097,6 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Principal ID of the deployer (human user) for Azure AI Developer role"
-              }
-            },
-            "acrLoginServer": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "ACR login server (e.g. cr{project}dev.azurecr.io) for the container registry connection"
-              }
-            },
-            "acrResourceId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "ACR resource ID for the container registry connection"
               }
             },
             "appInsightsResourceId": {
@@ -3062,7 +3132,7 @@
               "apiVersion": "2025-06-01",
               "name": "[format('{0}/{1}', format('ai-{0}', parameters('baseName')), format('proj-{0}', parameters('baseName')))]",
               "location": "[parameters('location')]",
-              "tags": "[union(parameters('tags'), createObject('azd-service-name', 'agent'))]",
+              "tags": "[parameters('tags')]",
               "identity": {
                 "type": "SystemAssigned"
               },
@@ -3120,28 +3190,6 @@
               }
             },
             {
-              "condition": "[not(empty(parameters('acrLoginServer')))]",
-              "type": "Microsoft.CognitiveServices/accounts/projects/connections",
-              "apiVersion": "2025-06-01",
-              "name": "[format('{0}/{1}/{2}', format('ai-{0}', parameters('baseName')), format('proj-{0}', parameters('baseName')), 'acr-connection')]",
-              "properties": {
-                "category": "ContainerRegistry",
-                "target": "[parameters('acrLoginServer')]",
-                "authType": "ManagedIdentity",
-                "isSharedToAll": true,
-                "credentials": {
-                  "clientId": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', format('ai-{0}', parameters('baseName')), format('proj-{0}', parameters('baseName'))), '2025-06-01', 'full').identity.principalId]",
-                  "resourceId": "[parameters('acrResourceId')]"
-                },
-                "metadata": {
-                  "ResourceId": "[parameters('acrResourceId')]"
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts/projects', format('ai-{0}', parameters('baseName')), format('proj-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
               "condition": "[not(empty(parameters('appInsightsResourceId')))]",
               "type": "Microsoft.CognitiveServices/accounts/connections",
               "apiVersion": "2025-04-01-preview",
@@ -3158,15 +3206,6 @@
                   "ApiType": "Azure",
                   "ResourceId": "[parameters('appInsightsResourceId')]"
                 }
-              }
-            },
-            {
-              "type": "Microsoft.CognitiveServices/accounts/capabilityHosts",
-              "apiVersion": "2025-10-01-preview",
-              "name": "[format('{0}/{1}', format('ai-{0}', parameters('baseName')), 'agents')]",
-              "properties": {
-                "capabilityHostKind": "Agents",
-                "enablePublicHostingEnvironment": true
               }
             }
           ],
@@ -3192,8 +3231,314 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
-        "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "agent-container-app",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "baseName": {
+            "value": "[variables('baseName')]"
+          },
+          "tags": {
+            "value": "[variables('defaultTags')]"
+          },
+          "containerAppsEnvId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvId.value]"
+          },
+          "containerAppsEnvDefaultDomain": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-apps-env'), '2025-04-01').outputs.containerAppsEnvDefaultDomain.value]"
+          },
+          "acrLoginServer": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryLoginServer.value]"
+          },
+          "acrResourceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-registry'), '2025-04-01').outputs.containerRegistryId.value]"
+          },
+          "aiServicesEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.aiServicesEndpoint.value]"
+          },
+          "searchEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'search'), '2025-04-01').outputs.searchEndpoint.value]"
+          },
+          "servingBlobEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'serving-storage'), '2025-04-01').outputs.blobEndpoint.value]"
+          },
+          "projectEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'foundry-project'), '2025-04-01').outputs.projectEndpoint.value]"
+          },
+          "agentModelDeploymentName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.agentDeploymentName.value]"
+          },
+          "embeddingDeploymentName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.embeddingDeploymentName.value]"
+          },
+          "applicationInsightsConnectionString": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsConnectionString.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "7726786858299647436"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name used for resource naming"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to all resources"
+              }
+            },
+            "containerAppsEnvId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps Environment ID"
+              }
+            },
+            "containerAppsEnvDefaultDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps Environment default domain (for internal FQDN construction)"
+              }
+            },
+            "acrLoginServer": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR login server (e.g., cr{project}dev.azurecr.io)"
+              }
+            },
+            "acrResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR resource ID for role assignment"
+              }
+            },
+            "imageName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Docker image name and tag. Leave empty for initial provisioning."
+              }
+            },
+            "aiServicesEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure AI Services endpoint"
+              }
+            },
+            "searchEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure AI Search endpoint"
+              }
+            },
+            "searchIndexName": {
+              "type": "string",
+              "defaultValue": "kb-articles",
+              "metadata": {
+                "description": "Azure AI Search index name"
+              }
+            },
+            "servingBlobEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Serving storage blob endpoint"
+              }
+            },
+            "servingContainerName": {
+              "type": "string",
+              "defaultValue": "serving",
+              "metadata": {
+                "description": "Serving storage container name"
+              }
+            },
+            "projectEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Foundry project endpoint for agent registration"
+              }
+            },
+            "agentModelDeploymentName": {
+              "type": "string",
+              "defaultValue": "gpt-4.1",
+              "metadata": {
+                "description": "Agent model deployment name"
+              }
+            },
+            "embeddingDeploymentName": {
+              "type": "string",
+              "defaultValue": "text-embedding-3-small",
+              "metadata": {
+                "description": "Embedding deployment name"
+              }
+            },
+            "applicationInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights connection string"
+              }
+            }
+          },
+          "variables": {
+            "useAcrImage": "[not(empty(parameters('imageName')))]",
+            "containerImage": "[if(variables('useAcrImage'), format('{0}/{1}', parameters('acrLoginServer'), parameters('imageName')), 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest')]",
+            "appName": "[format('agent-{0}', parameters('baseName'))]",
+            "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[variables('appName')]",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('azd-service-name', 'agent'))]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('containerAppsEnvId')]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": false,
+                    "targetPort": 8088,
+                    "transport": "auto",
+                    "allowInsecure": true
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('acrLoginServer')]",
+                      "identity": "system"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "agent",
+                      "image": "[variables('containerImage')]",
+                      "resources": {
+                        "cpu": "[json('1.0')]",
+                        "memory": "2Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "AI_SERVICES_ENDPOINT",
+                          "value": "[parameters('aiServicesEndpoint')]"
+                        },
+                        {
+                          "name": "SEARCH_ENDPOINT",
+                          "value": "[parameters('searchEndpoint')]"
+                        },
+                        {
+                          "name": "SEARCH_INDEX_NAME",
+                          "value": "[parameters('searchIndexName')]"
+                        },
+                        {
+                          "name": "SERVING_BLOB_ENDPOINT",
+                          "value": "[parameters('servingBlobEndpoint')]"
+                        },
+                        {
+                          "name": "SERVING_CONTAINER_NAME",
+                          "value": "[parameters('servingContainerName')]"
+                        },
+                        {
+                          "name": "PROJECT_ENDPOINT",
+                          "value": "[parameters('projectEndpoint')]"
+                        },
+                        {
+                          "name": "AGENT_MODEL_DEPLOYMENT_NAME",
+                          "value": "[parameters('agentModelDeploymentName')]"
+                        },
+                        {
+                          "name": "EMBEDDING_DEPLOYMENT_NAME",
+                          "value": "[parameters('embeddingDeploymentName')]"
+                        },
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[parameters('applicationInsightsConnectionString')]"
+                        },
+                        {
+                          "name": "OTEL_SERVICE_NAME",
+                          "value": "kb-agent"
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 1
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', split(parameters('acrResourceId'), '/')[8])]",
+              "name": "[guid(parameters('acrResourceId'), resourceId('Microsoft.App/containerApps', variables('appName')), variables('acrPullRoleId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/containerApps', variables('appName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "agentEndpoint": {
+              "type": "string",
+              "value": "[format('http://{0}.internal.{1}', variables('appName'), parameters('containerAppsEnvDefaultDomain'))]"
+            },
+            "agentPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
+            },
+            "agentAppName": {
+              "type": "string",
+              "value": "[variables('appName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'ai-services')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-apps-env')]",
+        "[resourceId('Microsoft.Resources/deployments', 'container-registry')]",
+        "[resourceId('Microsoft.Resources/deployments', 'foundry-project')]",
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
+        "[resourceId('Microsoft.Resources/deployments', 'search')]",
+        "[resourceId('Microsoft.Resources/deployments', 'serving-storage')]"
       ]
     },
     {
@@ -5340,7 +5685,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "3264015045705152047"
+              "templateHash": "16867847367994988261"
             }
           },
           "parameters": {
@@ -5394,6 +5739,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Principal ID to grant Search Index Data Reader role (e.g., Container App MI for read-only query access)"
+              }
+            },
+            "serviceContributorOnlyPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID to grant Search Service Contributor role only (e.g., agent MI for agentic retrieval)"
               }
             }
           },
@@ -5499,6 +5851,21 @@
               "dependsOn": [
                 "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
               ]
+            },
+            {
+              "condition": "[not(empty(parameters('serviceContributorOnlyPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('serviceContributorOnlyPrincipalId'), variables('searchServiceContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('serviceContributorOnlyPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
             }
           ],
           "outputs": {
@@ -5519,122 +5886,6 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'func-index')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "container-registry-foundry-role",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "baseName": {
-            "value": "[variables('baseName')]"
-          },
-          "tags": {
-            "value": "[variables('defaultTags')]"
-          },
-          "acrPullPrincipalId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'foundry-project'), '2025-04-01').outputs.projectPrincipalId.value]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "4791844155552478208"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region for resources"
-              }
-            },
-            "baseName": {
-              "type": "string",
-              "metadata": {
-                "description": "Base name used for resource naming"
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tags to apply to all resources"
-              }
-            },
-            "acrPullPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant AcrPull role (Container App managed identity)"
-              }
-            }
-          },
-          "variables": {
-            "acrName": "[replace(format('cr{0}', parameters('baseName')), '-', '')]",
-            "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.ContainerRegistry/registries",
-              "apiVersion": "2023-07-01",
-              "name": "[variables('acrName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "sku": {
-                "name": "Basic"
-              },
-              "properties": {
-                "adminUserEnabled": false,
-                "publicNetworkAccess": "Enabled"
-              }
-            },
-            {
-              "condition": "[not(empty(parameters('acrPullPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
-              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), parameters('acrPullPrincipalId'), variables('acrPullRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('acrPullPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "containerRegistryId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]"
-            },
-            "containerRegistryName": {
-              "type": "string",
-              "value": "[variables('acrName')]"
-            },
-            "containerRegistryLoginServer": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), '2023-07-01').loginServer]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'foundry-project')]"
       ]
     },
     {
@@ -6002,7 +6253,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "3264015045705152047"
+              "templateHash": "16867847367994988261"
             }
           },
           "parameters": {
@@ -6056,6 +6307,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Principal ID to grant Search Index Data Reader role (e.g., Container App MI for read-only query access)"
+              }
+            },
+            "serviceContributorOnlyPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID to grant Search Service Contributor role only (e.g., agent MI for agentic retrieval)"
               }
             }
           },
@@ -6156,6 +6414,21 @@
               "properties": {
                 "principalId": "[parameters('indexReaderPrincipalId')]",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('serviceContributorOnlyPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('serviceContributorOnlyPrincipalId'), variables('searchServiceContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('serviceContributorOnlyPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
                 "principalType": "ServicePrincipal"
               },
               "dependsOn": [
@@ -6248,221 +6521,7 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "search-agent-role",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "baseName": {
-            "value": "[variables('baseName')]"
-          },
-          "tags": {
-            "value": "[variables('defaultTags')]"
-          },
-          "skuName": {
-            "value": "[parameters('searchSkuName')]"
-          },
-          "indexReaderPrincipalId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.aiServicesPrincipalId.value]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "3264015045705152047"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region for resources"
-              }
-            },
-            "baseName": {
-              "type": "string",
-              "metadata": {
-                "description": "Base name used for resource naming"
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tags to apply to all resources"
-              }
-            },
-            "skuName": {
-              "type": "string",
-              "defaultValue": "basic",
-              "allowedValues": [
-                "free",
-                "basic",
-                "standard"
-              ],
-              "metadata": {
-                "description": "Search service SKU"
-              }
-            },
-            "indexContributorPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Search Index Data Contributor role (service principal / managed identity)"
-              }
-            },
-            "deployerPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID of the deployer (human user) for Search access"
-              }
-            },
-            "indexReaderPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Search Index Data Reader role (e.g., Container App MI for read-only query access)"
-              }
-            }
-          },
-          "variables": {
-            "searchIndexDataContributorRoleId": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
-            "searchServiceContributorRoleId": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
-            "searchIndexDataReaderRoleId": "1407120a-92aa-4202-b7e9-c0e197c71c8f"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Search/searchServices",
-              "apiVersion": "2023-11-01",
-              "name": "[format('srch-{0}', parameters('baseName'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "sku": {
-                "name": "[parameters('skuName')]"
-              },
-              "properties": {
-                "hostingMode": "default",
-                "publicNetworkAccess": "enabled",
-                "partitionCount": 1,
-                "replicaCount": 1,
-                "semanticSearch": "free",
-                "authOptions": {
-                  "aadOrApiKey": {
-                    "aadAuthFailureMode": "http401WithBearerChallenge"
-                  }
-                }
-              }
-            },
-            {
-              "condition": "[not(empty(parameters('indexContributorPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexContributorPrincipalId'), variables('searchIndexDataContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('indexContributorPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('indexContributorPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexContributorPrincipalId'), variables('searchServiceContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('indexContributorPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('searchIndexDataContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('deployerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
-                "principalType": "User"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('searchServiceContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('deployerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
-                "principalType": "User"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('indexReaderPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexReaderPrincipalId'), variables('searchIndexDataReaderRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('indexReaderPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "searchId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-            },
-            "searchName": {
-              "type": "string",
-              "value": "[format('srch-{0}', parameters('baseName'))]"
-            },
-            "searchEndpoint": {
-              "type": "string",
-              "value": "[format('https://{0}.search.windows.net', format('srch-{0}', parameters('baseName')))]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'ai-services')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "ai-services-agent-role",
+      "name": "ai-services-agent-ca-role",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -6472,8 +6531,8 @@
           "baseName": {
             "value": "[variables('baseName')]"
           },
-          "openAIOnlyUserPrincipalId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.aiServicesPrincipalId.value]"
+          "cognitiveServicesUserPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentPrincipalId.value]"
           }
         },
         "template": {
@@ -6584,13 +6643,252 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'ai-services')]"
+        "[resourceId('Microsoft.Resources/deployments', 'agent-container-app')]"
       ]
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "serving-storage-agent-role",
+      "name": "search-agent-ca-role",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "baseName": {
+            "value": "[variables('baseName')]"
+          },
+          "tags": {
+            "value": "[variables('defaultTags')]"
+          },
+          "skuName": {
+            "value": "[parameters('searchSkuName')]"
+          },
+          "indexReaderPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentPrincipalId.value]"
+          },
+          "serviceContributorOnlyPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentPrincipalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "16867847367994988261"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name used for resource naming"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to all resources"
+              }
+            },
+            "skuName": {
+              "type": "string",
+              "defaultValue": "basic",
+              "allowedValues": [
+                "free",
+                "basic",
+                "standard"
+              ],
+              "metadata": {
+                "description": "Search service SKU"
+              }
+            },
+            "indexContributorPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID to grant Search Index Data Contributor role (service principal / managed identity)"
+              }
+            },
+            "deployerPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID of the deployer (human user) for Search access"
+              }
+            },
+            "indexReaderPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID to grant Search Index Data Reader role (e.g., Container App MI for read-only query access)"
+              }
+            },
+            "serviceContributorOnlyPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID to grant Search Service Contributor role only (e.g., agent MI for agentic retrieval)"
+              }
+            }
+          },
+          "variables": {
+            "searchIndexDataContributorRoleId": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
+            "searchServiceContributorRoleId": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
+            "searchIndexDataReaderRoleId": "1407120a-92aa-4202-b7e9-c0e197c71c8f"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Search/searchServices",
+              "apiVersion": "2023-11-01",
+              "name": "[format('srch-{0}', parameters('baseName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "[parameters('skuName')]"
+              },
+              "properties": {
+                "hostingMode": "default",
+                "publicNetworkAccess": "enabled",
+                "partitionCount": 1,
+                "replicaCount": 1,
+                "semanticSearch": "free",
+                "authOptions": {
+                  "aadOrApiKey": {
+                    "aadAuthFailureMode": "http401WithBearerChallenge"
+                  }
+                }
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('indexContributorPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexContributorPrincipalId'), variables('searchIndexDataContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('indexContributorPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('indexContributorPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexContributorPrincipalId'), variables('searchServiceContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('indexContributorPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('searchIndexDataContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('deployerPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('searchServiceContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('deployerPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('indexReaderPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexReaderPrincipalId'), variables('searchIndexDataReaderRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('indexReaderPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('serviceContributorOnlyPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('serviceContributorOnlyPrincipalId'), variables('searchServiceContributorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('serviceContributorOnlyPrincipalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "searchId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
+            },
+            "searchName": {
+              "type": "string",
+              "value": "[format('srch-{0}', parameters('baseName'))]"
+            },
+            "searchEndpoint": {
+              "type": "string",
+              "value": "[format('https://{0}.search.windows.net', format('srch-{0}', parameters('baseName')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'agent-container-app')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "serving-storage-agent-ca-role",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -6612,7 +6910,7 @@
             ]
           },
           "readerPrincipalId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'ai-services'), '2025-04-01').outputs.aiServicesPrincipalId.value]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentPrincipalId.value]"
           }
         },
         "template": {
@@ -6788,553 +7086,7 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'ai-services')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "search-foundry-role",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "baseName": {
-            "value": "[variables('baseName')]"
-          },
-          "tags": {
-            "value": "[variables('defaultTags')]"
-          },
-          "skuName": {
-            "value": "[parameters('searchSkuName')]"
-          },
-          "indexReaderPrincipalId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'foundry-project'), '2025-04-01').outputs.projectPrincipalId.value]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "3264015045705152047"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region for resources"
-              }
-            },
-            "baseName": {
-              "type": "string",
-              "metadata": {
-                "description": "Base name used for resource naming"
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tags to apply to all resources"
-              }
-            },
-            "skuName": {
-              "type": "string",
-              "defaultValue": "basic",
-              "allowedValues": [
-                "free",
-                "basic",
-                "standard"
-              ],
-              "metadata": {
-                "description": "Search service SKU"
-              }
-            },
-            "indexContributorPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Search Index Data Contributor role (service principal / managed identity)"
-              }
-            },
-            "deployerPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID of the deployer (human user) for Search access"
-              }
-            },
-            "indexReaderPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Search Index Data Reader role (e.g., Container App MI for read-only query access)"
-              }
-            }
-          },
-          "variables": {
-            "searchIndexDataContributorRoleId": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
-            "searchServiceContributorRoleId": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
-            "searchIndexDataReaderRoleId": "1407120a-92aa-4202-b7e9-c0e197c71c8f"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Search/searchServices",
-              "apiVersion": "2023-11-01",
-              "name": "[format('srch-{0}', parameters('baseName'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "sku": {
-                "name": "[parameters('skuName')]"
-              },
-              "properties": {
-                "hostingMode": "default",
-                "publicNetworkAccess": "enabled",
-                "partitionCount": 1,
-                "replicaCount": 1,
-                "semanticSearch": "free",
-                "authOptions": {
-                  "aadOrApiKey": {
-                    "aadAuthFailureMode": "http401WithBearerChallenge"
-                  }
-                }
-              }
-            },
-            {
-              "condition": "[not(empty(parameters('indexContributorPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexContributorPrincipalId'), variables('searchIndexDataContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('indexContributorPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('indexContributorPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexContributorPrincipalId'), variables('searchServiceContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('indexContributorPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('searchIndexDataContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('deployerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataContributorRoleId'))]",
-                "principalType": "User"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('searchServiceContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('deployerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchServiceContributorRoleId'))]",
-                "principalType": "User"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('indexReaderPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName'))), parameters('indexReaderPrincipalId'), variables('searchIndexDataReaderRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('indexReaderPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('searchIndexDataReaderRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "searchId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Search/searchServices', format('srch-{0}', parameters('baseName')))]"
-            },
-            "searchName": {
-              "type": "string",
-              "value": "[format('srch-{0}', parameters('baseName'))]"
-            },
-            "searchEndpoint": {
-              "type": "string",
-              "value": "[format('https://{0}.search.windows.net', format('srch-{0}', parameters('baseName')))]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'foundry-project')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "ai-services-foundry-role",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "baseName": {
-            "value": "[variables('baseName')]"
-          },
-          "openAIOnlyUserPrincipalId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'foundry-project'), '2025-04-01').outputs.projectPrincipalId.value]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "13318651232120776590"
-            }
-          },
-          "parameters": {
-            "baseName": {
-              "type": "string",
-              "metadata": {
-                "description": "Base name used for resource naming"
-              }
-            },
-            "cognitiveServicesUserPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Cognitive Services User + OpenAI User roles (service principal)"
-              }
-            },
-            "deployerPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID of the deployer (human user) for Cognitive Services access"
-              }
-            },
-            "openAIOnlyUserPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Cognitive Services OpenAI User role only (e.g., Container App MI)"
-              }
-            }
-          },
-          "variables": {
-            "cognitiveServicesOpenAIUserRoleId": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
-            "cognitiveServicesUserRoleId": "a97b65f3-24c7-4388-baec-2e87135dc908"
-          },
-          "resources": [
-            {
-              "condition": "[not(empty(parameters('cognitiveServicesUserPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName'))), parameters('cognitiveServicesUserPrincipalId'), variables('cognitiveServicesOpenAIUserRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('cognitiveServicesUserPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAIUserRoleId'))]",
-                "principalType": "ServicePrincipal"
-              }
-            },
-            {
-              "condition": "[not(empty(parameters('cognitiveServicesUserPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName'))), parameters('cognitiveServicesUserPrincipalId'), variables('cognitiveServicesUserRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('cognitiveServicesUserPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserRoleId'))]",
-                "principalType": "ServicePrincipal"
-              }
-            },
-            {
-              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('cognitiveServicesOpenAIUserRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('deployerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAIUserRoleId'))]",
-                "principalType": "User"
-              }
-            },
-            {
-              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName'))), parameters('deployerPrincipalId'), variables('cognitiveServicesUserRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('deployerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserRoleId'))]",
-                "principalType": "User"
-              }
-            },
-            {
-              "condition": "[not(empty(parameters('openAIOnlyUserPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName')))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', format('ai-{0}', parameters('baseName'))), parameters('openAIOnlyUserPrincipalId'), variables('cognitiveServicesOpenAIUserRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('openAIOnlyUserPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAIUserRoleId'))]",
-                "principalType": "ServicePrincipal"
-              }
-            }
-          ]
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'foundry-project')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "serving-storage-foundry-role",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "storageAccountName": {
-            "value": "[variables('servingStorageName')]"
-          },
-          "tags": {
-            "value": "[variables('defaultTags')]"
-          },
-          "containerNames": {
-            "value": [
-              "serving"
-            ]
-          },
-          "readerPrincipalId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'foundry-project'), '2025-04-01').outputs.projectPrincipalId.value]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "12167089955696721982"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region for resources"
-              }
-            },
-            "storageAccountName": {
-              "type": "string",
-              "metadata": {
-                "description": "Globally unique storage account name (3-24 lowercase alphanumeric)"
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tags to apply to all resources"
-              }
-            },
-            "containerNames": {
-              "type": "array",
-              "defaultValue": [],
-              "metadata": {
-                "description": "Container names to create in this account"
-              }
-            },
-            "contributorPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Storage Blob Data Contributor role (service principal / managed identity)"
-              }
-            },
-            "deployerPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID of the deployer (human user) for blob access"
-              }
-            },
-            "readerPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Principal ID to grant Storage Blob Data Reader role (e.g., Container App MI for read-only access)"
-              }
-            }
-          },
-          "variables": {
-            "storageBlobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
-            "storageBlobDataReaderRoleId": "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Storage/storageAccounts",
-              "apiVersion": "2023-05-01",
-              "name": "[parameters('storageAccountName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "kind": "StorageV2",
-              "sku": {
-                "name": "Standard_LRS"
-              },
-              "properties": {
-                "accessTier": "Hot",
-                "supportsHttpsTrafficOnly": true,
-                "minimumTlsVersion": "TLS1_2",
-                "allowBlobPublicAccess": false,
-                "allowSharedKeyAccess": false,
-                "publicNetworkAccess": "Enabled",
-                "networkAcls": {
-                  "bypass": "AzureServices",
-                  "defaultAction": "Allow"
-                }
-              }
-            },
-            {
-              "type": "Microsoft.Storage/storageAccounts/blobServices",
-              "apiVersion": "2023-05-01",
-              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-              ]
-            },
-            {
-              "copy": {
-                "name": "containers",
-                "count": "[length(parameters('containerNames'))]"
-              },
-              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-              "apiVersion": "2023-05-01",
-              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('containerNames')[copyIndex()])]",
-              "properties": {
-                "publicAccess": "None"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('contributorPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('contributorPrincipalId'), variables('storageBlobDataContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('contributorPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('deployerPrincipalId'), variables('storageBlobDataContributorRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('deployerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
-                "principalType": "User"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-              ]
-            },
-            {
-              "condition": "[not(empty(parameters('readerPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('readerPrincipalId'), variables('storageBlobDataReaderRoleId'))]",
-              "properties": {
-                "principalId": "[parameters('readerPrincipalId')]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataReaderRoleId'))]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "storageAccountId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-            },
-            "storageAccountName": {
-              "type": "string",
-              "value": "[parameters('storageAccountName')]"
-            },
-            "blobEndpoint": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').primaryEndpoints.blob]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'foundry-project')]"
+        "[resourceId('Microsoft.Resources/deployments', 'agent-container-app')]"
       ]
     }
   ],
@@ -7486,6 +7238,14 @@
     "FOUNDRY_PROJECT_ENDPOINT": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'foundry-project'), '2025-04-01').outputs.projectEndpoint.value]"
+    },
+    "AGENT_APP_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentAppName.value]"
+    },
+    "AGENT_ENDPOINT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentEndpoint.value]"
     },
     "COSMOS_ENDPOINT": {
       "type": "string",

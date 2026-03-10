@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** Updated — June 26, 2026
+> **Status:** Updated — July 14, 2026
 
 ## Overview
 
@@ -98,7 +98,7 @@ flowchart LR
             AIS["AI Search<br/>kb-articles index"]
             COSMOS["Cosmos DB<br/>Conversation history"]
         end
-        subgraph AgentSvc["KB Agent — Foundry Hosted Agent"]
+        subgraph AgentSvc["KB Agent — Container App"]
             direction TB
             AGENT["<b>ChatAgent</b><br/>search tool + reasoning"]
             VIS["<b>Vision Middleware</b><br/>Image injection"]
@@ -137,11 +137,11 @@ flowchart LR
 
 ## Context Aware & Vision Grounded KB Agent
 
-The solution consists of two services: a standalone **KB Agent** deployed as a **Foundry hosted agent** and a **Chainlit thin client** web app that calls the agent via the OpenAI-compatible **Responses API** and stores conversation history in **Cosmos DB**.
+The solution consists of two services: a standalone **KB Agent** deployed as an **Azure Container App** (with Foundry integration for tracing and registration) and a **Chainlit thin client** web app that calls the agent via the OpenAI-compatible **Responses API** and stores conversation history in **Cosmos DB**.
 
-### Agent (Foundry Hosted Agent)
+### Agent (Container App)
 
-The agent runs as a FastAPI service on port 8088 (locally) or as a Foundry hosted agent (deployed). It exposes three endpoints:
+The agent runs as a FastAPI service on port 8088, deployed as an Azure Container App with internal-only ingress. It exposes three endpoints:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -162,7 +162,7 @@ The web app is a Chainlit-based UI that calls the agent via the Responses API. I
 
 #### Web App Components
 
-- **OpenAI SDK Client** — Calls the agent via `client.responses.create(input=..., stream=True)`. Dual-mode auth: `http://` → no auth (local), `https://` → Entra token via `get_bearer_token_provider`.
+- **OpenAI SDK Client** — Calls the agent via `client.responses.create(input=..., stream=True)`. Always plain HTTP — no auth needed (both local `http://localhost:8088` and deployed internal FQDN use `http://`).
 - **Context Window Management** — Maintains in-memory conversation history per session. Estimates tokens (4 chars ≈ 1 token) and drops oldest messages when context exceeds 120K tokens (leaving headroom for response). Cosmos DB retains the full conversation (append-only).
 - **Cosmos DB Data Layer** — `CosmosDataLayer(BaseDataLayer)` stores conversations in Cosmos DB NoSQL (serverless). Partition key: `/userId`. Auto-title from first user message (80 chars max). Supports thread listing, resume, and deletion.
 - **Image Proxy** — A FastAPI endpoint (`/api/images/{article_id}/{image_path}`) that downloads images from the serving blob account on demand. Chainlit renders standard `![alt](/api/images/...)` markdown natively, and the browser fetches images from this same-origin proxy.
@@ -237,9 +237,9 @@ Despite explicit system prompt instructions, LLMs generate image URLs in many cr
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| 1 | Two-service split (Agent + Web App) | Agent is a standalone Foundry hosted agent with its own identity and RBAC. Web app is a thin client — no agent logic, search code, or vision middleware. Clean separation of concerns. |
+| 1 | Two-service split (Agent + Web App) | Agent is a standalone Container App with its own managed identity and RBAC. Web app is a thin client — no agent logic, search code, or vision middleware. Clean separation of concerns. |
 | 2 | Microsoft Agent Framework | Provides `ChatAgent` with built-in tool calling, conversation threading, and Azure OpenAI integration — avoids manual Responses API loop management. |
-| 3 | Responses API integration | Web app calls agent via OpenAI SDK `client.responses.create()`. Standard protocol, dual-mode auth (no auth local, Entra token deployed), streaming SSE. |
+| 3 | Responses API integration | Web app calls agent via OpenAI SDK `client.responses.create()`. Standard protocol, always plain HTTP (internal-only ingress), streaming SSE. |
 | 4 | Vision middleware for image injection | `ChatMiddleware` intercepts tool results and injects images as `DataContent`. The framework auto-converts to OpenAI's vision format. The LLM can reason about visual content (diagrams, architecture charts) not just text descriptions — producing higher-fidelity answers. |
 | 5 | Cosmos DB conversation persistence | Serverless NoSQL with `/userId` partition key. Replaces in-memory-only thread storage. Supports conversation resume, history panel, and cross-session continuity. |
 | 6 | Same-origin image proxy | Avoids SAS URL complexity (token expiry, CORS). Chainlit renders `![alt](/api/images/...)` as native markdown; browser fetches from same origin. Images persist across `msg.update()` re-renders. |
@@ -251,26 +251,24 @@ For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md) an
 
 ### Deployment
 
-The solution deploys **six services**: 4 function Container Apps (one per pipeline function), a Foundry hosted agent, and a Chainlit web app.
+The solution deploys **six services**: 4 function Container Apps (one per pipeline function), an agent Container App, and a Chainlit web app.
 
 1. **Function Apps** — 4 independent Container Apps, one per pipeline function, each with its own Docker image and managed identity. See [Function Apps Deployment](#function-apps-deployment-container-apps) below.
-2. **Agent** — Deployed as a **Foundry hosted agent** via AZD's `azure.ai.agents` extension. The agent container is built remotely in ACR and deployed to the Foundry project within Azure AI Services.
+2. **Agent** — Deployed as a **standard Azure Container App** (`agent-{project}-{env}`) with internal-only ingress on port 8088. System-assigned managed identity with RBAC for AI Services, AI Search, and Serving Storage. Foundry project retained for tracing and agent registration.
 3. **Web App** — Deployed to **Azure Container Apps** with **Entra ID Easy Auth** (single-tenant).
 
-#### Agent Deployment (Foundry)
+#### Agent Deployment (Container App)
 
-- **Container image** built from `src/agent/Dockerfile` (Python 3.11, FastAPI + uvicorn, port 8088)
-- **AZD service** defined in `azure.yaml` as `host: azure.ai.agent`, `language: docker`, `docker.remoteBuild: true`
-- **Config block** specifies container resources (CPU, memory), scale settings, and model deployments (gpt-4.1)
-- **Agent manifest** (`src/agent/agent.yaml`) uses the `ContainerAgent` schema: `kind: hosted`, `protocols: [responses v1]`, `environment_variables` for runtime config
-- **Deployment** via `azd deploy --service agent` — builds the Docker image in ACR and deploys to Foundry
-- **Publish script** (`scripts/publish-agent.sh`) publishes the agent via the ARM management-plane API and assigns RBAC roles to the agent's identity:
-  - Cognitive Services OpenAI User → AI Services
-  - Search Index Data Reader → AI Search
-  - Storage Blob Data Reader → Serving Storage
-- **Agent endpoint** stored in AZD env as `AGENT_ENDPOINT` for the web app to consume
+- **Container image** built from `src/agent/Dockerfile` (Python 3.12, FastAPI + uvicorn, port 8088)
+- **AZD service** defined in `azure.yaml` as `host: containerapp`, `language: python`
+- **Infrastructure** defined in `infra/modules/agent-container-app.bicep`: internal-only ingress, 1.0 CPU / 2 GiB memory, system-assigned managed identity
+- **RBAC** (Bicep-managed): Cognitive Services User + Azure AI User on AI Services, Search Index Data Reader + Search Service Contributor on AI Search, Storage Blob Data Reader on Serving Storage
+- **Deployment** via `azd deploy --service agent` — builds Docker image in ACR, deploys to Container Apps
+- **Registration** (optional): `make azure-register-agent` registers the agent in Foundry portal (Operate → Assets) for visibility
+- **Foundry integration**: Foundry project retained for App Insights tracing (`APPLICATIONINSIGHTS_CONNECTION_STRING` + `OTEL_SERVICE_NAME=kb-agent`); no ACR connection or capability host
+- **Agent endpoint**: internal FQDN `http://agent-{project}-{env}.internal.{cae-domain}` — web app connects via plain HTTP
 
-See [ARD-005](../ards/ARD-005-foundry-hosted-agent.md) and [Research 006](../research/006-foundry-hosted-agent-deployment.md) for the deployment approach and findings.
+See [ARD-005](../ards/ARD-005-foundry-hosted-agent.md), [ARD-009](../ards/ARD-009-agent-container-apps.md), and [Research 006](../research/006-foundry-hosted-agent-deployment.md) for deployment history.
 
 #### Function Apps Deployment (Container Apps)
 
@@ -312,26 +310,18 @@ Only users in the Azure AD tenant can access the app. An **Entra App Registratio
 
 #### Managed Identity RBAC
 
-Each service has its own identity with least-privilege roles. The Foundry hosted agent uses **two different identities** depending on context — both need the same set of roles:
+Each service has its own identity with least-privilege roles.
 
-**AI Services Account MI** (used by the published agent at the `/applications/` endpoint):
-
-| Role | Resource | Purpose |
-|------|----------|---------|
-| Cognitive Services OpenAI User | AI Services | Call GPT-5-mini and embedding models |
-| Search Index Data Reader | AI Search | Query the `kb-articles` index |
-| Storage Blob Data Reader | Serving Storage | Download article images for vision middleware |
-
-**Foundry Project MI** (used when testing the unpublished agent in the Foundry UI):
+**Agent Container App Managed Identity**:
 
 | Role | Resource | Purpose |
 |------|----------|---------|
-| Cognitive Services OpenAI User | AI Services | Call GPT-5-mini and embedding models |
+| Cognitive Services User | AI Services | Access AI Services APIs |
+| Azure AI User | AI Services | Azure AI platform access |
 | Search Index Data Reader | AI Search | Query the `kb-articles` index |
+| Search Service Contributor | AI Search | Manage search indexes |
 | Storage Blob Data Reader | Serving Storage | Download article images for vision middleware |
 | AcrPull | Container Registry | Pull the agent Docker image |
-
-> **Why two identities?** The Foundry runtime uses the **project's** system-assigned MI when running an unpublished agent version (e.g., testing v2 in the Foundry portal). Once the agent is published as an Application, the runtime switches to the **AI Services account's** system-assigned MI. Both identities are provisioned and granted roles via Bicep in `main.bicep`.
 
 **Web App Container App Managed Identity**:
 

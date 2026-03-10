@@ -47,9 +47,6 @@ param entraClientId string = ''
 @secure()
 param entraClientSecret string = ''
 
-@description('Published agent endpoint URL (set by scripts/publish-agent.sh)')
-param agentEndpoint string = ''
-
 // ---------------------------------------------------------------------------
 // Variables
 // ---------------------------------------------------------------------------
@@ -171,7 +168,7 @@ module funcConvertCu 'modules/function-app.bicep' = {
     deployerPrincipalId: principalId
     acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
     acrResourceId: containerRegistry.outputs.containerRegistryId
-    containerAppsEnvId: containerApp.outputs.containerAppsEnvId
+    containerAppsEnvId: containerAppsEnv.outputs.containerAppsEnvId
   }
   dependsOn: [functionsStorage]
 }
@@ -198,7 +195,7 @@ module funcConvertMistral 'modules/function-app.bicep' = {
     deployerPrincipalId: principalId
     acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
     acrResourceId: containerRegistry.outputs.containerRegistryId
-    containerAppsEnvId: containerApp.outputs.containerAppsEnvId
+    containerAppsEnvId: containerAppsEnv.outputs.containerAppsEnvId
   }
   dependsOn: [functionsStorage]
 }
@@ -224,7 +221,7 @@ module funcConvertMarkitdown 'modules/function-app.bicep' = {
     deployerPrincipalId: principalId
     acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
     acrResourceId: containerRegistry.outputs.containerRegistryId
-    containerAppsEnvId: containerApp.outputs.containerAppsEnvId
+    containerAppsEnvId: containerAppsEnv.outputs.containerAppsEnvId
   }
   dependsOn: [functionsStorage]
 }
@@ -252,7 +249,7 @@ module funcIndex 'modules/function-app.bicep' = {
     deployerPrincipalId: principalId
     acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
     acrResourceId: containerRegistry.outputs.containerRegistryId
-    containerAppsEnvId: containerApp.outputs.containerAppsEnvId
+    containerAppsEnvId: containerAppsEnv.outputs.containerAppsEnvId
   }
   dependsOn: [functionsStorage]
 }
@@ -270,6 +267,23 @@ module containerRegistry 'modules/container-registry.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
+// Module: Container Apps Environment (shared by web app, agent, and functions)
+// ---------------------------------------------------------------------------
+module containerAppsEnv 'modules/container-apps-env.bicep' = {
+  name: 'container-apps-env'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+  }
+}
+
+// Agent internal endpoint: constructed from predictable naming to avoid dependency cycle
+// (agent CA depends on foundryProject, which depends on containerApp)
+var agentInternalEndpoint = 'http://agent-${baseName}.internal.${containerAppsEnv.outputs.containerAppsEnvDefaultDomain}'
+
+// ---------------------------------------------------------------------------
 // Module: Container App (Context Aware & Vision Grounded KB Agent)
 // ---------------------------------------------------------------------------
 module containerApp 'modules/container-app.bicep' = {
@@ -278,7 +292,7 @@ module containerApp 'modules/container-app.bicep' = {
     location: location
     baseName: baseName
     tags: defaultTags
-    logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
+    containerAppsEnvId: containerAppsEnv.outputs.containerAppsEnvId
     acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
     acrResourceId: containerRegistry.outputs.containerRegistryId
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
@@ -287,7 +301,7 @@ module containerApp 'modules/container-app.bicep' = {
     servingBlobEndpoint: servingStorage.outputs.blobEndpoint
     entraClientId: entraClientId
     entraClientSecret: entraClientSecret
-    agentEndpoint: agentEndpoint
+    agentEndpoint: agentInternalEndpoint
     cosmosEndpoint: cosmosDb.outputs.cosmosEndpoint
     cosmosDatabaseName: cosmosDb.outputs.cosmosDatabaseName
   }
@@ -303,11 +317,32 @@ module foundryProject 'modules/foundry-project.bicep' = {
     baseName: baseName
     tags: defaultTags
     deployerPrincipalId: principalId
-    acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
-    acrResourceId: containerRegistry.outputs.containerRegistryId
     appInsightsResourceId: monitoring.outputs.appInsightsId
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     webAppPrincipalId: containerApp.outputs.containerAppPrincipalId
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module: Agent Container App (KB Agent — internal-only)
+// ---------------------------------------------------------------------------
+module agentContainerApp 'modules/agent-container-app.bicep' = {
+  name: 'agent-container-app'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+    containerAppsEnvId: containerAppsEnv.outputs.containerAppsEnvId
+    containerAppsEnvDefaultDomain: containerAppsEnv.outputs.containerAppsEnvDefaultDomain
+    acrLoginServer: containerRegistry.outputs.containerRegistryLoginServer
+    acrResourceId: containerRegistry.outputs.containerRegistryId
+    aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
+    searchEndpoint: search.outputs.searchEndpoint
+    servingBlobEndpoint: servingStorage.outputs.blobEndpoint
+    projectEndpoint: foundryProject.outputs.projectEndpoint
+    agentModelDeploymentName: aiServices.outputs.agentDeploymentName
+    embeddingDeploymentName: aiServices.outputs.embeddingDeploymentName
+    applicationInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
   }
 }
 
@@ -466,17 +501,6 @@ module searchRoleIdx 'modules/search.bicep' = {
 // ACR: AcrPull role for webapp is now inside container-app.bicep module to avoid
 // race condition during initial provisioning (revision needs ACR access immediately).
 
-// ACR: AcrPull (Foundry Project MI used by unpublished hosted agent runtime)
-module containerRegistryFoundryRole 'modules/container-registry.bicep' = {
-  name: 'container-registry-foundry-role'
-  params: {
-    location: location
-    baseName: baseName
-    tags: defaultTags
-    acrPullPrincipalId: foundryProject.outputs.projectPrincipalId
-  }
-}
-
 // Serving storage: Blob Data Reader (Container App MI — read-only for image proxy)
 module servingStorageReaderRole 'modules/storage.bicep' = {
   name: 'serving-storage-reader-role'
@@ -521,80 +545,42 @@ module cosmosDbWebAppRole 'modules/cosmos-db-role.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
-// Post-deploy: Grant AI Services managed identity access to dependent services
-// The Foundry hosted agent runs under the AI Services account's system-assigned
-// identity, so it needs RBAC on search, storage, and AI Services itself.
+// Post-deploy: Grant Agent Container App managed identity access to services
+// The agent runs as a Container App and needs RBAC on AI Services, Search,
+// and serving storage for agentic retrieval and model calls.
 // ---------------------------------------------------------------------------
 
-// AI Search: Search Index Data Reader (AI Services MI — for search_knowledge_base tool)
-module searchAgentRole 'modules/search.bicep' = {
-  name: 'search-agent-role'
+// AI Services: Cognitive Services User + OpenAI User (agent CA MI)
+module aiServicesAgentContainerAppRole 'modules/ai-services-role.bicep' = {
+  name: 'ai-services-agent-ca-role'
+  params: {
+    baseName: baseName
+    cognitiveServicesUserPrincipalId: agentContainerApp.outputs.agentPrincipalId
+  }
+}
+
+// AI Search: Index Data Reader + Service Contributor (agent CA MI — for agentic retrieval)
+module searchAgentContainerAppRole 'modules/search.bicep' = {
+  name: 'search-agent-ca-role'
   params: {
     location: location
     baseName: baseName
     tags: defaultTags
     skuName: searchSkuName
-    indexReaderPrincipalId: aiServices.outputs.aiServicesPrincipalId
+    indexReaderPrincipalId: agentContainerApp.outputs.agentPrincipalId
+    serviceContributorOnlyPrincipalId: agentContainerApp.outputs.agentPrincipalId
   }
 }
 
-// AI Services: Cognitive Services OpenAI User (AI Services MI — for embedding calls)
-module aiServicesAgentRole 'modules/ai-services-role.bicep' = {
-  name: 'ai-services-agent-role'
-  params: {
-    baseName: baseName
-    openAIOnlyUserPrincipalId: aiServices.outputs.aiServicesPrincipalId
-  }
-}
-
-// Serving storage: Storage Blob Data Reader (AI Services MI — for image proxy)
-module servingStorageAgentRole 'modules/storage.bicep' = {
-  name: 'serving-storage-agent-role'
+// Serving storage: Blob Data Reader (agent CA MI — for image proxy)
+module servingStorageAgentContainerAppRole 'modules/storage.bicep' = {
+  name: 'serving-storage-agent-ca-role'
   params: {
     location: location
     storageAccountName: servingStorageName
     tags: defaultTags
     containerNames: ['serving']
-    readerPrincipalId: aiServices.outputs.aiServicesPrincipalId
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Post-deploy: Grant Foundry Project managed identity access to dependent services
-// When testing the unpublished agent in the Foundry UI, the runtime uses the
-// project's system-assigned identity (not the AI Services account identity).
-// ---------------------------------------------------------------------------
-
-// AI Search: Search Index Data Reader (Foundry Project MI)
-module searchFoundryRole 'modules/search.bicep' = {
-  name: 'search-foundry-role'
-  params: {
-    location: location
-    baseName: baseName
-    tags: defaultTags
-    skuName: searchSkuName
-    indexReaderPrincipalId: foundryProject.outputs.projectPrincipalId
-  }
-}
-
-// AI Services: Cognitive Services OpenAI User (Foundry Project MI — for embeddings)
-module aiServicesFoundryRole 'modules/ai-services-role.bicep' = {
-  name: 'ai-services-foundry-role'
-  params: {
-    baseName: baseName
-    openAIOnlyUserPrincipalId: foundryProject.outputs.projectPrincipalId
-  }
-}
-
-// Serving storage: Storage Blob Data Reader (Foundry Project MI — for images)
-module servingStorageFoundryRole 'modules/storage.bicep' = {
-  name: 'serving-storage-foundry-role'
-  params: {
-    location: location
-    storageAccountName: servingStorageName
-    tags: defaultTags
-    containerNames: ['serving']
-    readerPrincipalId: foundryProject.outputs.projectPrincipalId
+    readerPrincipalId: agentContainerApp.outputs.agentPrincipalId
   }
 }
 
@@ -654,6 +640,10 @@ output AZURE_AI_ACCOUNT_NAME string = aiServices.outputs.aiServicesName
 output AZURE_OPENAI_ENDPOINT string = replace(aiServices.outputs.aiServicesEndpoint, '.cognitiveservices.azure.com/', '.openai.azure.com/')
 output FOUNDRY_PROJECT_NAME string = foundryProject.outputs.projectName
 output FOUNDRY_PROJECT_ENDPOINT string = foundryProject.outputs.projectEndpoint
+
+// Agent Container App
+output AGENT_APP_NAME string = agentContainerApp.outputs.agentAppName
+output AGENT_ENDPOINT string = agentContainerApp.outputs.agentEndpoint
 
 // Cosmos DB
 output COSMOS_ENDPOINT string = cosmosDb.outputs.cosmosEndpoint

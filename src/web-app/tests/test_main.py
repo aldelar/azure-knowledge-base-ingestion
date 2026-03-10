@@ -85,10 +85,10 @@ class TestTrimContext:
 # ---------------------------------------------------------------------------
 
 class TestCreateAgentClient:
-    """Test _create_agent_client dual-mode factory."""
+    """Test _create_agent_client — always plain HTTP."""
 
     @patch("app.main.config")
-    def test_local_mode(self, mock_config: MagicMock) -> None:
+    def test_local_endpoint(self, mock_config: MagicMock) -> None:
         mock_config.agent_endpoint = "http://localhost:8088"
 
         client = _create_agent_client()
@@ -97,19 +97,13 @@ class TestCreateAgentClient:
         assert client.base_url.host == "localhost"
 
     @patch("app.main.config")
-    def test_foundry_mode(self, mock_config: MagicMock) -> None:
-        mock_config.agent_endpoint = "https://my-foundry.ai.azure.com/agents"
+    def test_internal_fqdn_endpoint(self, mock_config: MagicMock) -> None:
+        mock_config.agent_endpoint = "http://agent-myproj.internal.cae-domain.eastus2.azurecontainerapps.io"
 
-        with patch("app.main.OpenAI") as mock_openai:
-            with patch("azure.identity.DefaultAzureCredential"):
-                with patch("azure.identity.get_bearer_token_provider") as mock_token:
-                    mock_token.return_value = lambda: "fake-token"
-                    _create_agent_client()
+        client = _create_agent_client()
 
-                    mock_openai.assert_called_once()
-                    call_kwargs = mock_openai.call_args[1]
-                    assert call_kwargs["base_url"] == "https://my-foundry.ai.azure.com/agents"
-                    assert call_kwargs["api_key"] == "fake-token"
+        assert client.api_key == "local"
+        assert "agent-myproj" in str(client.base_url)
 
 
 # ---------------------------------------------------------------------------

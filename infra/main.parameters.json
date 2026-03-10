@@ -22,9 +22,6 @@
     },
     "entraClientSecret": {
       "value": "${ENTRA_CLIENT_SECRET}"
-    },
-    "agentEndpoint": {
-      "value": "${AGENT_ENDPOINT}"
     }
   }
 }

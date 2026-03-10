@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // Module: container-app.bicep
-// Deploys Container Apps Environment + Container App for the Context Aware & Vision Grounded KB Agent
-// with Easy Auth (Entra ID, single-tenant) and system-assigned managed identity
+// Deploys Container App for the web app (Chainlit thin client)
+// with Easy Auth (Entra ID, single-tenant) and system-assigned managed identity.
+// Requires an existing Container Apps Environment (created by container-apps-env.bicep).
 // ---------------------------------------------------------------------------
 
 @description('Azure region for resources')
@@ -13,8 +14,8 @@ param baseName string
 @description('Tags to apply to all resources')
 param tags object = {}
 
-@description('Log Analytics workspace ID for Container Apps Environment')
-param logAnalyticsWorkspaceId string
+@description('Container Apps Environment ID (from container-apps-env module)')
+param containerAppsEnvId string
 
 @description('ACR login server (e.g., cr{project}dev.azurecr.io)')
 param acrLoginServer string
@@ -75,24 +76,6 @@ param entraClientSecret string = ''
 param tenantId string = subscription().tenantId
 
 // ---------------------------------------------------------------------------
-// Container Apps Environment (Consumption plan)
-// ---------------------------------------------------------------------------
-resource containerAppsEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: 'cae-${baseName}'
-  location: location
-  tags: tags
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: reference(logAnalyticsWorkspaceId, '2023-09-01').customerId
-        sharedKey: listKeys(logAnalyticsWorkspaceId, '2023-09-01').primarySharedKey
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Container App — Context Aware & Vision Grounded KB Agent
 // ---------------------------------------------------------------------------
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
@@ -105,7 +88,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     type: 'SystemAssigned'
   }
   properties: {
-    managedEnvironmentId: containerAppsEnv.id
+    managedEnvironmentId: containerAppsEnvId
     configuration: {
       activeRevisionsMode: 'Single'
       secrets: !empty(entraClientSecret) ? [
@@ -120,16 +103,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
         allowInsecure: false
       }
-      // Only configure ACR registry when a real ACR image is used.
-      // On initial provisioning (placeholder MCR image), omit ACR to avoid
-      // registry validation blocking revision creation before AcrPull role propagates.
-      // azd deploy updates the registry config when pushing the real image.
-      registries: useAcrImage ? [
+      // Always configure ACR registry so AZD deploy can push images
+      // immediately after first provision without requiring a re-provision.
+      registries: [
         {
           server: acrLoginServer
           identity: 'system'
         }
-      ] : []
+      ]
     }
     template: {
       containers: [
@@ -211,7 +192,7 @@ resource authConfig 'Microsoft.App/containerApps/authConfigs@2024-03-01' = if (!
 // ---------------------------------------------------------------------------
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (useAcrImage) {
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(acrResourceId, containerApp.id, acrPullRoleId)
   scope: existingAcr
   properties: {
@@ -234,5 +215,3 @@ output containerAppName string = containerApp.name
 output containerAppPrincipalId string = containerApp.identity.principalId
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output containerAppsEnvId string = containerAppsEnv.id
-output containerAppsEnvName string = containerAppsEnv.name
