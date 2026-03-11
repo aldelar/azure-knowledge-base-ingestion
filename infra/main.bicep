@@ -76,6 +76,7 @@ module monitoring 'modules/monitoring.bicep' = {
     baseName: baseName
     tags: defaultTags
     deployerPrincipalId: principalId
+    aiServicesPrincipalId: aiServices.outputs.aiServicesPrincipalId
   }
 }
 
@@ -279,9 +280,8 @@ module containerAppsEnv 'modules/container-apps-env.bicep' = {
   }
 }
 
-// Agent internal endpoint: constructed from predictable naming to avoid dependency cycle
-// (agent CA depends on foundryProject, which depends on containerApp)
-var agentInternalEndpoint = 'http://agent-${baseName}.internal.${containerAppsEnv.outputs.containerAppsEnvDefaultDomain}'
+// Agent endpoint via APIM registered agent API path for Foundry tracing
+var agentApimEndpoint = '${apim.outputs.apimGatewayUrl}/kb-agent'
 
 // ---------------------------------------------------------------------------
 // Module: Container App (Context Aware & Vision Grounded KB Agent)
@@ -301,7 +301,7 @@ module containerApp 'modules/container-app.bicep' = {
     servingBlobEndpoint: servingStorage.outputs.blobEndpoint
     entraClientId: entraClientId
     entraClientSecret: entraClientSecret
-    agentEndpoint: agentInternalEndpoint
+    agentEndpoint: agentApimEndpoint
     cosmosEndpoint: cosmosDb.outputs.cosmosEndpoint
     cosmosDatabaseName: cosmosDb.outputs.cosmosDatabaseName
   }

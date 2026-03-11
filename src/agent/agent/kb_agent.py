@@ -169,6 +169,7 @@ def create_agent() -> ChatAgent:
 
     agent = ChatAgent(
         chat_client=client,
+        id=os.environ.get("OTEL_SERVICE_NAME", "kb-agent"),
         name="KBSearchAgent",
         instructions=_SYSTEM_PROMPT,
         tools=[search_knowledge_base],

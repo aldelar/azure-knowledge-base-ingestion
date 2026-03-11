@@ -15,6 +15,9 @@ param tags object = {}
 @description('Principal ID of the deployer (human user) for Log Analytics Reader role on App Insights')
 param deployerPrincipalId string = ''
 
+@description('Principal ID of the AI Services managed identity — needs Log Analytics Reader so Foundry can query traces')
+param aiServicesPrincipalId string = ''
+
 // ---------------------------------------------------------------------------
 // Log Analytics Workspace
 // ---------------------------------------------------------------------------
@@ -57,6 +60,21 @@ resource deployerLogAnalyticsReaderRole 'Microsoft.Authorization/roleAssignments
   properties: {
     principalId: deployerPrincipalId
     principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', logAnalyticsReaderRoleId)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Role: Log Analytics Reader — allows the AI Services managed identity
+// (Foundry) to query traces from Application Insights.  Without this,
+// the Foundry Operate > Assets > Traces tab shows "No traces found".
+// ---------------------------------------------------------------------------
+resource aiServicesLogAnalyticsReaderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(aiServicesPrincipalId)) {
+  name: guid(appInsights.id, aiServicesPrincipalId, logAnalyticsReaderRoleId)
+  scope: appInsights
+  properties: {
+    principalId: aiServicesPrincipalId
+    principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', logAnalyticsReaderRoleId)
   }
 }
