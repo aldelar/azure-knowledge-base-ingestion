@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Module: agent-container-app.bicep
-// Deploys the KB Agent as a Container App with internal-only ingress
+// Deploys the KB Agent as a Container App with external HTTPS ingress with JWT auth
 // in the existing Container Apps Environment.
 // ---------------------------------------------------------------------------
 
@@ -78,10 +78,10 @@ resource agentApp 'Microsoft.App/containerApps@2024-03-01' = {
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
-        external: false
+        external: true
         targetPort: 8088
         transport: 'auto'
-        allowInsecure: true
+        allowInsecure: false
       }
       // Always configure ACR registry so AZD deploy can push images
       // immediately after first provision without requiring a re-provision.
@@ -112,6 +112,7 @@ resource agentApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'EMBEDDING_DEPLOYMENT_NAME', value: embeddingDeploymentName }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: applicationInsightsConnectionString }
             { name: 'OTEL_SERVICE_NAME', value: 'kb-agent' }
+            { name: 'REQUIRE_AUTH', value: 'true' }
           ]
         }
       ]
@@ -149,5 +150,6 @@ resource existingAcr 'Microsoft.ContainerRegistry/registries@2023-07-01' existin
 // Outputs
 // ---------------------------------------------------------------------------
 output agentEndpoint string = 'http://${appName}.internal.${containerAppsEnvDefaultDomain}'
+output agentExternalUrl string = 'https://${agentApp.properties.configuration.ingress.fqdn}'
 output agentPrincipalId string = agentApp.identity.principalId
 output agentAppName string = agentApp.name

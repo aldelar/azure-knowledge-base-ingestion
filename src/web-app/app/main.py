@@ -14,6 +14,7 @@ import re
 from typing import TYPE_CHECKING
 
 import chainlit as cl
+from azure.identity import DefaultAzureCredential
 from openai import OpenAI
 from starlette.responses import Response
 
@@ -282,15 +283,26 @@ def _trim_context(messages: list[dict], max_tokens: int | None = None) -> list[d
 def _create_agent_client() -> OpenAI:
     """Create an OpenAI client pointing at the agent endpoint.
 
-    Both local (``http://localhost:8088``) and deployed
-    (``http://agent-*.internal.*``) use plain HTTP — no auth needed.
+    - ``http://`` endpoints (local dev, internal FQDN): plain HTTP, no auth
+    - ``https://`` endpoints (registered APIM proxy URL): Entra bearer token
+      via DefaultAzureCredential with scope ``https://ai.azure.com/.default``
     """
     endpoint = config.agent_endpoint.rstrip("/")
-    client = OpenAI(
-        base_url=endpoint,
-        api_key="local",
-    )
-    logger.info("Agent client → %s", endpoint)
+
+    if endpoint.startswith("https://"):
+        credential = DefaultAzureCredential()
+        token = credential.get_token("https://ai.azure.com/.default")
+        client = OpenAI(
+            base_url=endpoint,
+            api_key=token.token,
+        )
+        logger.info("Agent client → %s (Entra auth)", endpoint)
+    else:
+        client = OpenAI(
+            base_url=endpoint,
+            api_key="local",
+        )
+        logger.info("Agent client → %s (no auth)", endpoint)
     return client
 
 

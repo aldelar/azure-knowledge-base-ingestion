@@ -134,11 +134,11 @@ set-project: ## Set PROJECT_NAME in AZD env (name=<your-name>, 2-8 chars)
 	azd env set AZURE_RESOURCE_GROUP "rg-$$PROJECT-$$ENV" && \
 	echo "\u2713 PROJECT_NAME=$$PROJECT  AZURE_RESOURCE_GROUP=rg-$$PROJECT-$$ENV"
 
-azure-up: _check-project-name azure-provision azure-deploy azure-setup-auth ## Full Azure deploy (provision + deploy + auth)
+azure-up: _check-project-name azure-provision azure-deploy azure-register-agent azure-configure-app azure-setup-auth ## Full Azure deploy (provision + deploy + register + configure + auth)
 
 azure-kb: _check-project-name azure-upload-staging azure-convert azure-index ## Full Azure KB pipeline (upload + convert + index)
 
-azure-test: _check-project-name azure-test-app ## Run all Azure integration tests
+azure-test: _check-project-name azure-test-agent azure-test-app ## Run all Azure integration tests
 
 azure-app-url: _check-project-name ## Print the deployed web app URL
 	@azd env get-value WEBAPP_URL
@@ -304,7 +304,7 @@ azure-provision: _check-project-name ## Provision all Azure resources (azd provi
 	azd provision --no-state
 
 # --- Deploy ---
-.PHONY: azure-deploy azure-deploy-app azure-register-agent azure-setup-auth
+.PHONY: azure-deploy azure-deploy-app azure-register-agent azure-configure-app azure-setup-auth
 
 azure-deploy: _check-project-name ## Deploy all services + CU analyzer
 	AZD_EXT_TIMEOUT=180 azd deploy
@@ -316,6 +316,9 @@ azure-deploy-app: ## Deploy web app only
 
 azure-register-agent: ## Register agent in Foundry portal (idempotent)
 	@bash scripts/register-agent.sh
+
+azure-configure-app: ## Configure web app agent endpoint (post-registration)
+	@bash scripts/configure-app-agent-endpoint.sh
 
 azure-setup-auth: ## Configure Entra redirect URIs (idempotent)
 	@bash scripts/setup-redirect-uris.sh
@@ -366,7 +369,12 @@ azure-index-summarize: ## Show AI Search index contents summary
 	@cd src/functions && uv run python ../../scripts/functions/display-index-summary.py
 
 # --- Test ---
-.PHONY: azure-test-app
+.PHONY: azure-test-agent azure-test-app
+
+azure-test-agent: _check-project-name ## Agent integration tests (external HTTPS + JWT auth)
+	@cd src/agent && \
+	  AGENT_ENDPOINT=$$(azd env get-value AGENT_EXTERNAL_URL) \
+	  uv run pytest tests/ -v -m integration || test $$? -eq 5
 
 azure-test-app: ## Web app integration tests (Cosmos + Blob + Agent)
 	@cd src/web-app && \

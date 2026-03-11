@@ -1,0 +1,102 @@
+"""JWT authentication middleware for Entra ID token validation.
+
+Validates bearer tokens on incoming requests using Microsoft Entra ID
+JWKS (JSON Web Key Set).  Skips auth for health probe endpoints and
+when ``REQUIRE_AUTH`` is ``false`` (local development).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+
+import jwt
+from jwt import PyJWKClient
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+_JWKS_URL = "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+_DEFAULT_AUDIENCE = "https://ai.azure.com"
+_HEALTH_PATHS = {"/liveness", "/readiness", "/health"}
+_VALID_ISSUER_PREFIXES = (
+    "https://sts.windows.net/",
+    "https://login.microsoftonline.com/",
+)
+
+# ---------------------------------------------------------------------------
+# JWKS client (singleton — cached keys with 5-minute lifespan)
+# ---------------------------------------------------------------------------
+
+_jwks_client = PyJWKClient(_JWKS_URL, cache_keys=True, lifespan=300)
+
+
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
+
+
+class JWTAuthMiddleware(BaseHTTPMiddleware):
+    """Starlette middleware that validates Entra ID JWT bearer tokens."""
+
+    async def dispatch(self, request: Request, call_next):  # noqa: ANN001
+        # Skip auth when disabled (local dev)
+        require_auth = os.environ.get("REQUIRE_AUTH", "true")
+        if require_auth.lower() == "false":
+            return await call_next(request)
+
+        # Skip auth for health probes
+        if request.url.path in _HEALTH_PATHS:
+            return await call_next(request)
+
+        # Extract bearer token
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.lower().startswith("bearer "):
+            return _unauthorized("Missing or invalid Authorization header")
+
+        token = auth_header[7:]  # Strip "Bearer "
+
+        # Build accepted audiences
+        audiences = [_DEFAULT_AUDIENCE]
+        app_uri = os.environ.get("AGENT_APP_URI")
+        if app_uri:
+            audiences.append(app_uri)
+
+        try:
+            signing_key = _jwks_client.get_signing_key_from_jwt(token)
+            claims = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                audience=audiences,
+                options={"verify_iss": False},  # manual issuer check below
+            )
+
+            # Validate issuer prefix (multi-tenant)
+            issuer = claims.get("iss", "")
+            if not any(issuer.startswith(p) for p in _VALID_ISSUER_PREFIXES):
+                return _unauthorized(f"Invalid issuer: {issuer}")
+
+        except jwt.ExpiredSignatureError:
+            return _unauthorized("Token has expired")
+        except jwt.InvalidAudienceError:
+            return _unauthorized("Invalid audience")
+        except jwt.PyJWTError as exc:
+            logger.warning("JWT validation failed: %s", exc)
+            return _unauthorized(str(exc))
+
+        return await call_next(request)
+
+
+def _unauthorized(detail: str) -> JSONResponse:
+    """Return a 401 JSON response."""
+    return JSONResponse(
+        status_code=401,
+        content={"error": "unauthorized", "detail": detail},
+    )

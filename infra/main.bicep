@@ -320,11 +320,12 @@ module foundryProject 'modules/foundry-project.bicep' = {
     appInsightsResourceId: monitoring.outputs.appInsightsId
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     webAppPrincipalId: containerApp.outputs.containerAppPrincipalId
+    apimResourceId: apim.outputs.apimResourceId
   }
 }
 
 // ---------------------------------------------------------------------------
-// Module: Agent Container App (KB Agent — internal-only)
+// Module: Agent Container App (KB Agent — external HTTPS + JWT auth)
 // ---------------------------------------------------------------------------
 module agentContainerApp 'modules/agent-container-app.bicep' = {
   name: 'agent-container-app'
@@ -343,6 +344,29 @@ module agentContainerApp 'modules/agent-container-app.bicep' = {
     agentModelDeploymentName: aiServices.outputs.agentDeploymentName
     embeddingDeploymentName: aiServices.outputs.embeddingDeploymentName
     applicationInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module: API Management — AI Gateway
+// ---------------------------------------------------------------------------
+module apim 'modules/apim.bicep' = {
+  name: 'apim'
+  params: {
+    location: location
+    baseName: baseName
+    tags: defaultTags
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module: APIM Agent API definition + backend
+// ---------------------------------------------------------------------------
+module apimAgentApi 'modules/apim-agent-api.bicep' = {
+  name: 'apim-agent-api'
+  params: {
+    apimName: apim.outputs.apimName
+    agentExternalUrl: agentContainerApp.outputs.agentExternalUrl
   }
 }
 
@@ -644,6 +668,11 @@ output FOUNDRY_PROJECT_ENDPOINT string = foundryProject.outputs.projectEndpoint
 // Agent Container App
 output AGENT_APP_NAME string = agentContainerApp.outputs.agentAppName
 output AGENT_ENDPOINT string = agentContainerApp.outputs.agentEndpoint
+output AGENT_EXTERNAL_URL string = agentContainerApp.outputs.agentExternalUrl
+
+// API Management (AI Gateway)
+output APIM_NAME string = apim.outputs.apimName
+output APIM_GATEWAY_URL string = apim.outputs.apimGatewayUrl
 
 // Cosmos DB
 output COSMOS_ENDPOINT string = cosmosDb.outputs.cosmosEndpoint

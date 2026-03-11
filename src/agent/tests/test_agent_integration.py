@@ -9,9 +9,10 @@ Local adapter endpoints:
   GET  /liveness    — 200 OK (container alive)
   GET  /readiness   — {"status": "ready"} (agent ready to serve)
 
-Published agent endpoint (Foundry):
-  POST {base_url}/responses?api-version=2025-11-15-preview
-  Health probes are NOT exposed through the published endpoint.
+Deployed endpoint (external HTTPS Container App with JWT auth):
+  POST {base_url}/responses
+  GET  {base_url}/liveness
+  GET  {base_url}/readiness
 
 Usage (local):
     make test-agent-integration      # expects agent running on localhost:8088
@@ -38,9 +39,7 @@ import pytest
 
 AGENT_ENDPOINT = os.environ.get("AGENT_ENDPOINT", "http://localhost:8088")
 
-# True when targeting a published Foundry agent (https endpoint).  Health
-# probes aren't exposed through the published endpoint, and the api-version
-# query param differs from the dev endpoint.
+# True when targeting a deployed agent (https endpoint).
 _IS_REMOTE = AGENT_ENDPOINT.startswith("https://")
 
 
@@ -75,12 +74,8 @@ def headers() -> dict[str, str]:
 @pytest.fixture(scope="module")
 def client(base_url, headers) -> httpx.Client:
     """Synchronous HTTP client for integration tests."""
-    params = {}
-    # Published Foundry endpoints require api-version query parameter.
-    if _IS_REMOTE:
-        params["api-version"] = "2025-11-15-preview"
     with httpx.Client(
-        base_url=base_url, headers=headers, params=params, timeout=120.0
+        base_url=base_url, headers=headers, timeout=120.0
     ) as c:
         yield c
 
@@ -94,17 +89,14 @@ def client(base_url, headers) -> httpx.Client:
 class TestHealthProbes:
     """Verify the adapter health probe endpoints.
 
-    These probes are only available when testing the local container
-    directly.  Published Foundry endpoints don't expose /liveness or
-    /readiness.
+    These probes are available both locally and on the deployed
+    external HTTPS Container App with JWT auth.
     """
 
-    @pytest.mark.skipif(_IS_REMOTE, reason="Health probes not exposed on published endpoint")
     def test_liveness(self, client):
         resp = client.get("liveness")
         assert resp.status_code == 200
 
-    @pytest.mark.skipif(_IS_REMOTE, reason="Health probes not exposed on published endpoint")
     def test_readiness(self, client):
         resp = client.get("readiness")
         assert resp.status_code == 200

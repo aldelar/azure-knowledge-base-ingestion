@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    """Run the KB Agent as a Foundry hosted agent."""
+    """Run the KB Agent as an HTTP server on port 8088."""
     logger.info("[KB-AGENT] Starting agent server (port 8088)…")
 
     from agent.kb_agent import create_agent
@@ -72,7 +72,11 @@ def main() -> None:
     agent = create_agent()
     logger.info("[KB-AGENT] Agent created, starting server…")
 
-    from_agent_framework(agent).run()
+    server = from_agent_framework(agent)
+    from middleware.jwt_auth import JWTAuthMiddleware
+
+    server.app.add_middleware(JWTAuthMiddleware)
+    server.run()
 
 
 if __name__ == "__main__":

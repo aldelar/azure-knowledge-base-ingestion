@@ -1044,6 +1044,7 @@ dependencies = [
     { name = "azure-search-documents" },
     { name = "azure-storage-blob" },
     { name = "opentelemetry-sdk" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-dotenv" },
     { name = "starlette" },
 ]
@@ -1068,6 +1069,7 @@ requires-dist = [
     { name = "azure-storage-blob", specifier = ">=12.24.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
     { name = "python-dotenv", specifier = ">=1.0.0" },

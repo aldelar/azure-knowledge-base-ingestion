@@ -40,8 +40,9 @@ All resources follow the pattern `{prefix}-{projectName}-{env}` (e.g., `func-{pr
 | Container Registry | `container-registry.bicep` | `cr{project}{env}` | Basic |
 | Container Apps Environment | `container-apps-env.bicep` | `cae-{project}-{env}` | Consumption |
 | Container App (Web App) | `container-app.bicep` | `webapp-{project}-{env}` | 0.5 vCPU, 1 GiB |
-| Container App (Agent) | `agent-container-app.bicep` | `agent-{project}-{env}` | 1.0 vCPU, 2 GiB |
+| Container App (Agent) | `agent-container-app.bicep` | `agent-{project}-{env}` | 1.0 vCPU, 2 GiB, external HTTPS + JWT auth |
 | Foundry Project | `foundry-project.bicep` | `proj-{project}-{env}` | — (child of AI Services) |
+| API Management (AI Gateway) | `apim.bicep` | `apim-{project}-{env}` | BasicV2 |
 | Cosmos DB (NoSQL) | `cosmos-db.bicep` | `cosmos-{project}-{env}` | Serverless |
 | → Database | `cosmos-db.bicep` | `kb-agent` | — |
 | → Container | `cosmos-db.bicep` | `conversations` | Partition key `/userId` |
@@ -56,6 +57,8 @@ infra/
 ├── main.bicep                  # Orchestration — wires all modules + role assignments
 ├── main.parameters.json        # AZD parameter file (env name, location, search SKU)
 └── modules/
+    ├── apim.bicep                   # API Management — AI Gateway (BasicV2)
+    ├── apim-agent-api.bicep         # APIM agent API definition + backend
     ├── monitoring.bicep            # Log Analytics + Application Insights
     ├── storage.bicep               # Reusable storage account with containers + RBAC
     ├── ai-services.bicep           # AI Services account + model deployments + RBAC
@@ -67,7 +70,7 @@ infra/
     ├── container-registry.bicep    # Azure Container Registry (Basic) + AcrPull RBAC
     ├── container-apps-env.bicep    # Container Apps Environment (shared by web app, agent, and functions)
     ├── container-app.bicep         # Web App Container App + Easy Auth
-    └── agent-container-app.bicep   # Agent Container App (internal-only ingress, port 8088)
+    └── agent-container-app.bicep   # Agent Container App (external HTTPS ingress with JWT auth, port 8088)
 ```
 
 ---
@@ -232,6 +235,8 @@ The project endpoint is output for use by agent deployment (AZD `azure.ai.agents
 
 The project is used for tracing (App Insights connection) and optional agent registration via `scripts/register-agent.sh`.
 
+The project also has an APIM connection resource (`apim-connection`) linking it to the AI Gateway, which is required for agent registration via `scripts/register-agent.sh`. The registration script verifies this connection exists before proceeding.
+
 **AZD Environment Variables** (set during `azd ai agent init` or manually):
 
 | Variable | Value | Purpose |
@@ -315,14 +320,14 @@ The Entra App Registration is created by the AZD `preprovision` hook script (`sc
 
 ### Agent Container App (`agent-container-app.bicep`)
 
-Hosts the KB Agent as an internal-only Container App in the shared Container Apps Environment.
+Hosts the KB Agent as an external HTTPS Container App with JWT authentication in the shared Container Apps Environment.
 
 | Setting | Value |
 |---------|-------|
 | Identity | System-assigned managed identity |
 | Container | Single container from ACR |
 | CPU / Memory | 1.0 vCPU / 2 GiB |
-| Ingress | Internal-only, port 8088 |
+| Ingress | External, port 8088, HTTPS + JWT auth |
 | Scale | Min 1, Max 1 |
 
 **Application Settings:**
@@ -339,6 +344,21 @@ Hosts the KB Agent as an internal-only Container App in the shared Container App
 | `EMBEDDING_DEPLOYMENT_NAME` | `text-embedding-3-small` | Search query embeddings |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights connection string | Telemetry + tracing |
 | `OTEL_SERVICE_NAME` | `kb-agent` | Trace correlation label |
+
+### API Management — AI Gateway (`apim.bicep`)
+
+Provisions Azure API Management as an AI Gateway for agent traffic. Enables Foundry agent registration via the APIM gateway connection.
+
+| Setting | Value |
+|---------|-------|
+| Name | `apim-{project}-{env}` |
+| SKU | BasicV2 (parameterised for StandardV2 in prod) |
+| Identity | System-assigned managed identity |
+| API | `kb-agent-api` — proxies to agent external URL |
+| Operations | POST /responses, GET /liveness, GET /readiness |
+| Subscription | Not required (auth via Entra JWT) |
+
+The APIM gateway URL is output as `APIM_GATEWAY_URL` for use by `register-agent.sh`.
 
 ---
 
@@ -491,7 +511,8 @@ AZD reads `azure.yaml` (project root) and `infra/main.parameters.json` to resolv
 | _(per-function)_ | `azd deploy --service func-convert-mistral` |
 | _(per-function)_ | `azd deploy --service func-convert-markitdown` |
 | _(per-function)_ | `azd deploy --service func-index` |
-| `make azure-register-agent` | Register agent in Foundry portal (idempotent) |
+| `make azure-register-agent` | Register agent via AI Gateway in Foundry (idempotent, captures proxy URL) |
+| `make azure-configure-app` | Push registered proxy URL to web app AGENT_ENDPOINT |
 | `make azure-deploy-app` | `azd deploy --service web-app` |
 
 ---
@@ -532,6 +553,9 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `WEBAPP_URL` | `https://webapp-{project}-dev.<region>.azurecontainerapps.io` |
 | `AGENT_APP_NAME` | `agent-{project}-dev` |
 | `AGENT_ENDPOINT` | `http://agent-{project}-dev.internal.{cae-domain}` |
+| `AGENT_EXTERNAL_URL` | `https://agent-{project}-dev.<region>.azurecontainerapps.io` |
+| `APIM_NAME` | `apim-{project}-dev` |
+| `APIM_GATEWAY_URL` | `https://apim-{project}-dev.azure-api.net` |
 | `FOUNDRY_PROJECT_NAME` | `proj-{project}-dev` |
 | `FOUNDRY_PROJECT_ENDPOINT` | `https://ai-{project}-dev.services.ai.azure.com/api/projects/proj-{project}-dev` |
 | `AZURE_AI_PROJECT_ID` | `/subscriptions/.../providers/Microsoft.CognitiveServices/accounts/ai-{project}-dev/projects/proj-{project}-dev` |
@@ -541,6 +565,8 @@ The following values are exported by `main.bicep` and available as AZD environme
 | `AZURE_OPENAI_ENDPOINT` | `https://ai-{project}-dev.openai.azure.com/` |
 | `COSMOS_ENDPOINT` | `https://cosmos-{project}-dev.documents.azure.com:443/` |
 | `COSMOS_DATABASE_NAME` | `kb-agent` |
+
+> **Post-deploy variables** (set by scripts, not Bicep): `AGENT_REGISTERED_URL` — the Foundry-generated proxy URL captured by `register-agent.sh` and used by `configure-app-agent-endpoint.sh`.
 
 ---
 

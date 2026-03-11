@@ -1,8 +1,8 @@
 # Epic 009 — Agent Container Apps Migration
 
-> **Status:** In Progress
+> **Status:** Done
 > **Created:** March 10, 2026
-> **Updated:** March 10, 2026
+> **Updated:** July 14, 2026
 
 ## Objective
 
@@ -20,18 +20,18 @@ After this epic:
 
 ## Success Criteria
 
-- [ ] Agent Container App deployed: `agent-{project}-{env}` with external HTTPS ingress and JWT validation
-- [ ] Agent Container App has system-assigned managed identity with least-privilege RBAC (AI Services, AI Search, Serving Storage)
-- [ ] `from_agent_framework` adapter serves `/responses`, `/liveness`, `/readiness` on port 8088
-- [ ] Web app connects to agent through Foundry-registered APIM proxy URL with Entra bearer token
-- [ ] `azd deploy --service agent` deploys the agent independently (no `publish-agent.sh`)
-- [ ] APIM (AI Gateway) provisioned via Bicep, linked to Foundry project
-- [ ] Agent registered in Foundry via AI Gateway (visible under Operate → Assets)
-- [ ] Traces appear in Foundry portal with `OTEL_SERVICE_NAME=kb-agent` correlation
-- [ ] Foundry project Bicep trimmed: no ACR connection, no capability host
-- [ ] All Makefile targets (`agent-dev`, `azure-deploy`, `azure-test-agent`, agent logs) work correctly
-- [ ] `make test` passes with zero regressions
-- [ ] Architecture and infrastructure docs updated to reflect external ingress, APIM gateway, and JWT auth
+- [x] Agent Container App deployed: `agent-{project}-{env}` with external HTTPS ingress and JWT validation
+- [x] Agent Container App has system-assigned managed identity with least-privilege RBAC (AI Services, AI Search, Serving Storage)
+- [x] `from_agent_framework` adapter serves `/responses`, `/liveness`, `/readiness` on port 8088
+- [x] Web app connects to agent through Foundry-registered APIM proxy URL with Entra bearer token
+- [x] `azd deploy --service agent` deploys the agent independently (no `publish-agent.sh`)
+- [x] APIM (AI Gateway) provisioned via Bicep, linked to Foundry project
+- [x] Agent registered in Foundry via AI Gateway (visible under Operate → Assets)
+- [x] Traces appear in Foundry portal with `OTEL_SERVICE_NAME=kb-agent` correlation
+- [x] Foundry project Bicep trimmed: no ACR connection, no capability host
+- [x] All Makefile targets (`agent-dev`, `azure-deploy`, `azure-test-agent`, agent logs) work correctly
+- [x] `make test` passes with zero regressions
+- [x] Architecture and infrastructure docs updated to reflect external ingress, APIM gateway, and JWT auth
 
 ---
 
@@ -341,48 +341,48 @@ Update architecture docs, infrastructure docs, and create an ARD for the migrati
 
 ---
 
-### Story 7 — Agent External Ingress & JWT Auth Middleware
+### Story 7 — Agent External Ingress & JWT Auth Middleware ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 6 ✅
 
 Switch the agent Container App from internal-only to external HTTPS ingress, and add in-code JWT validation middleware in FastAPI so the agent can be securely accessed from outside the Container Apps Environment (dev machines, APIM gateway, other apps/systems). Local dev (`http://localhost:8088`) bypasses auth.
 
 #### Deliverables
 
-- [ ] Update `infra/modules/agent-container-app.bicep`:
+- [x] Update `infra/modules/agent-container-app.bicep`:
   - Change `external: false` → `external: true`
   - Change `allowInsecure: true` → `allowInsecure: false`
   - Add output `agentExternalUrl` (the public HTTPS FQDN) alongside the existing internal endpoint output
-- [ ] Update `infra/main.bicep`:
+- [x] Update `infra/main.bicep`:
   - Add new output `AGENT_EXTERNAL_URL` from the agent module's `agentExternalUrl`
-- [ ] Create `src/agent/middleware/__init__.py` — empty package
-- [ ] Create `src/agent/middleware/jwt_auth.py` — FastAPI middleware:
+- [x] Create `src/agent/middleware/__init__.py` — empty package
+- [x] Create `src/agent/middleware/jwt_auth.py` — FastAPI middleware:
   - Validate JWT bearer tokens on all incoming requests to `/responses`
   - Accept tokens issued by the project's Entra tenant (`iss` claim)
   - Accept audience `https://ai.azure.com` (Foundry scope) and the agent's own app URI
   - Skip validation when `REQUIRE_AUTH` env var is `false` (local dev) or when path is `/liveness` or `/readiness` (health probes)
   - Return `401 Unauthorized` with clear error message on invalid/missing tokens
   - Use `python-jose[cryptography]` or `PyJWT` + JWKS endpoint for token validation
-- [ ] Update `src/agent/main.py` — mount the JWT middleware on the FastAPI app
-- [ ] Add `REQUIRE_AUTH` env var to `agent-container-app.bicep` (default `true` in Azure)
-- [ ] Update `src/agent/.env.sample` — add `REQUIRE_AUTH=false` for local dev
-- [ ] Add `python-jose[cryptography]` (or `PyJWT`) to `src/agent/pyproject.toml`
-- [ ] Update `src/agent/tests/test_agent_integration.py`:
+- [x] Update `src/agent/main.py` — mount the JWT middleware on the FastAPI app
+- [x] Add `REQUIRE_AUTH` env var to `agent-container-app.bicep` (default `true` in Azure)
+- [x] Update `src/agent/.env.sample` — add `REQUIRE_AUTH=false` for local dev
+- [x] Add `python-jose[cryptography]` (or `PyJWT`) to `src/agent/pyproject.toml`
+- [x] Update `src/agent/tests/test_agent_integration.py`:
   - Remote mode (`_IS_REMOTE`) acquires Entra token via `DefaultAzureCredential` with agent audience scope
   - Update `_get_headers()` to use the correct scope for the external agent
   - Tests pass against both local (no auth) and remote (JWT auth) endpoints
-- [ ] Restore `azure-test-agent` target in `Makefile` (was removed when agent was internal-only):
+- [x] Restore `azure-test-agent` target in `Makefile` (was removed when agent was internal-only):
   - Set `AGENT_ENDPOINT` to the external HTTPS URL from `azd env get-value AGENT_EXTERNAL_URL`
   - Depend on `_check-project-name`
   - Re-add to `azure-test` dependency list
-- [ ] Update `docs/specs/architecture.md`:
+- [x] Update `docs/specs/architecture.md`:
   - Agent hosting section: change "internal-only ingress" to "external HTTPS ingress with JWT validation"
   - Agent endpoint: update FQDN pattern to show the external HTTPS URL
   - Web App Components → OpenAI SDK Client: remove "no auth needed" language (auth is now required)
   - Authentication section: add a third layer describing agent JWT auth
   - Design Decisions table: update row 3 to reflect APIM routing + JWT ("always plain HTTP" → "HTTPS via APIM gateway")
-- [ ] Update `docs/specs/infrastructure.md`:
+- [x] Update `docs/specs/infrastructure.md`:
   - Resource Inventory table: update Agent Container App row — note "external HTTPS ingress, JWT auth"
   - Agent Container App section (if exists): document `REQUIRE_AUTH` env var
   - Outputs table: add `AGENT_EXTERNAL_URL`
@@ -397,54 +397,54 @@ Switch the agent Container App from internal-only to external HTTPS ingress, and
 
 #### Definition of Done
 
-- [ ] Agent Container App has external HTTPS ingress (`az containerapp show` confirms `external: true`, `allowInsecure: false`)
-- [ ] `curl https://<agent-external-url>/liveness` returns 200 (no auth required for probes)
-- [ ] `curl https://<agent-external-url>/responses` without a token returns 401
-- [ ] `curl https://<agent-external-url>/responses` with a valid Entra token returns a response
-- [ ] `make agent-dev` still works locally without auth (`REQUIRE_AUTH=false`)
-- [ ] `make azure-test-agent` passes all 8 tests (acquires Entra token, calls external endpoint)
-- [ ] `make test` passes with zero regressions
-- [ ] `az bicep build` succeeds with 0 errors
-- [ ] `docs/specs/architecture.md` reflects external ingress + JWT auth
-- [ ] `docs/specs/infrastructure.md` reflects external ingress, `REQUIRE_AUTH` env var, and `AGENT_EXTERNAL_URL` output
+- [x] Agent Container App has external HTTPS ingress (`az containerapp show` confirms `external: true`, `allowInsecure: false`)
+- [x] `curl https://<agent-external-url>/liveness` returns 200 (no auth required for probes)
+- [x] `curl https://<agent-external-url>/responses` without a token returns 401
+- [x] `curl https://<agent-external-url>/responses` with a valid Entra token returns a response
+- [x] `make agent-dev` still works locally without auth (`REQUIRE_AUTH=false`)
+- [x] `make azure-test-agent` passes all 8 tests (acquires Entra token, calls external endpoint)
+- [x] `make test` passes with zero regressions
+- [x] `az bicep build` succeeds with 0 errors
+- [x] `docs/specs/architecture.md` reflects external ingress + JWT auth
+- [x] `docs/specs/infrastructure.md` reflects external ingress, `REQUIRE_AUTH` env var, and `AGENT_EXTERNAL_URL` output
 
 ---
 
-### Story 8 — AI Gateway (APIM) Infrastructure
+### Story 8 — AI Gateway (APIM) Infrastructure ✅
 
-> **Status:** Not Started
-> **Depends on:** Story 7
+> **Status:** Done
+> **Depends on:** Story 7 ✅
 
 Provision an Azure API Management (APIM) instance as an AI Gateway via Bicep, link it to the Foundry project, and configure it to proxy requests to the agent's external HTTPS endpoint. This story provisions the infrastructure only — the web app continues using the internal FQDN until Story 9 registers the agent and provides the Foundry-generated proxy URL.
 
 #### Deliverables
 
-- [ ] Create `infra/modules/apim.bicep`:
+- [x] Create `infra/modules/apim.bicep`:
   - APIM resource `apim-{baseName}` (BasicV2 SKU for dev/test, parameterised for StandardV2 in prod)
   - Publisher name and email from parameters (required by APIM)
   - System-assigned managed identity
   - Tags: `azd-env-name`
   - Outputs: `apimName`, `apimGatewayUrl`, `apimPrincipalId`, `apimResourceId`
-- [ ] Create `infra/modules/apim-agent-api.bicep`:
+- [x] Create `infra/modules/apim-agent-api.bicep`:
   - API definition `kb-agent-api` on the APIM instance
   - Backend pointing to the agent's external HTTPS URL
   - Operations: `POST /responses`, `GET /liveness`, `GET /readiness`
   - Policy: pass-through (APIM forwards the caller's Entra token to the agent; agent validates it)
   - Subscription not required (`subscriptionRequired: false`) — auth is via Entra JWT, not APIM subscription keys
-- [ ] Update `infra/main.bicep`:
+- [x] Update `infra/main.bicep`:
   - Add `apim` module call, passing location, baseName, tags
   - Add `apimAgentApi` module call, passing APIM name and agent external URL
   - Add outputs: `APIM_NAME`, `APIM_GATEWAY_URL`
   - **Do NOT change `AGENT_ENDPOINT` on the web app yet** — it stays as the internal FQDN until Story 9 provides the registered proxy URL
-- [ ] Update `infra/modules/foundry-project.bicep`:
+- [x] Update `infra/modules/foundry-project.bicep`:
   - Add APIM connection resource linking the Foundry project to the APIM gateway (required for agent registration via gateway)
   - Accept new parameter `apimResourceId`
-- [ ] Update `infra/main.bicep` — pass `apimResourceId` to `foundryProject` module
-- [ ] Update `docs/specs/architecture.md`:
+- [x] Update `infra/main.bicep` — pass `apimResourceId` to `foundryProject` module
+- [x] Update `docs/specs/architecture.md`:
   - Azure Services Map diagram: add APIM node between Web App and Agent, show APIM ↔ Agent connection
   - Agent Deployment section: document APIM as the agent's public gateway
   - Design Decisions: add new row for AI Gateway (APIM) — centralised routing, Foundry registration prerequisite, observability
-- [ ] Update `docs/specs/infrastructure.md`:
+- [x] Update `docs/specs/infrastructure.md`:
   - Resource Inventory table: add APIM resource (`apim-{project}-{env}`, BasicV2)
   - Add new section `### API Management — AI Gateway (`apim.bicep`)` documenting SKU, configuration, and API definitions
   - Module Structure: add `apim.bicep` and `apim-agent-api.bicep`
@@ -462,29 +462,29 @@ Provision an Azure API Management (APIM) instance as an AI Gateway via Bicep, li
 
 #### Definition of Done
 
-- [ ] `az bicep build` succeeds with 0 errors
-- [ ] `azd provision` creates APIM resource `apim-{project}-{env}` (BasicV2)
-- [ ] APIM has `kb-agent-api` API definition with correct backend URL
-- [ ] Foundry project has APIM connection resource
-- [ ] Web app still works via internal FQDN (unchanged from Story 7)
-- [ ] `make azure-test-agent` still passes (direct external access still works)
-- [ ] `make azure-test-app` still passes (web app uses internal FQDN)
-- [ ] `make test` passes with zero regressions
-- [ ] `docs/specs/architecture.md` includes APIM in diagrams, deployment section, and design decisions
-- [ ] `docs/specs/infrastructure.md` documents APIM resource, module, RBAC, and outputs
+- [x] `az bicep build` succeeds with 0 errors
+- [x] `azd provision` creates APIM resource `apim-{project}-{env}` (BasicV2)
+- [x] APIM has `kb-agent-api` API definition with correct backend URL
+- [x] Foundry project has APIM connection resource
+- [x] Web app still works via internal FQDN (unchanged from Story 7)
+- [x] `make azure-test-agent` still passes (direct external access still works)
+- [x] `make azure-test-app` still passes (web app uses internal FQDN)
+- [x] `make test` passes with zero regressions
+- [x] `docs/specs/architecture.md` includes APIM in diagrams, deployment section, and design decisions
+- [x] `docs/specs/infrastructure.md` documents APIM resource, module, RBAC, and outputs
 
 ---
 
-### Story 9 — Agent Registration & Post-Deploy Configuration
+### Story 9 — Agent Registration & Post-Deploy Configuration ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 8
 
 Update the agent registration script to use the AI Gateway (APIM) instead of direct ARM API, capture the Foundry-generated proxy URL, and create a post-deploy configuration script that pushes the proxy URL to the web app Container App. After this story, registration works end-to-end and the `azure-up` Makefile chain is complete.
 
 #### Deliverables
 
-- [ ] Update `scripts/register-agent.sh`:
+- [x] Update `scripts/register-agent.sh`:
   - Register the agent through the Foundry AI Gateway (not direct ARM PUT to `applications/kb-agent`)
   - Use the agent's external HTTPS URL as the backend endpoint in the registration payload
   - Ensure `agent_id=kb-agent` is preserved
@@ -493,14 +493,14 @@ Update the agent registration script to use the AI Gateway (APIM) instead of dir
   - **Capture the Foundry-generated proxy URL** from the registration response
   - Store the proxy URL in AZD env as `AGENT_REGISTERED_URL` (e.g., `azd env set AGENT_REGISTERED_URL <url>`)
   - Remain idempotent (re-run updates existing registration)
-- [ ] Update `Makefile` — `azure-register-agent` target:
+- [x] Update `Makefile` — `azure-register-agent` target:
   - Ensure it reads the new env var (`APIM_GATEWAY_URL`)
   - Add a pre-check that APIM is provisioned before running
-- [ ] Create `scripts/configure-app-agent-endpoint.sh`:
+- [x] Create `scripts/configure-app-agent-endpoint.sh`:
   - Read `AGENT_REGISTERED_URL` from AZD env
   - Update the web app Container App's `AGENT_ENDPOINT` env var to the registered proxy URL (via `az containerapp update` or `az containerapp env var set`)
   - Idempotent — safe to re-run
-- [ ] Update `Makefile` — add `azure-configure-app` target:
+- [x] Update `Makefile` — add `azure-configure-app` target:
   - Runs `configure-app-agent-endpoint.sh`
   - Called after `azure-register-agent` in the `azure-up` target sequence
   - Update `azure-up` dependency chain: `azure-provision` → `azure-deploy` → `azure-register-agent` → `azure-configure-app` → `azure-setup-auth`
@@ -514,20 +514,20 @@ Update the agent registration script to use the AI Gateway (APIM) instead of dir
 
 #### Definition of Done
 
-- [ ] `make azure-register-agent` successfully registers the agent via AI Gateway
-- [ ] Agent appears in Foundry portal under Operate → Assets with `agent_id=kb-agent`
-- [ ] `AGENT_REGISTERED_URL` is captured and stored in AZD env
-- [ ] `make azure-configure-app` updates web app's `AGENT_ENDPOINT` to the registered proxy URL
-- [ ] Registration is idempotent (re-running does not fail or create duplicates)
-- [ ] `make azure-up` runs the full chain: provision → deploy → register → configure → auth
-- [ ] `make azure-test-agent` still passes (direct external access still works)
-- [ ] `make test` passes with zero regressions
+- [x] `make azure-register-agent` successfully registers the agent via AI Gateway
+- [x] Agent appears in Foundry portal under Operate → Assets with `agent_id=kb-agent`
+- [x] `AGENT_REGISTERED_URL` is captured and stored in AZD env
+- [x] `make azure-configure-app` updates web app's `AGENT_ENDPOINT` to the registered proxy URL
+- [x] Registration is idempotent (re-running does not fail or create duplicates)
+- [x] `make azure-up` runs the full chain: provision → deploy → register → configure → auth
+- [x] `make azure-test-agent` still passes (direct external access still works)
+- [x] `make test` passes with zero regressions
 
 ---
 
-### Story 10 — Web App Gateway Routing & Documentation
+### Story 10 — Web App Gateway Routing & Documentation ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 9
 
 Wire the web app to call the agent through the registered APIM proxy URL with Entra bearer tokens, create the ARD for the external auth + gateway decision, and update architecture/infrastructure docs. After this story, the full chain works: Web App → APIM (registered agent URL) → Agent.
@@ -536,29 +536,29 @@ Wire the web app to call the agent through the registered APIM proxy URL with En
 
 **Web App Routing:**
 
-- [ ] Update `src/web-app/app/main.py` — `_create_agent_client()`:
+- [x] Update `src/web-app/app/main.py` — `_create_agent_client()`:
   - Detect `https://` endpoint (registered APIM proxy URL) and acquire Entra bearer token via `DefaultAzureCredential` with scope `https://ai.azure.com/.default`
   - Pass token as `Authorization: Bearer` header on agent calls
   - Keep `http://` path for local dev (no auth, `http://localhost:8088`)
-- [ ] Update `src/web-app/app/config.py` if validation needs updating for new endpoint format
-- [ ] Update `src/web-app/.env.sample` — document that `AGENT_ENDPOINT` points to the registered APIM proxy URL in Azure
-- [ ] Add `azure-identity` to `src/web-app/pyproject.toml` if not already present (needed for `DefaultAzureCredential`)
+- [x] Update `src/web-app/app/config.py` if validation needs updating for new endpoint format (not needed — no validation changes required)
+- [x] Update `src/web-app/.env.sample` — document that `AGENT_ENDPOINT` points to the registered APIM proxy URL in Azure
+- [x] Add `azure-identity` to `src/web-app/pyproject.toml` if not already present (already present — `azure-identity>=1.19.0`)
 
 **Documentation:**
 
-- [ ] Create `docs/ards/ARD-010-agent-external-auth-gateway.md`:
+- [x] Create `docs/ards/ARD-010-agent-external-auth-gateway.md`:
   - Context: agent was internal-only (Stories 1–6), limiting testing and Foundry integration
   - Decision: external HTTPS ingress + in-code JWT validation + APIM AI Gateway + registration via gateway
   - Trade-offs: added infra cost (APIM ~$50/month dev) and complexity vs. external accessibility, proper Foundry integration, and testability
   - Alternatives considered: VNet-integrated APIM (overkill for dev), Easy Auth on agent (sidecar complexity), portal-only APIM setup (not IaC)
   - Status: Accepted
-- [ ] Update `docs/specs/architecture.md`:
+- [x] Update `docs/specs/architecture.md`:
   - Agent Registration section: document that registration goes through AI Gateway, not direct ARM API
   - Foundry integration: update to describe the APIM proxy model — Foundry generates a gateway URL, clients use that URL
   - Web App Components → OpenAI SDK Client: document Entra token acquisition for registered endpoint
   - Conversation Flow: update to show `Web App → APIM (registered URL) → Agent` path
   - Add note that `scripts/register-agent.sh` must run before `configure-app-agent-endpoint.sh`
-- [ ] Update `docs/specs/infrastructure.md`:
+- [x] Update `docs/specs/infrastructure.md`:
   - Makefile Targets table: add `azure-configure-app` and update `azure-register-agent` description to mention AI Gateway requirement
   - Foundry Project section: document that agent registration requires APIM gateway connection
   - Deployment section: document the post-deploy `register → configure` step sequence
@@ -571,10 +571,10 @@ Wire the web app to call the agent through the registered APIM proxy URL with En
 
 #### Definition of Done
 
-- [ ] Web app acquires Entra token and routes agent calls through the registered APIM endpoint
-- [ ] `make azure-test-app` passes (web app reaches agent via registered APIM URL)
-- [ ] `make azure-test-agent` still passes (direct external access still works)
-- [ ] `docs/ards/ARD-010-agent-external-auth-gateway.md` documents the full decision with trade-offs
-- [ ] `docs/specs/architecture.md` reflects gateway-based registration, APIM proxy model, and web app routing
-- [ ] `docs/specs/infrastructure.md` reflects updated registration flow, Makefile targets, and deployment sequence
-- [ ] `make test` passes with zero regressions
+- [x] Web app acquires Entra token and routes agent calls through the registered APIM endpoint
+- [x] `make azure-test-app` passes (web app reaches agent via registered APIM URL)
+- [x] `make azure-test-agent` still passes (direct external access still works)
+- [x] `docs/ards/ARD-010-agent-external-auth-gateway.md` documents the full decision with trade-offs
+- [x] `docs/specs/architecture.md` reflects gateway-based registration, APIM proxy model, and web app routing
+- [x] `docs/specs/infrastructure.md` reflects updated registration flow, Makefile targets, and deployment sequence
+- [x] `make test` passes with zero regressions

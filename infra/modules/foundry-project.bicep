@@ -27,6 +27,9 @@ param appInsightsConnectionString string = ''
 @description('Principal ID of the web app Container App MI — gets Azure AI User role to call the agent Responses API')
 param webAppPrincipalId string = ''
 
+@description('APIM resource ID for AI Gateway connection')
+param apimResourceId string = ''
+
 // ---------------------------------------------------------------------------
 // Foundry Project (child of AIServices)
 // ---------------------------------------------------------------------------
@@ -135,6 +138,25 @@ resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/connections
     metadata: {
       ApiType: 'Azure'
       ResourceId: appInsightsResourceId
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Connection: API Management — enables Foundry agent registration via
+// the AI Gateway. Required before register-agent.sh can register agents.
+// ---------------------------------------------------------------------------
+resource apimConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = if (!empty(apimResourceId)) {
+  parent: aiServicesAccount
+  name: 'apim-connection'
+  properties: {
+    category: 'ApiManagement'
+    target: apimResourceId
+    authType: 'None'
+    isSharedToAll: true
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: apimResourceId
     }
   }
 }

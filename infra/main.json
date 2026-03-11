@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "8009336457202925982"
+      "templateHash": "633671766532000272"
     }
   },
   "parameters": {
@@ -3060,6 +3060,9 @@
           },
           "webAppPrincipalId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'container-app'), '2025-04-01').outputs.containerAppPrincipalId.value]"
+          },
+          "apimResourceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimResourceId.value]"
           }
         },
         "template": {
@@ -3069,7 +3072,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "16208843410036895751"
+              "templateHash": "5342550864311632818"
             }
           },
           "parameters": {
@@ -3118,6 +3121,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Principal ID of the web app Container App MI — gets Azure AI User role to call the agent Responses API"
+              }
+            },
+            "apimResourceId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "APIM resource ID for AI Gateway connection"
               }
             }
           },
@@ -3207,6 +3217,22 @@
                   "ResourceId": "[parameters('appInsightsResourceId')]"
                 }
               }
+            },
+            {
+              "condition": "[not(empty(parameters('apimResourceId')))]",
+              "type": "Microsoft.CognitiveServices/accounts/connections",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', format('ai-{0}', parameters('baseName')), 'apim-connection')]",
+              "properties": {
+                "category": "ApiManagement",
+                "target": "[parameters('apimResourceId')]",
+                "authType": "None",
+                "isSharedToAll": true,
+                "metadata": {
+                  "ApiType": "Azure",
+                  "ResourceId": "[parameters('apimResourceId')]"
+                }
+              }
             }
           ],
           "outputs": {
@@ -3230,6 +3256,7 @@
         }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]",
         "[resourceId('Microsoft.Resources/deployments', 'container-app')]",
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
       ]
@@ -3294,7 +3321,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "7726786858299647436"
+              "templateHash": "12789111319920632466"
             }
           },
           "parameters": {
@@ -3428,10 +3455,10 @@
                 "configuration": {
                   "activeRevisionsMode": "Single",
                   "ingress": {
-                    "external": false,
+                    "external": true,
                     "targetPort": 8088,
                     "transport": "auto",
-                    "allowInsecure": true
+                    "allowInsecure": false
                   },
                   "registries": [
                     {
@@ -3489,6 +3516,10 @@
                         {
                           "name": "OTEL_SERVICE_NAME",
                           "value": "kb-agent"
+                        },
+                        {
+                          "name": "REQUIRE_AUTH",
+                          "value": "true"
                         }
                       ]
                     }
@@ -3520,6 +3551,10 @@
               "type": "string",
               "value": "[format('http://{0}.internal.{1}', variables('appName'), parameters('containerAppsEnvDefaultDomain'))]"
             },
+            "agentExternalUrl": {
+              "type": "string",
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn)]"
+            },
             "agentPrincipalId": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01', 'full').identity.principalId]"
@@ -3539,6 +3574,244 @@
         "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
         "[resourceId('Microsoft.Resources/deployments', 'search')]",
         "[resourceId('Microsoft.Resources/deployments', 'serving-storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "baseName": {
+            "value": "[variables('baseName')]"
+          },
+          "tags": {
+            "value": "[variables('defaultTags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "11883983338752261375"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "baseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Base name used for resource naming"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to all resources"
+              }
+            },
+            "skuName": {
+              "type": "string",
+              "defaultValue": "BasicV2",
+              "metadata": {
+                "description": "APIM SKU name"
+              }
+            },
+            "publisherName": {
+              "type": "string",
+              "defaultValue": "KB Agent Team",
+              "metadata": {
+                "description": "Publisher name for APIM"
+              }
+            },
+            "publisherEmail": {
+              "type": "string",
+              "defaultValue": "noreply@example.com",
+              "metadata": {
+                "description": "Publisher email for APIM"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('apim-{0}', parameters('baseName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "[parameters('skuName')]",
+                "capacity": 1
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "publisherName": "[parameters('publisherName')]",
+                "publisherEmail": "[parameters('publisherEmail')]"
+              }
+            }
+          ],
+          "outputs": {
+            "apimName": {
+              "type": "string",
+              "value": "[format('apim-{0}', parameters('baseName'))]"
+            },
+            "apimGatewayUrl": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', format('apim-{0}', parameters('baseName'))), '2024-06-01-preview').gatewayUrl]"
+            },
+            "apimPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', format('apim-{0}', parameters('baseName'))), '2024-06-01-preview', 'full').identity.principalId]"
+            },
+            "apimResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service', format('apim-{0}', parameters('baseName')))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-agent-api",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "agentExternalUrl": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentExternalUrl.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "15023398003171200556"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM resource"
+              }
+            },
+            "agentExternalUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Agent external HTTPS URL (e.g., https://agent-xxx.azurecontainerapps.io)"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service/backends",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'kb-agent-backend')]",
+              "properties": {
+                "url": "[parameters('agentExternalUrl')]",
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'kb-agent-api')]",
+              "properties": {
+                "displayName": "KB Agent API",
+                "path": "",
+                "protocols": [
+                  "https"
+                ],
+                "subscriptionRequired": false,
+                "serviceUrl": "[parameters('agentExternalUrl')]"
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/policies",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'kb-agent-api', 'policy')]",
+              "properties": {
+                "format": "rawxml",
+                "value": "<policies><inbound><base /><set-backend-service backend-id=\"kb-agent-backend\" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'kb-agent-api')]",
+                "[resourceId('Microsoft.ApiManagement/service/backends', parameters('apimName'), 'kb-agent-backend')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'kb-agent-api', 'post-responses')]",
+              "properties": {
+                "displayName": "Process message",
+                "method": "POST",
+                "urlTemplate": "/responses"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'kb-agent-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'kb-agent-api', 'get-liveness')]",
+              "properties": {
+                "displayName": "Liveness probe",
+                "method": "GET",
+                "urlTemplate": "/liveness"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'kb-agent-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'kb-agent-api', 'get-readiness')]",
+              "properties": {
+                "displayName": "Readiness probe",
+                "method": "GET",
+                "urlTemplate": "/readiness"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'kb-agent-api')]"
+              ]
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'agent-container-app')]",
+        "[resourceId('Microsoft.Resources/deployments', 'apim')]"
       ]
     },
     {
@@ -7246,6 +7519,18 @@
     "AGENT_ENDPOINT": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentEndpoint.value]"
+    },
+    "AGENT_EXTERNAL_URL": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'agent-container-app'), '2025-04-01').outputs.agentExternalUrl.value]"
+    },
+    "APIM_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimName.value]"
+    },
+    "APIM_GATEWAY_URL": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.apimGatewayUrl.value]"
     },
     "COSMOS_ENDPOINT": {
       "type": "string",

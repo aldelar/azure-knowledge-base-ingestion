@@ -103,6 +103,7 @@ flowchart LR
             AGENT["<b>ChatAgent</b><br/>search tool + reasoning"]
             VIS["<b>Vision Middleware</b><br/>Image injection"]
         end
+        APIM["APIM<br/>AI Gateway"]
         subgraph WebApp["Web App — Container Apps"]
             direction TB
             PROXY["<b>Image Proxy</b><br/>/api/images/*"]
@@ -125,7 +126,8 @@ flowchart LR
     AGENT -->|query| AIS
     VIS -->|fetch images| SA2
 
-    CHAT -->|Responses API| AGENT
+    CHAT -->|Responses API| APIM
+    APIM -->|proxy| AGENT
     CHAT -->|read/write| COSMOS
     PROXY -->|serve images| SA2
 
@@ -141,7 +143,7 @@ The solution consists of two services: a standalone **KB Agent** deployed as an 
 
 ### Agent (Container App)
 
-The agent runs as a FastAPI service on port 8088, deployed as an Azure Container App with internal-only ingress. It exposes three endpoints:
+The agent runs as a FastAPI service on port 8088, deployed as an Azure Container App with external HTTPS ingress and in-code JWT validation. It exposes three endpoints:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -162,7 +164,7 @@ The web app is a Chainlit-based UI that calls the agent via the Responses API. I
 
 #### Web App Components
 
-- **OpenAI SDK Client** — Calls the agent via `client.responses.create(input=..., stream=True)`. Always plain HTTP — no auth needed (both local `http://localhost:8088` and deployed internal FQDN use `http://`).
+- **OpenAI SDK Client** — Calls the agent via `client.responses.create(input=..., stream=True)`. Local dev uses plain HTTP (`http://localhost:8088`). Deployed: routed through registered APIM proxy URL with Entra bearer token.
 - **Context Window Management** — Maintains in-memory conversation history per session. Estimates tokens (4 chars ≈ 1 token) and drops oldest messages when context exceeds 120K tokens (leaving headroom for response). Cosmos DB retains the full conversation (append-only).
 - **Cosmos DB Data Layer** — `CosmosDataLayer(BaseDataLayer)` stores conversations in Cosmos DB NoSQL (serverless). Partition key: `/userId`. Auto-title from first user message (80 chars max). Supports thread listing, resume, and deletion.
 - **Image Proxy** — A FastAPI endpoint (`/api/images/{article_id}/{image_path}`) that downloads images from the serving blob account on demand. Chainlit renders standard `![alt](/api/images/...)` markdown natively, and the browser fetches images from this same-origin proxy.
@@ -173,8 +175,8 @@ The web app is a Chainlit-based UI that calls the agent via the Responses API. I
 
 ```
 User message → Web App → Build context (system prompt + history from Cosmos)
-                       → POST /v1/responses (stream=True)
-                       → Agent (FastAPI) → ChatAgent.run_stream()
+                       → POST /v1/responses (stream=True) via APIM proxy
+                       → APIM → Agent (FastAPI) → ChatAgent.run_stream()
                                          → search_knowledge_base tool
                                          → Vision middleware (download + inject images)
                                          → LLM response (streamed SSE)
@@ -239,13 +241,14 @@ Despite explicit system prompt instructions, LLMs generate image URLs in many cr
 |---|----------|-----------|
 | 1 | Two-service split (Agent + Web App) | Agent is a standalone Container App with its own managed identity and RBAC. Web app is a thin client — no agent logic, search code, or vision middleware. Clean separation of concerns. |
 | 2 | Microsoft Agent Framework | Provides `ChatAgent` with built-in tool calling, conversation threading, and Azure OpenAI integration — avoids manual Responses API loop management. |
-| 3 | Responses API integration | Web app calls agent via OpenAI SDK `client.responses.create()`. Standard protocol, always plain HTTP (internal-only ingress), streaming SSE. |
+| 3 | Responses API integration | Web app calls agent via OpenAI SDK `client.responses.create()`. Standard protocol, local dev uses plain HTTP, deployed uses APIM proxy with Entra bearer token, streaming SSE. |
 | 4 | Vision middleware for image injection | `ChatMiddleware` intercepts tool results and injects images as `DataContent`. The framework auto-converts to OpenAI's vision format. The LLM can reason about visual content (diagrams, architecture charts) not just text descriptions — producing higher-fidelity answers. |
 | 5 | Cosmos DB conversation persistence | Serverless NoSQL with `/userId` partition key. Replaces in-memory-only thread storage. Supports conversation resume, history panel, and cross-session continuity. |
 | 6 | Same-origin image proxy | Avoids SAS URL complexity (token expiry, CORS). Chainlit renders `![alt](/api/images/...)` as native markdown; browser fetches from same origin. Images persist across `msg.update()` re-renders. |
 | 7 | Post-processing normalisation (not base64 `<img>`) | Chainlit strips HTML `<img>` tags on `msg.update()`, causing grey boxes. Native markdown `![alt](url)` survives re-rendering. The normaliser ensures all URLs point to the proxy. |
 | 8 | Hybrid search | Best relevance — combines vector similarity and keyword matching. |
 | 9 | Chainlit | Purpose-built chat UI with native streaming, `cl.Text` side panels for citations, and markdown rendering. Single `chainlit run` command. |
+| 10 | AI Gateway (APIM) | Centralised API gateway for agent traffic. Enables Foundry agent registration (requires APIM connection), provides a stable proxy URL, and supports future rate limiting, monitoring, and access control. BasicV2 SKU for dev/test (~$50/month). |
 
 For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md) and [Epic 005](../epics/005-hosted-agent-foundry.md).
 
@@ -254,21 +257,22 @@ For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md) an
 The solution deploys **six services**: 4 function Container Apps (one per pipeline function), an agent Container App, and a Chainlit web app.
 
 1. **Function Apps** — 4 independent Container Apps, one per pipeline function, each with its own Docker image and managed identity. See [Function Apps Deployment](#function-apps-deployment-container-apps) below.
-2. **Agent** — Deployed as a **standard Azure Container App** (`agent-{project}-{env}`) with internal-only ingress on port 8088. System-assigned managed identity with RBAC for AI Services, AI Search, and Serving Storage. Foundry project retained for tracing and agent registration.
+2. **Agent** — Deployed as a **standard Azure Container App** (`agent-{project}-{env}`) with external HTTPS ingress and in-code JWT validation on port 8088. System-assigned managed identity with RBAC for AI Services, AI Search, and Serving Storage. Foundry project retained for tracing and agent registration.
 3. **Web App** — Deployed to **Azure Container Apps** with **Entra ID Easy Auth** (single-tenant).
 
 #### Agent Deployment (Container App)
 
 - **Container image** built from `src/agent/Dockerfile` (Python 3.12, FastAPI + uvicorn, port 8088)
 - **AZD service** defined in `azure.yaml` as `host: containerapp`, `language: python`
-- **Infrastructure** defined in `infra/modules/agent-container-app.bicep`: internal-only ingress, 1.0 CPU / 2 GiB memory, system-assigned managed identity
+- **Infrastructure** defined in `infra/modules/agent-container-app.bicep`: external HTTPS ingress with JWT auth, 1.0 CPU / 2 GiB memory, system-assigned managed identity
 - **RBAC** (Bicep-managed): Cognitive Services User + Azure AI User on AI Services, Search Index Data Reader + Search Service Contributor on AI Search, Storage Blob Data Reader on Serving Storage
 - **Deployment** via `azd deploy --service agent` — builds Docker image in ACR, deploys to Container Apps
 - **Registration** (optional): `make azure-register-agent` registers the agent in Foundry portal (Operate → Assets) for visibility
+- **AI Gateway**: APIM (`apim-{project}-{env}`, BasicV2) proxies all external agent traffic. Foundry registers the agent via the APIM gateway connection.
 - **Foundry integration**: Foundry project retained for App Insights tracing (`APPLICATIONINSIGHTS_CONNECTION_STRING` + `OTEL_SERVICE_NAME=kb-agent`); no ACR connection or capability host
-- **Agent endpoint**: internal FQDN `http://agent-{project}-{env}.internal.{cae-domain}` — web app connects via plain HTTP
+- **Agent endpoint**: internal FQDN `http://agent-{project}-{env}.internal.{cae-domain}` for direct access; registered APIM proxy URL for gateway routing (set by `configure-app-agent-endpoint.sh`)
 
-See [ARD-005](../ards/ARD-005-foundry-hosted-agent.md), [ARD-009](../ards/ARD-009-agent-container-apps.md), and [Research 006](../research/006-foundry-hosted-agent-deployment.md) for deployment history.
+See [ARD-005](../ards/ARD-005-foundry-hosted-agent.md), [ARD-009](../ards/ARD-009-agent-container-apps.md), [ARD-010](../ards/ARD-010-agent-external-auth-gateway.md), and [Research 006](../research/006-foundry-hosted-agent-deployment.md) for deployment history.
 
 #### Function Apps Deployment (Container Apps)
 
@@ -333,6 +337,20 @@ Each service has its own identity with least-privilege roles.
 | AcrPull | Container Registry | Pull Docker images |
 
 For infrastructure details, see [Infrastructure](../specs/infrastructure.md). For deployment epics, see [Epic 003](../epics/003-web-app-azure-deployment.md) and [Epic 005](../epics/005-hosted-agent-foundry.md).
+
+### Agent Registration & Gateway Routing
+
+Agent registration and web app routing use a post-deploy script sequence:
+
+1. **`scripts/register-agent.sh`** — Registers the agent in Foundry via the AI Gateway (APIM). Verifies APIM connection exists, PUTs to the applications API with the agent's external HTTPS URL, and captures the Foundry-generated proxy URL as `AGENT_REGISTERED_URL` in AZD env.
+2. **`scripts/configure-app-agent-endpoint.sh`** — Updates the web app Container App's `AGENT_ENDPOINT` env var to the registered proxy URL. This switches the web app from internal FQDN to gateway routing.
+
+The web app's `_create_agent_client()` detects `https://` endpoints and acquires Entra bearer tokens via `DefaultAzureCredential`. Local dev uses `http://localhost:8088` with no auth.
+
+```
+make azure-up
+# → azure-provision → azure-deploy → azure-register-agent → azure-configure-app → azure-setup-auth
+```
 
 ---
 

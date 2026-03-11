@@ -85,10 +85,10 @@ class TestTrimContext:
 # ---------------------------------------------------------------------------
 
 class TestCreateAgentClient:
-    """Test _create_agent_client — always plain HTTP."""
+    """Test _create_agent_client — HTTP (no auth) and HTTPS (Entra auth)."""
 
     @patch("app.main.config")
-    def test_local_endpoint(self, mock_config: MagicMock) -> None:
+    def test_local_endpoint_no_auth(self, mock_config: MagicMock) -> None:
         mock_config.agent_endpoint = "http://localhost:8088"
 
         client = _create_agent_client()
@@ -97,13 +97,37 @@ class TestCreateAgentClient:
         assert client.base_url.host == "localhost"
 
     @patch("app.main.config")
-    def test_internal_fqdn_endpoint(self, mock_config: MagicMock) -> None:
+    def test_internal_fqdn_no_auth(self, mock_config: MagicMock) -> None:
         mock_config.agent_endpoint = "http://agent-myproj.internal.cae-domain.eastus2.azurecontainerapps.io"
 
         client = _create_agent_client()
 
         assert client.api_key == "local"
         assert "agent-myproj" in str(client.base_url)
+
+    @patch("app.main.DefaultAzureCredential")
+    @patch("app.main.config")
+    def test_https_endpoint_acquires_entra_token(self, mock_config: MagicMock, mock_cred_cls: MagicMock) -> None:
+        mock_config.agent_endpoint = "https://apim-myproj-dev.azure-api.net/kb-agent"
+        mock_cred = mock_cred_cls.return_value
+        mock_cred.get_token.return_value = MagicMock(token="fake-entra-token")
+
+        client = _create_agent_client()
+
+        mock_cred.get_token.assert_called_once_with("https://ai.azure.com/.default")
+        assert client.api_key == "fake-entra-token"
+        assert "apim-myproj-dev" in str(client.base_url)
+
+    @patch("app.main.DefaultAzureCredential")
+    @patch("app.main.config")
+    def test_https_endpoint_uses_correct_scope(self, mock_config: MagicMock, mock_cred_cls: MagicMock) -> None:
+        mock_config.agent_endpoint = "https://some-gateway.azure-api.net/agent"
+        mock_cred = mock_cred_cls.return_value
+        mock_cred.get_token.return_value = MagicMock(token="another-token")
+
+        _create_agent_client()
+
+        mock_cred.get_token.assert_called_once_with("https://ai.azure.com/.default")
 
 
 # ---------------------------------------------------------------------------
