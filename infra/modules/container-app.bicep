@@ -103,14 +103,16 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
         allowInsecure: false
       }
-      // Always configure ACR registry so AZD deploy can push images
-      // immediately after first provision without requiring a re-provision.
-      registries: [
+      // Only configure ACR registry when a real ACR image is used.
+      // On initial provisioning (placeholder image), omit ACR to avoid
+      // registry validation blocking revision creation before AcrPull role propagates.
+      // azd deploy updates the registry config when pushing the real image.
+      registries: useAcrImage ? [
         {
           server: acrLoginServer
           identity: 'system'
         }
-      ]
+      ] : []
     }
     template: {
       containers: [

@@ -61,7 +61,7 @@ echo ""
 echo "Registering agent application..."
 REGISTER_OUTPUT=$(az rest --method PUT \
     --url "$ARM_BASE/applications/kb-agent?api-version=$API_VERSION" \
-    --body "{\"properties\":{\"displayName\":\"KB Agent\",\"agents\":[{\"agentName\":\"kb-agent\"}],\"endpoint\":{\"uri\":\"$AGENT_EXTERNAL_URL\",\"authentication\":{\"type\":\"None\"}}}}" \
+    --body "{\"properties\":{\"displayName\":\"KB Agent\",\"agents\":[{\"agentName\":\"kb-agent\"}],\"definition\":{\"endpoint\":{\"uri\":\"$AGENT_EXTERNAL_URL\",\"authentication\":{\"type\":\"None\"}}}}}" \
     -o json 2>&1) || {
     echo "ERROR: Failed to register agent."
     echo "$REGISTER_OUTPUT"

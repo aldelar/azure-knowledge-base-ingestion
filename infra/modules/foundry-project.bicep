@@ -152,7 +152,7 @@ resource apimConnection 'Microsoft.CognitiveServices/accounts/connections@2025-0
   properties: {
     category: 'ApiManagement'
     target: apimResourceId
-    authType: 'None'
+    authType: 'AAD'
     isSharedToAll: true
     metadata: {
       ApiType: 'Azure'
