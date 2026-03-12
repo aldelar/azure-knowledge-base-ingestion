@@ -80,6 +80,9 @@ class TestCreateUser:
         assert result is not None
         assert result.identifier == "bob"
         mock_container.upsert_item.assert_called_once()
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert doc["conversationId"] == "__users__"
+        assert "userId" not in doc
 
 
 # ---------------------------------------------------------------------------
@@ -89,8 +92,8 @@ class TestCreateUser:
 class TestUpdateThread:
     @pytest.mark.asyncio
     async def test_creates_new_thread(self, data_layer, mock_container):
-        # _read_thread_doc returns None → cross-partition query returns empty
-        mock_container.query_items.return_value = iter([])
+        # _read_thread_doc returns CosmosResourceNotFoundError → new doc
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
 
         await data_layer.update_thread(
             thread_id="t1",
@@ -100,6 +103,7 @@ class TestUpdateThread:
         mock_container.upsert_item.assert_called_once()
         doc = mock_container.upsert_item.call_args[0][0]
         assert doc["id"] == "t1"
+        assert doc["conversationId"] == "t1"
         assert doc["name"] == "Test Thread"
         assert doc["userId"] == "alice"
 
@@ -107,13 +111,14 @@ class TestUpdateThread:
     async def test_updates_existing_thread(self, data_layer, mock_container):
         existing = {
             "id": "t1",
+            "conversationId": "t1",
             "userId": "alice",
             "name": "Old",
             "createdAt": "2025-01-01",
             "steps": [],
             "elements": [],
         }
-        mock_container.query_items.return_value = iter([existing])
+        mock_container.read_item.return_value = existing
 
         await data_layer.update_thread(thread_id="t1", name="New Name")
         doc = mock_container.upsert_item.call_args[0][0]
@@ -123,14 +128,15 @@ class TestUpdateThread:
 class TestGetThread:
     @pytest.mark.asyncio
     async def test_returns_thread(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([{
+        mock_container.read_item.return_value = {
             "id": "t1",
+            "conversationId": "t1",
             "userId": "alice",
             "createdAt": "2025-01-01",
             "name": "Test",
             "steps": [{"type": "user_message", "output": "Hello"}],
             "elements": [],
-        }])
+        }
 
         thread = await data_layer.get_thread("t1")
         assert thread is not None
@@ -139,9 +145,61 @@ class TestGetThread:
 
     @pytest.mark.asyncio
     async def test_returns_none_when_not_found(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([])
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
         thread = await data_layer.get_thread("missing")
         assert thread is None
+
+    @pytest.mark.asyncio
+    async def test_synthesizes_steps_from_session(self, data_layer, mock_container):
+        """When no steps but session has messages, synthesize steps."""
+        mock_container.read_item.return_value = {
+            "id": "t1",
+            "conversationId": "t1",
+            "userId": "alice",
+            "createdAt": "2025-01-01",
+            "name": "Test",
+            "steps": [],
+            "elements": [],
+            "session": {
+                "state": {
+                    "messages": [
+                        {"role": "user", "content": "Hello"},
+                        {"role": "assistant", "content": "Hi there!"},
+                    ]
+                }
+            },
+        }
+        thread = await data_layer.get_thread("t1")
+        assert thread is not None
+        assert len(thread["steps"]) == 2
+        assert thread["steps"][0]["type"] == "user_message"
+        assert thread["steps"][0]["output"] == "Hello"
+        assert thread["steps"][1]["type"] == "assistant_message"
+        assert thread["steps"][1]["output"] == "Hi there!"
+
+    @pytest.mark.asyncio
+    async def test_synthesizes_steps_from_content_parts(self, data_layer, mock_container):
+        """Content as list of parts is handled correctly."""
+        mock_container.read_item.return_value = {
+            "id": "t1",
+            "conversationId": "t1",
+            "createdAt": "2025-01-01",
+            "steps": [],
+            "elements": [],
+            "session": {
+                "state": {
+                    "messages": [
+                        {"role": "user", "content": [
+                            {"type": "text", "text": "Part 1"},
+                            {"type": "image_url", "url": "..."},
+                            {"type": "text", "text": "Part 2"},
+                        ]},
+                    ]
+                }
+            },
+        }
+        thread = await data_layer.get_thread("t1")
+        assert thread["steps"][0]["output"] == "Part 1 Part 2"
 
 
 class TestListThreads:
@@ -179,42 +237,39 @@ class TestListThreads:
 class TestDeleteThread:
     @pytest.mark.asyncio
     async def test_deletes_existing_thread(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([{
-            "id": "t1", "userId": "alice", "steps": [], "elements": [],
-        }])
         await data_layer.delete_thread("t1")
         mock_container.delete_item.assert_called_once_with(
-            item="t1", partition_key="alice"
+            item="t1", partition_key="t1"
         )
 
     @pytest.mark.asyncio
     async def test_no_error_when_not_found(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([])
+        mock_container.delete_item.side_effect = CosmosResourceNotFoundError()
         await data_layer.delete_thread("missing")
-        mock_container.delete_item.assert_not_called()
+        mock_container.delete_item.assert_called_once()
 
 
 class TestGetThreadAuthor:
     @pytest.mark.asyncio
     async def test_returns_clean_id_when_prefixed(self, data_layer, mock_container):
         """Legacy docs store userId as 'user:local-user'; author must be 'local-user'."""
-        mock_container.query_items.return_value = iter([
-            {"id": "t1", "userId": "user:local-user", "steps": [], "elements": []},
-        ])
+        mock_container.read_item.return_value = {
+            "id": "t1", "userId": "user:local-user", "steps": [], "elements": [],
+        }
         author = await data_layer.get_thread_author("t1")
         assert author == "local-user"
 
     @pytest.mark.asyncio
     async def test_returns_clean_id_when_not_prefixed(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([
-            {"id": "t2", "userId": "local-user", "steps": [], "elements": []},
-        ])
+        mock_container.read_item.return_value = {
+            "id": "t2", "userId": "local-user", "steps": [], "elements": [],
+        }
         author = await data_layer.get_thread_author("t2")
         assert author == "local-user"
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_not_found(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([])
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
         author = await data_layer.get_thread_author("missing")
         assert author == ""
 
@@ -227,9 +282,9 @@ class TestCreateStep:
     @pytest.mark.asyncio
     async def test_appends_step(self, data_layer, mock_container):
         existing = {
-            "id": "t1", "userId": "alice", "steps": [], "elements": [],
+            "id": "t1", "conversationId": "t1", "userId": "alice", "steps": [], "elements": [],
         }
-        mock_container.query_items.return_value = iter([existing])
+        mock_container.read_item.return_value = existing
 
         await data_layer.create_step({
             "threadId": "t1",
@@ -243,12 +298,13 @@ class TestCreateStep:
 
     @pytest.mark.asyncio
     async def test_auto_creates_thread_when_not_found(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([])
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
         await data_layer.create_step({"threadId": "missing", "type": "user_message"})
         # Thread is auto-created on the fly when document doesn't exist
         mock_container.upsert_item.assert_called_once()
         doc = mock_container.upsert_item.call_args[0][0]
         assert doc["id"] == "missing"
+        assert doc["conversationId"] == "missing"
         assert len(doc["steps"]) == 1
 
 
@@ -256,11 +312,11 @@ class TestUpdateStep:
     @pytest.mark.asyncio
     async def test_replaces_existing_step(self, data_layer, mock_container):
         existing = {
-            "id": "t1", "userId": "alice",
+            "id": "t1", "conversationId": "t1", "userId": "alice",
             "steps": [{"id": "s1", "output": "old"}],
             "elements": [],
         }
-        mock_container.query_items.return_value = iter([existing])
+        mock_container.read_item.return_value = existing
 
         await data_layer.update_step({
             "threadId": "t1", "id": "s1", "output": "new",
@@ -294,7 +350,7 @@ class TestUpdateThreadNormalization:
 
     @pytest.mark.asyncio
     async def test_strips_user_prefix_on_create(self, data_layer, mock_container):
-        mock_container.query_items.return_value = iter([])
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
 
         await data_layer.update_thread(
             thread_id="t1",
@@ -308,13 +364,14 @@ class TestUpdateThreadNormalization:
     async def test_strips_user_prefix_on_update(self, data_layer, mock_container):
         existing = {
             "id": "t1",
+            "conversationId": "t1",
             "userId": "user:alice",
             "name": "Old",
             "createdAt": "2025-01-01",
             "steps": [],
             "elements": [],
         }
-        mock_container.query_items.return_value = iter([existing])
+        mock_container.read_item.return_value = existing
 
         await data_layer.update_thread(
             thread_id="t1",
@@ -388,6 +445,341 @@ class TestMisc:
     @pytest.mark.asyncio
     async def test_get_favorite_steps(self, data_layer):
         assert await data_layer.get_favorite_steps("user1") == []
+
+
+# ---------------------------------------------------------------------------
+# Config tests
+# ---------------------------------------------------------------------------
+
+class TestCosmosSessionsContainerConfig:
+    def test_default_value(self):
+        from app.config import config
+        assert config.cosmos_sessions_container == "agent-sessions"
+
+    def test_from_env_var(self):
+        import os
+        from app.config import _load_config
+
+        old = os.environ.get("COSMOS_SESSIONS_CONTAINER")
+        try:
+            os.environ["COSMOS_SESSIONS_CONTAINER"] = "custom-container"
+            cfg = _load_config()
+            assert cfg.cosmos_sessions_container == "custom-container"
+        finally:
+            if old is None:
+                os.environ.pop("COSMOS_SESSIONS_CONTAINER", None)
+            else:
+                os.environ["COSMOS_SESSIONS_CONTAINER"] = old
+
+
+# ---------------------------------------------------------------------------
+# _read_thread_doc tests
+# ---------------------------------------------------------------------------
+
+class TestReadThreadDoc:
+    def test_uses_point_read_with_partition_key(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {"id": "t1", "conversationId": "t1"}
+        doc = data_layer._read_thread_doc("t1")
+        mock_container.read_item.assert_called_once_with(item="t1", partition_key="t1")
+        assert doc["id"] == "t1"
+
+    def test_returns_none_on_not_found(self, data_layer, mock_container):
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
+        assert data_layer._read_thread_doc("missing") is None
+
+    def test_returns_none_in_degraded_mode(self, degraded_layer):
+        assert degraded_layer._read_thread_doc("t1") is None
+
+
+# ---------------------------------------------------------------------------
+# get_thread session synthesis edge cases
+# ---------------------------------------------------------------------------
+
+class TestGetThreadSessionEdgeCases:
+    @pytest.mark.asyncio
+    async def test_session_with_no_state_key(self, data_layer, mock_container):
+        """Session dict without 'state' → empty steps."""
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [], "elements": [],
+            "session": {"other": "data"},
+        }
+        thread = await data_layer.get_thread("t1")
+        assert thread["steps"] == []
+
+    @pytest.mark.asyncio
+    async def test_session_with_empty_messages(self, data_layer, mock_container):
+        """Session with messages: [] → empty steps."""
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [], "elements": [],
+            "session": {"state": {"messages": []}},
+        }
+        thread = await data_layer.get_thread("t1")
+        assert thread["steps"] == []
+
+    @pytest.mark.asyncio
+    async def test_non_dict_session(self, data_layer, mock_container):
+        """Non-dict session value → empty steps, no crash."""
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [], "elements": [],
+            "session": "invalid-string-session",
+        }
+        thread = await data_layer.get_thread("t1")
+        assert thread["steps"] == []
+
+    @pytest.mark.asyncio
+    async def test_none_content_produces_empty_output(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [], "elements": [],
+            "session": {"state": {"messages": [
+                {"role": "user", "content": None},
+            ]}},
+        }
+        thread = await data_layer.get_thread("t1")
+        assert len(thread["steps"]) == 1
+        assert thread["steps"][0]["output"] == ""
+
+    @pytest.mark.asyncio
+    async def test_integer_content_produces_empty_output(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [], "elements": [],
+            "session": {"state": {"messages": [
+                {"role": "user", "content": 42},
+            ]}},
+        }
+        thread = await data_layer.get_thread("t1")
+        assert len(thread["steps"]) == 1
+        assert thread["steps"][0]["output"] == ""
+
+    @pytest.mark.asyncio
+    async def test_mixed_roles_classification(self, data_layer, mock_container):
+        """Non-'user' roles all become assistant_message."""
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [], "elements": [],
+            "session": {"state": {"messages": [
+                {"role": "system", "content": "You are a helper."},
+                {"role": "user", "content": "Hi"},
+                {"role": "tool", "content": "lookup result"},
+                {"role": "assistant", "content": "Here you go"},
+            ]}},
+        }
+        thread = await data_layer.get_thread("t1")
+        assert len(thread["steps"]) == 4
+        assert thread["steps"][0]["type"] == "assistant_message"
+        assert thread["steps"][1]["type"] == "user_message"
+        assert thread["steps"][2]["type"] == "assistant_message"
+        assert thread["steps"][3]["type"] == "assistant_message"
+
+    @pytest.mark.asyncio
+    async def test_existing_steps_skips_synthesis(self, data_layer, mock_container):
+        """When Chainlit steps exist, session messages are NOT synthesized."""
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [{"id": "s1", "type": "user_message", "output": "real"}],
+            "elements": [],
+            "session": {"state": {"messages": [
+                {"role": "user", "content": "ignored"},
+                {"role": "assistant", "content": "also ignored"},
+            ]}},
+        }
+        thread = await data_layer.get_thread("t1")
+        assert len(thread["steps"]) == 1
+        assert thread["steps"][0]["output"] == "real"
+
+    @pytest.mark.asyncio
+    async def test_synthesized_step_ids_are_sequential(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "createdAt": "2025-01-01",
+            "steps": [], "elements": [],
+            "session": {"state": {"messages": [
+                {"role": "user", "content": "a"},
+                {"role": "assistant", "content": "b"},
+            ]}},
+        }
+        thread = await data_layer.get_thread("t1")
+        assert thread["steps"][0]["id"] == "session-msg-0"
+        assert thread["steps"][1]["id"] == "session-msg-1"
+
+
+# ---------------------------------------------------------------------------
+# Element tests
+# ---------------------------------------------------------------------------
+
+class TestCreateElement:
+    @pytest.mark.asyncio
+    async def test_appends_element(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "steps": [], "elements": [],
+        }
+        await data_layer.create_element({"id": "e1", "threadId": "t1", "type": "text"})
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert len(doc["elements"]) == 1
+        assert doc["elements"][0]["id"] == "e1"
+
+    @pytest.mark.asyncio
+    async def test_replaces_existing_element_by_id(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "steps": [],
+            "elements": [{"id": "e1", "content": "old"}],
+        }
+        await data_layer.create_element({"id": "e1", "threadId": "t1", "content": "new"})
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert len(doc["elements"]) == 1
+        assert doc["elements"][0]["content"] == "new"
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_thread_id(self, data_layer, mock_container):
+        await data_layer.create_element({"id": "e1", "type": "text"})
+        mock_container.upsert_item.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_when_thread_not_found(self, data_layer, mock_container):
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
+        await data_layer.create_element({"id": "e1", "threadId": "t1"})
+        mock_container.upsert_item.assert_not_called()
+
+
+class TestGetElement:
+    @pytest.mark.asyncio
+    async def test_returns_element_when_found(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "steps": [],
+            "elements": [{"id": "e1", "content": "found"}],
+        }
+        el = await data_layer.get_element("t1", "e1")
+        assert el is not None
+        assert el["content"] == "found"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_element_missing(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "steps": [],
+            "elements": [{"id": "e2"}],
+        }
+        assert await data_layer.get_element("t1", "e1") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_thread_missing(self, data_layer, mock_container):
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
+        assert await data_layer.get_element("missing", "e1") is None
+
+
+class TestDeleteElement:
+    @pytest.mark.asyncio
+    async def test_removes_element(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "steps": [],
+            "elements": [{"id": "e1"}, {"id": "e2"}],
+        }
+        await data_layer.delete_element("e1", thread_id="t1")
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert len(doc["elements"]) == 1
+        assert doc["elements"][0]["id"] == "e2"
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_thread_id(self, data_layer, mock_container):
+        await data_layer.delete_element("e1")
+        mock_container.upsert_item.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_when_thread_not_found(self, data_layer, mock_container):
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
+        await data_layer.delete_element("e1", thread_id="missing")
+        mock_container.upsert_item.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Update step auto-create
+# ---------------------------------------------------------------------------
+
+class TestUpdateStepAutoCreate:
+    @pytest.mark.asyncio
+    async def test_auto_creates_thread_with_conversationId(self, data_layer, mock_container):
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
+        await data_layer.update_step({"threadId": "new-t", "id": "s1", "output": "hello"})
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert doc["id"] == "new-t"
+        assert doc["conversationId"] == "new-t"
+        assert len(doc["steps"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Update thread — conversationId preservation
+# ---------------------------------------------------------------------------
+
+class TestUpdateThreadConversationId:
+    @pytest.mark.asyncio
+    async def test_new_doc_gets_conversationId(self, data_layer, mock_container):
+        mock_container.read_item.side_effect = CosmosResourceNotFoundError()
+        await data_layer.update_thread(thread_id="t1", name="New")
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert doc["conversationId"] == "t1"
+
+    @pytest.mark.asyncio
+    async def test_existing_doc_preserves_conversationId(self, data_layer, mock_container):
+        mock_container.read_item.return_value = {
+            "id": "t1", "conversationId": "t1", "userId": "alice",
+            "createdAt": "2025-01-01", "steps": [], "elements": [],
+        }
+        await data_layer.update_thread(thread_id="t1", name="Updated")
+        doc = mock_container.upsert_item.call_args[0][0]
+        assert doc["conversationId"] == "t1"
+
+
+# ---------------------------------------------------------------------------
+# Degraded mode (no Cosmos connection)
+# ---------------------------------------------------------------------------
+
+class TestDegradedMode:
+    @pytest.mark.asyncio
+    async def test_get_user_returns_none(self, degraded_layer):
+        assert await degraded_layer.get_user("alice") is None
+
+    @pytest.mark.asyncio
+    async def test_create_user_returns_ephemeral(self, degraded_layer):
+        from chainlit.user import User
+        user = User(identifier="bob")
+        result = await degraded_layer.create_user(user)
+        assert result is not None
+        assert result.identifier == "bob"
+
+    @pytest.mark.asyncio
+    async def test_update_thread_is_noop(self, degraded_layer):
+        await degraded_layer.update_thread(thread_id="t1", name="Test")
+
+    @pytest.mark.asyncio
+    async def test_get_thread_returns_none(self, degraded_layer):
+        assert await degraded_layer.get_thread("t1") is None
+
+    @pytest.mark.asyncio
+    async def test_list_threads_returns_empty(self, degraded_layer):
+        result = await degraded_layer.list_threads(
+            pagination=Pagination(first=20),
+            filters=ThreadFilter(userId="alice"),
+        )
+        assert result.data == []
+        assert result.pageInfo.hasNextPage is False
+
+    @pytest.mark.asyncio
+    async def test_create_step_is_noop(self, degraded_layer):
+        await degraded_layer.create_step({"threadId": "t1", "type": "user_message"})
+
+    @pytest.mark.asyncio
+    async def test_delete_thread_is_noop(self, degraded_layer):
+        await degraded_layer.delete_thread("t1")
+
+    @pytest.mark.asyncio
+    async def test_create_element_is_noop(self, degraded_layer):
+        await degraded_layer.create_element({"id": "e1", "threadId": "t1"})
+
+    @pytest.mark.asyncio
+    async def test_delete_element_is_noop(self, degraded_layer):
+        await degraded_layer.delete_element("e1", thread_id="t1")
 
 
 # ---------------------------------------------------------------------------

@@ -45,7 +45,7 @@ All resources follow the pattern `{prefix}-{projectName}-{env}` (e.g., `func-{pr
 | API Management (AI Gateway) | `apim.bicep` | `apim-{project}-{env}` | BasicV2 |
 | Cosmos DB (NoSQL) | `cosmos-db.bicep` | `cosmos-{project}-{env}` | Serverless |
 | → Database | `cosmos-db.bicep` | `kb-agent` | — |
-| → Container | `cosmos-db.bicep` | `conversations` | Partition key `/userId` |
+| → Container | `cosmos-db.bicep` | `agent-sessions` | Partition key `/conversationId` |
 | Entra App Registration | Pre-provision hook | `webapp-{project}-{env}` | — |
 
 > `{project}` is the `PROJECT_NAME` (default `{project}`). `{env}` is the `AZURE_ENV_NAME` (e.g., `dev`, `staging`, `prod`).
@@ -64,7 +64,7 @@ infra/
     ├── ai-services.bicep           # AI Services account + model deployments + RBAC
     ├── search.bicep                # AI Search service + RBAC
     ├── foundry-project.bicep       # Foundry project (tracing + registration only — no ACR connection or capability host)
-    ├── cosmos-db.bicep             # Cosmos DB NoSQL (serverless) — database + conversations container
+    ├── cosmos-db.bicep             # Cosmos DB NoSQL (serverless) — database + agent-sessions container
     ├── cosmos-db-role.bicep        # Cosmos DB Built-in Data Contributor role assignment
     ├── function-app.bicep          # Reusable Functions Container App module (called 4×, one per function)
     ├── container-registry.bicep    # Azure Container Registry (Basic) + AcrPull RBAC
