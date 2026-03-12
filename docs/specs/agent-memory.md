@@ -4,17 +4,12 @@
 
 The application implements an **agent-owned memory** pattern: the agent persists its own conversation history to Cosmos DB via the Microsoft Agent Framework's session persistence, and the web app acts as a thin client that reads from the same store.
 
-```
-┌──────────────┐        ┌──────────────┐        ┌──────────────┐        ┌──────────────┐
-│              │  HTTP   │              │ OpenAI  │              │  SDK   │              │
-│   Browser    │◄──────►│   Web App    │ Resp.   │   KB Agent   │◄──────►│  Cosmos DB   │
-│  (Chainlit)  │        │  (Chainlit)  │  API    │  (FastAPI +  │        │  (NoSQL)     │
-│              │        │              │────────►│  Agent Fwk)  │        │              │
-└──────────────┘        └──────┬───────┘        └──────────────┘        └──────┬───────┘
-                               │                                               │
-                               │  Reads threads for sidebar,                   │
-                               │  writes steps/elements for UI                 │
-                               └───────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    Browser["Browser<br/>(Chainlit)"] <-->|HTTP| WebApp["Web App<br/>(Chainlit)"]
+    WebApp -->|OpenAI Resp. API| Agent["KB Agent<br/>(Starlette +<br/>Agent Fwk)"]
+    Agent <-->|SDK| Cosmos["Cosmos DB<br/>(NoSQL)"]
+    WebApp -->|reads sessions for sidebar,<br/>writes steps/elements for UI| Cosmos
 ```
 
 **Key design decisions:**

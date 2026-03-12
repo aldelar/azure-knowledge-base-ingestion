@@ -1,6 +1,6 @@
 # Infrastructure
 
-> **Status:** Updated — March 11, 2026
+> **Status:** Updated — March 12, 2026
 
 ## Overview
 
@@ -249,7 +249,7 @@ The project also has an APIM connection resource (`apim-connection`) linking it 
 
 ### Cosmos DB (`cosmos-db.bicep`)
 
-Serverless NoSQL database for conversation persistence. The web app stores all conversation history here (threads, messages, user metadata).
+Serverless NoSQL database for agent session persistence. The agent writes session state (conversation history); the web app reads sessions for the sidebar and writes steps/elements for UI fidelity. See [Agent Memory](agent-memory.md) for the full schema.
 
 | Setting | Value |
 |---------|-------|
@@ -257,10 +257,10 @@ Serverless NoSQL database for conversation persistence. The web app stores all c
 | Capability | `EnableServerless` |
 | Consistency | Session |
 | Database | `kb-agent` |
-| Container | `conversations` (partition key: `/userId`) |
+| Container | `agent-sessions` (partition key: `/id`) |
 | Public Network | Enabled |
 
-The `cosmos-db-role.bicep` module assigns the **Cosmos DB Built-in Data Contributor** role (role ID `00000000-0000-0000-0000-000000000002`) to a specified principal (the web app Container App identity).
+The `cosmos-db-role.bicep` module assigns the **Cosmos DB Built-in Data Contributor** role (role ID `00000000-0000-0000-0000-000000000002`) to a specified principal. Called twice: once for the web app Container App identity and once for the agent Container App identity.
 
 ### Container Apps Environment (`container-apps-env.bicep`)
 
