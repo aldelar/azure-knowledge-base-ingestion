@@ -336,9 +336,8 @@ flowchart LR
 
 ### Prerequisites
 
-- Python 3.11+ and [uv](https://docs.astral.sh/uv/) package manager
-- Azure CLI (`az`) authenticated via `az login`
-- Azure Developer CLI (`azd`)
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (`az`) authenticated via `az login`
+- [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd) (`azd`)
 - An Azure subscription with access to AI Services, AI Search, and model deployments
 
 ### Local Development
