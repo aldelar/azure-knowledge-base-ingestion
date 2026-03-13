@@ -341,48 +341,23 @@ flowchart LR
 - Azure Developer CLI (`azd`)
 - An Azure subscription with access to AI Services, AI Search, and model deployments
 
-### Quick Start
+### Local Development
 
 ```bash
-# 1. Check required tools
-make dev-doctor
+# 1. Install tools + Python dependencies
+make setup
 
-# 2. Install tools + Python dependencies (functions + web app + agent)
-make dev-setup
-
-# 3. Set project name (2-8 chars — used in all Azure resource names)
+# 2. Set project name (2-8 chars — used in all Azure resource names)
 make set-project name=myproj
 
-# 4. Provision Azure infrastructure
-make azure-provision
+# 3. Provision Azure + configure local env
+make setup-azure
 
-# 5. Populate .env files from AZD environment
-make dev-setup-env
+# 4. Run the ingestion pipeline (convert + index)
+make kb
 
-# 6. Deploy functions, search index, and CU analyzer
-make azure-deploy
-
-# 7. Validate infrastructure is ready
-make validate-infra
-```
-
-### Run the Pipeline
-
-```bash
-# Convert HTML articles to Markdown (pick a backend)
-make convert analyzer=markitdown
-
-# Index into Azure AI Search
-make index
-```
-
-### Run the Agent + Web App
-
-```bash
-# Terminal 1: start the agent
+# 5. Start the agent (terminal 1) and web app (terminal 2)
 make agent
-
-# Terminal 2: start the web app
 make app
 
 # Open http://localhost:8080
@@ -393,6 +368,12 @@ make app
 ```bash
 # Full deploy: provision + deploy + register + configure auth
 make azure-up
+
+# Run the KB pipeline in Azure
+make azure-kb
+
+# Get the deployed web app URL
+make azure-app-url
 ```
 
 For the complete Makefile reference, local/Azure workflows, resource naming, and deployment details, see [Setup & Makefile Guide](docs/setup-and-makefile.md).
