@@ -1,4 +1,6 @@
 ---
+name: 'Azure Infrastructure'
+description: 'Bicep modules, AZD deployment, resource naming, and safety rules for infra/'
 applyTo: "infra/**"
 ---
 

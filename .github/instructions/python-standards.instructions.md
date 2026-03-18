@@ -1,4 +1,6 @@
 ---
+name: 'Python Standards'
+description: 'Python 3.11+, uv, Azure SDK, and code style conventions for all backend services'
 applyTo: "src/**/*.py"
 ---
 

@@ -1,12 +1,11 @@
 ---
-description: "Deliver an epic end-to-end — plan all remaining stories and delegate to @coder, @tester, @reviewer for each."
-mode: "agent"
+description: "Deliver an epic end-to-end — plan all remaining stories, then hand off to @implementer and @reviewer for each."
 agent: "planner"
 ---
 
 # Deliver Epic
 
-Complete an entire epic from current state to Done, story by story, delegating to the right agent at each phase.
+Complete an entire epic from current state to Done, story by story, using the handoff workflow.
 
 ## Variables
 
@@ -14,9 +13,9 @@ Complete an entire epic from current state to Done, story by story, delegating t
 
 ## Phase 1: Assess Current State
 
-1. Read the epic file at `${epicFile}`
-2. Read `docs/specs/architecture.md` and `docs/specs/infrastructure.md` for context
-3. Run `make test` to confirm the baseline passes
+1. **Create a shared scratchpad** — `shared-scratchpads/{epic}-delivery.md` (MANDATORY first action)
+2. Read the epic file at `${epicFile}`
+3. Read `docs/specs/architecture.md` and `docs/specs/infrastructure.md` for context
 4. Identify all stories and their current status:
    - Which stories are already ✅?
    - Is any story partially complete (some acceptance criteria checked)?
@@ -25,6 +24,7 @@ Complete an entire epic from current state to Done, story by story, delegating t
    - All prior ✅ stories are genuinely complete (acceptance criteria match code)
    - No broken or partially-updated stories
    - Flag any issues to the user before proceeding
+6. **Append findings to the scratchpad**
 
 ## Phase 2: Build the Master Plan
 
@@ -34,116 +34,47 @@ Complete an entire epic from current state to Done, story by story, delegating t
    - Definition of Done checklist
 2. Identify cross-story dependencies or shared changes
 3. Estimate if any story is too large and should be split
-4. Present the full plan and confirm with the user before proceeding
-
-## Delegation Mechanism
-
-You are the **orchestrator**. You do NOT implement code, write tests, review code, or modify infrastructure yourself.
-
-For every step that names an agent (@coder, @tester, @reviewer, @deployer, @debugger), you MUST delegate by calling the `runSubagent` tool with:
-- `agentName` — the agent name (e.g., `"coder"`, `"tester"`, `"reviewer"`, `"deployer"`, `"debugger"`)
-- `prompt` — a self-contained task description with all context the agent needs (see Context Packets below)
-
-After each `runSubagent` call, report:
-1. **Agent called:** which agent was invoked
-2. **Summary returned:** the key points from the agent's response
-3. **Next action:** what happens next based on the result
-
-The only work you do directly is: reading the epic, building the plan, preparing context packets, updating the epic doc (Step E), and deciding what to do next.
-
-### Context Packets
-
-Each `runSubagent` prompt must be **self-contained** — the subagent has no access to this conversation. Include:
-- The story title, acceptance criteria, and Definition of Done
-- Specific file paths to read and modify
-- Any relevant output from prior agents in this story (e.g., coder's summary for the tester)
-- The instruction: "Return a structured summary with: Status (success/partial/failed), Files created, Files modified, Tests run (pass/fail count), Issues found, Notes for next agent"
+4. **Create TODOs** — one per implementation step across all stories
+5. **Append the plan summary to the scratchpad**
+6. Present the full plan and confirm with the user before proceeding
 
 ## Phase 3: Deliver Each Story
 
-For each remaining story, execute this cycle in strict order:
+For each remaining story, execute this cycle:
 
-### Step A — Implement (@coder)
+### Step A — Hand off to Implementer
 
-Delegate to @coder via `runSubagent(agentName="coder")` with the task breakdown for this story.
+Use the **Start Implementation** handoff button to transfer to @implementer with the story plan.
+The Implementer will:
+- Read the shared scratchpad for full context
 - Implement all tasks following existing project patterns
-- Write basic happy-path tests to validate the implementation works
-- If the story involves infrastructure changes (Bicep modules, `azure.yaml`, deployment config), hand those tasks to @deployer instead
-- @coder runs `make test` after each significant change and debugs failures in-context using the debugging skill
-- Do not proceed to testing until implementation is complete
+- Write tests alongside the code (unit + edge cases + error paths)
+- Handle infrastructure changes (Bicep, azure.yaml) if the story requires them
+- Debug failures in-context using the `debugging` skill
+- Update the epic doc with acceptance criteria, implementation scope, and DoD
+- Append progress to the shared scratchpad
+- Hand off to @reviewer when ready
 
-### Step B — Test (@tester)
+### Step B — Review (handled by @reviewer)
 
-Delegate to @tester via `runSubagent(agentName="tester")` to write comprehensive tests.
-Include the coder's summary in the prompt so the tester knows what changed.
-- Build on @coder's happy-path tests — add edge cases, error paths, boundary conditions, and parametrised variants
-- Run the full test suite: `make test`
-- @tester debugs any failures in-context using the debugging skill
-- Do not proceed until all tests pass
+The Implementer hands off to @reviewer via the **Request Review** button.
+The Reviewer will:
+- Check architecture compliance, security, tests, code quality, and epic doc status
+- Produce a verdict: ✅ Approve / ⚠️ Approve with comments / ❌ Request changes
+- If issues found: hand back to @implementer via **Quick Fix** or **Rework** button
+- If fundamental issues: hand back to @planner via **Re-plan** button
+- On final approval: append `IMPLEMENTATION COMPLETE` to the scratchpad
 
-### Step B.1 — Escalate Persistent Failures (@debugger)
+### Step C — Next Story
 
-If @coder or @tester cannot resolve a failure after one debugging pass:
-- Delegate to @debugger via `runSubagent(agentName="debugger")` with: the error traceback, what was investigated, the hypothesis, and what was tried
-- @debugger handles complex multi-system issues (cross-service errors, config/RBAC problems, deployment failures)
-- Delegate back to @coder via `runSubagent(agentName="coder")` with the debugger's diagnosis to apply the fix
-- Re-run `make test` to confirm the fix resolves the issue
-- Repeat until all tests pass, then resume the normal flow
-
-### Step C — Review (@reviewer)
-
-Delegate to @reviewer via `runSubagent(agentName="reviewer")` for quality gate.
-Include both the coder's and tester's summaries in the prompt.
-- Review all changed files against the review checklist (security, correctness, tests, style, docs)
-- Produce a GO / NO-GO verdict
-- If NO-GO: route blockers back to @coder (or @deployer for infra issues), then repeat Step C
-- If GO: proceed to mark story complete
-
-### Step D — Deploy Infrastructure (@deployer)
-
-If the story introduced or modified infrastructure:
-- Delegate to @deployer via `runSubagent(agentName="deployer")` to validate changes:
-  - Verify Bicep compiles: `az bicep build --file infra/main.bicep`
-  - Cross-reference `infra/modules/` against `docs/specs/infrastructure.md`
-  - Validate `azure.yaml` service definitions match project structure
-- If no infrastructure changes in this story, skip to Step E
-
-### Step E — Update Epic (@planner)
-
-Update the epic doc for this story:
-- Check off all acceptance criteria (`- [x]`)
-- Update implementation scope table rows with ✅
-- Check off Definition of Done items
-- Mark the story title with ✅
-
-**Do not start the next story until Step E is complete.**
-
-## Phase 4: Finalize the Epic
-
-1. Run `make test` one final time to confirm full suite passes
-2. Verify every story in the epic is marked ✅
-3. Update the epic header: set Status to **Done** and update the date
-4. Hand off to @deployer for final deployment validation:
-   - Run `/deploy-check` to verify full deployment readiness
-   - Validate all infrastructure changes compile and are consistent
-   - If the epic introduced new services or endpoints, confirm `azure.yaml` and Bicep are updated
-   - If deployment is required, @deployer executes `make azure-up` and `make azure-test`
-5. If any deployment issues arise, hand off to @debugger for diagnosis
-6. Summarize what was delivered:
-   - Stories completed in this session
-   - Files created or modified
-   - Test coverage added
-   - Infrastructure changes (if any)
-   - Deployment status (deployed / ready to deploy / not applicable)
-   - Any known follow-ups or tech debt
+After Reviewer approval, the flow returns to Planner (you) to:
+- Confirm the story is marked ✅ in the epic doc
+- Move to the next story and repeat from Step A
+- When all stories are done, update the epic status to `Done`
 
 ## Rules
 
-- **Always use `runSubagent`** — never do an agent's job yourself; always delegate via the tool
-- **Strict story ordering** — never start story N+1 until story N is fully ✅
-- **No skipped validation** — every story must pass @tester and @reviewer before marking done
-- **Epic doc is the source of truth** — update it at every step; it drives visibility
-- **Stop on blockers** — if @reviewer gives NO-GO twice on the same issue, escalate to the user
-- **Minimal changes** — implement exactly what each story requires, nothing more
-- **No secrets in code** — use `DefaultAzureCredential` and environment variables everywhere
-- **Transparency** — after every delegation, report: which agent was called and the summary returned
+- **Always create a shared scratchpad first** — before any research or planning
+- **Always create TODOs** — the Implementer depends on them as a checklist
+- **Never write code yourself** — that is the Implementer's job
+- **Scratchpad is the context bridge** — all agents read and append to it across handoffs

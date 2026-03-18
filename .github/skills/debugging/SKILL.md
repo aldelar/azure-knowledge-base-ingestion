@@ -1,6 +1,6 @@
 ---
 name: debugging
-description: 'Structured first-pass debugging for test failures, runtime errors, and unexpected behavior. USE FOR: test failure, assertion error, ImportError, traceback, debug failing test, fix broken test, diagnose error, runtime exception, mock error, config error. DO NOT USE FOR: complex multi-system issues spanning infra and code (escalate to @debugger agent).'
+description: 'Structured first-pass debugging for test failures, runtime errors, and unexpected behavior. USE FOR: test failure, assertion error, ImportError, traceback, debug failing test, fix broken test, diagnose error, runtime exception, mock error, config error. DO NOT USE FOR: complex multi-system design issues (escalate to @planner for re-planning).'
 ---
 
 # Debugging
@@ -50,7 +50,7 @@ When a test fails or an error occurs, follow these steps **before** giving up or
 
 ## When to Escalate
 
-If you cannot resolve the issue after **one full debugging pass** (Steps 1–5), report what you found and let the orchestrator escalate to @debugger. Include:
+If you cannot resolve the issue after **one full debugging pass** (Steps 1–5), report what you found and escalate to @planner for re-planning. Include:
 - The error traceback
 - What you investigated
 - Your hypothesis for the root cause

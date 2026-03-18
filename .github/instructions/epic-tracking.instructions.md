@@ -1,4 +1,6 @@
 ---
+name: 'Epic & Story Tracking'
+description: 'Epic lifecycle, story completion checklist, and doc-code consistency rules'
 applyTo: "docs/epics/**"
 ---
 

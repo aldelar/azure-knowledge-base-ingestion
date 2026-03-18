@@ -1,4 +1,6 @@
 ---
+name: 'Security Standards'
+description: 'Secrets, auth, network, input validation, and code review security rules'
 applyTo: "**"
 ---
 

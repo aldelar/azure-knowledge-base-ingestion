@@ -1,7 +1,6 @@
 ---
 description: "Generate tests for a module — identify gaps and write comprehensive tests."
-mode: "agent"
-agent: "tester"
+agent: "implementer"
 ---
 
 # Write Tests

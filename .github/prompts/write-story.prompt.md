@@ -1,6 +1,5 @@
 ---
 description: "Write a new story for an existing epic — clarify scope, define deliverables, and produce a testable Definition of Done."
-mode: "agent"
 agent: "planner"
 ---
 
@@ -109,4 +108,4 @@ Iterate until the user approves.
 - **Be concrete** — file paths, module names, make targets, test counts. Abstract stories lead to confusion during implementation.
 - **Match existing style** — the new story must look like it belongs alongside the existing stories in the epic (same formatting, same level of detail).
 - **Respect the epic boundary** — if the requested work doesn't fit the epic's objective, say so and suggest creating a new epic instead.
-- **You do not write code** — you plan. Implementation is delegated to @coder and @tester via `deliver-story` or `deliver-epic` prompts.
+- **You do not write code** — you plan. Implementation is handled by @implementer via `deliver-story` or `deliver-epic` prompts.

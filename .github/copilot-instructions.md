@@ -29,10 +29,50 @@
 
 ## Agent-Driven Development
 
-This repo uses specialized agents, instructions, and prompts for structured development:
+This repo uses a **3-agent handoff model** with skills, instructions, and prompts for structured development:
 
-- **Agents** (`.github/agents/`): @planner, @coder, @reviewer, @tester, @deployer, @debugger
-- **Instructions** (`.github/instructions/`): Composable rules for Python, Azure infra, testing, epics, and security
-- **Prompts** (`.github/prompts/`): Reusable workflows for story planning, implementation, testing, review, and deployment
+### Agents (`.github/agents/`)
 
-See individual agent files for their roles and usage.
+| Agent | Role | Handoffs |
+|-------|------|----------|
+| **@planner** | Research codebase, produce plans, create scratchpads and TODOs. Never writes code. | → @implementer, → @reviewer |
+| **@implementer** | Write code, manage infra (Bicep/AZD), run tests, debug failures, update epic docs. Full edit + terminal access. | → @reviewer, → @planner |
+| **@reviewer** | Code review for architecture, security, tests, quality. Never writes code. | → @implementer (fix/rework), → @planner (re-plan) |
+
+### Shared Scratchpad Protocol
+
+Agents persist context across handoffs via append-only scratchpad files in `shared-scratchpads/`:
+- **Planner creates** a scratchpad as their first action in every session
+- **All agents append** before every handoff — timestamped entries with decisions, constraints, findings
+- **Reviewer closes** with `IMPLEMENTATION COMPLETE` marker on final approval
+- See [shared-scratchpad.instructions.md](instructions/shared-scratchpad.instructions.md) for the full protocol
+
+### Skills (`.github/skills/`)
+
+Domain-specific knowledge loaded on demand by agents:
+- `debugging` — Structured first-pass debugging for test failures and runtime errors
+- `architecture-check` — Service boundary validation (agent/functions/web-app/infra isolation)
+- `security-review` — Azure-specific security checklist (managed identity, RBAC, secrets, input validation)
+- `epic-workflow` — Epic/story lifecycle management with project-specific make targets
+- `azure-infra-review` — Bicep module review (naming, RBAC, wiring, doc sync)
+- `refactoring` — Safe refactoring across the service-based architecture
+
+### Instructions (`.github/instructions/`)
+
+Composable rules auto-applied by file pattern:
+- [python-standards.instructions.md](instructions/python-standards.instructions.md) — Python/uv/Azure SDK conventions (`src/**/*.py`)
+- [testing.instructions.md](instructions/testing.instructions.md) — pytest three-tier test strategy (`**/tests/**`)
+- [security.instructions.md](instructions/security.instructions.md) — Secrets, auth, and validation rules (`**`)
+- [epic-tracking.instructions.md](instructions/epic-tracking.instructions.md) — Epic lifecycle and doc-code consistency (`docs/epics/**`)
+- [azure-infra.instructions.md](instructions/azure-infra.instructions.md) — Bicep modules and AZD deployment (`infra/**`)
+- [shared-scratchpad.instructions.md](instructions/shared-scratchpad.instructions.md) — Cross-agent scratchpad protocol (`shared-scratchpads/**`)
+
+### Prompts (`.github/prompts/`)
+
+Reusable workflows for common development tasks:
+- `deliver-epic` / `deliver-story` — End-to-end story and epic delivery via handoff workflow
+- `write-epic` / `write-story` — Collaborative epic/story authoring
+- `write-tests` — Test generation for a module
+- `pre-commit-check` — Pre-commit quality validation
+- `deploy-check` / `post-deploy-verify` — Deployment readiness and post-deploy health
+- `test-e2e-local` / `test-e2e-azure` — Full end-to-end validation (local and Azure)

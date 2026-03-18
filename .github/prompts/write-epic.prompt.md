@@ -1,6 +1,5 @@
 ---
 description: "Write a new epic — iteratively scope, clarify, and break down into well-defined stories with testable Definitions of Done."
-mode: "agent"
 agent: "planner"
 ---
 
@@ -145,4 +144,4 @@ Iterate until the user approves the full story breakdown.
 - **Always present options** — when there are multiple valid approaches, lay them out with trade-offs instead of picking one silently.
 - **Be concrete** — file paths, module names, make targets, test counts. Abstract epics lead to confusion during implementation.
 - **Match existing style** — follow the formatting patterns in epics 007 and 008 (tables, blockquote status lines, checkbox lists, horizontal rules between stories).
-- **You do not write code** — you plan. Implementation is delegated to @coder and @tester via `deliver-epic` or `implement-story` prompts.
+- **You do not write code** — you plan. Implementation is handled by @implementer via `deliver-epic` or `deliver-story` prompts.

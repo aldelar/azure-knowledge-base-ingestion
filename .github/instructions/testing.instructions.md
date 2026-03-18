@@ -1,4 +1,6 @@
 ---
+name: 'Testing Standards'
+description: 'pytest conventions, three-tier test strategy, and service-specific test patterns'
 applyTo: "**/tests/**"
 ---
 
