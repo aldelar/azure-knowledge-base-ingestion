@@ -23,6 +23,7 @@ from agent_framework.azure import AzureOpenAIChatClient
 from agent.search_tool import SearchResult, search_kb
 from agent.image_service import get_image_url
 from agent.vision_middleware import VisionImageMiddleware
+from agent.security_middleware import SecurityFilterMiddleware
 from agent.config import config
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,7 @@ class AgentResponse:
 
 def search_knowledge_base(
     query: Annotated[str, "The search query — use natural language describing what information is needed"],
+    **kwargs,
 ) -> str:
     """Search the knowledge base for articles about Azure services, features, and how-to guides.
 
@@ -102,14 +104,24 @@ def search_knowledge_base(
     """
     logger.info("search_knowledge_base(query='%s')", query[:80])
 
+    # Build OData filter from departments injected by SecurityFilterMiddleware
+    departments = kwargs.get("departments", [])
+    security_filter = None
+    if departments:
+        dept_list = ",".join(departments)
+        security_filter = f"search.in(department, '{dept_list}', ',')"
+        logger.debug("Applying security filter: %s", security_filter)
+
     try:
-        results: list[SearchResult] = search_kb(query)
+        results: list[SearchResult] = search_kb(query, security_filter=security_filter)
     except Exception:
         logger.error("search_kb execution failed", exc_info=True)
         return json.dumps({"error": "Search failed. Please try again."})
 
     result_dicts: list[dict] = []
     for idx, r in enumerate(results, start=1):
+        # Build blob prefix: {department}/{article_id} for image URLs
+        blob_prefix = f"{r.department}/{r.article_id}" if r.department else r.article_id
         result_dicts.append({
             "ref_number": idx,
             "content": r.content,
@@ -119,7 +131,7 @@ def search_knowledge_base(
             "chunk_index": r.chunk_index,
             "image_urls": list(r.image_urls),  # raw paths like 'images/foo.png'
             "images": [
-                {"name": url.split("/")[-1], "url": get_image_url(r.article_id, url)}
+                {"name": url.split("/")[-1], "url": get_image_url(blob_prefix, url)}
                 for url in r.image_urls
             ] if r.image_urls else [],
         })
@@ -174,6 +186,7 @@ def create_agent() -> Agent:
         name="KBSearchAgent",
         instructions=_SYSTEM_PROMPT,
         tools=[search_knowledge_base],
+        middleware=[SecurityFilterMiddleware()],
         context_providers=[InMemoryHistoryProvider()],
     )
     logger.info(

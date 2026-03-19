@@ -31,6 +31,7 @@ class SearchResult:
     content: str
     title: str
     section_header: str
+    department: str = ""
     image_urls: list[str] = field(default_factory=list)
     score: float = 0.0
 
@@ -65,7 +66,7 @@ def _embed_query(query: str) -> list[float]:
     return vector
 
 
-def search_kb(query: str, top: int = 5) -> list[SearchResult]:
+def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -> list[SearchResult]:
     """Perform hybrid search (vector + keyword) against the kb-articles index.
 
     Parameters
@@ -74,6 +75,8 @@ def search_kb(query: str, top: int = 5) -> list[SearchResult]:
         Natural language search query.
     top:
         Maximum number of results to return.
+    security_filter:
+        Optional OData filter expression for department-scoped results.
 
     Returns
     -------
@@ -95,8 +98,9 @@ def search_kb(query: str, top: int = 5) -> list[SearchResult]:
     results = _search_client.search(
         search_text=query,
         vector_queries=[vector_query],
-        select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls"],
+        select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls", "department"],
         top=top,
+        filter=security_filter,
     )
 
     search_results: list[SearchResult] = []
@@ -109,6 +113,7 @@ def search_kb(query: str, top: int = 5) -> list[SearchResult]:
                 content=result["content"],
                 title=result.get("title", ""),
                 section_header=result.get("section_header", ""),
+                department=result.get("department", ""),
                 image_urls=result.get("image_urls") or [],
                 score=result.get("@search.score", 0.0),
             )

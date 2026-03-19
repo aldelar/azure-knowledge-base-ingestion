@@ -225,6 +225,7 @@ Despite explicit system prompt instructions, LLMs generate image URLs in many cr
 | 8 | Hybrid search | Best relevance — combines vector similarity and keyword matching. |
 | 9 | Chainlit | Purpose-built chat UI with native streaming, `cl.Text` side panels for citations, and markdown rendering. Single `chainlit run` command. |
 | 10 | AI Gateway (APIM) | Centralised API gateway for agent traffic. Enables Foundry agent registration (requires APIM connection), provides a stable proxy URL, and supports future rate limiting, monitoring, and access control. BasicV2 SKU for dev/test (~$50/month). |
+| 11 | Contextual tool filtering | Out-of-band security context propagation via `ContextVar` → `FunctionMiddleware` → `**kwargs`. JWT claims are extracted at the HTTP boundary, enriched by a middleware that resolves group GUIDs to department names, and forwarded to tools as plain kwargs. Tools build backend-specific OData filters. The LLM never sees the filter context. See [Contextual Tool Filtering spec](contextual-tool-filtering.md). |
 
 For implementation details, see [Epic 002](../epics/002-kb-search-web-app.md) and [Epic 005](../epics/005-hosted-agent-foundry.md).
 
@@ -592,6 +593,7 @@ The `{article-id}` folder name is preserved from the source and stored as `artic
     { "name": "source_url",     "type": "Edm.String",  "filterable": false },
     { "name": "title",          "type": "Edm.String",  "searchable": true },
     { "name": "section_header", "type": "Edm.String",  "filterable": true },
+    { "name": "department",     "type": "Edm.String",  "filterable": true },
     { "name": "key_topics",     "type": "Collection(Edm.String)",
       "filterable": true }
   ]
@@ -609,6 +611,7 @@ The `{article-id}` folder name is preserved from the source and stored as `artic
 | `source_url` | Original HTML article URL if available |
 | `title` | Article title |
 | `section_header` | H2/H3 heading this chunk belongs to |
+| `department` | Department that owns the article (derived from `kb/staging/{department}/` folder path). Used for OData security filtering via `SecurityFilterMiddleware`. |
 | `key_topics` | Filterable topic tags for the chunk |
 
 ---

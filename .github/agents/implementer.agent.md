@@ -14,11 +14,11 @@ handoffs:
   - label: Request Review
     agent: Reviewer
     prompt: "Review the implementation above for architecture compliance, security, test coverage, and code quality. The plan references a shared scratchpad — read it for full design context."
-    send: false
+    send: true
   - label: Revise Plan
     agent: Planner
     prompt: "The implementation revealed issues. Please revise the plan based on what we learned above. The shared scratchpad has been updated with details on what was tried and why it failed."
-    send: false
+    send: true
 ---
 
 # Implementer Agent

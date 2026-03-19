@@ -10,11 +10,14 @@ if [ ! -d "$SERVING_DIR" ] || [ -z "$(ls -A "$SERVING_DIR" 2>/dev/null)" ]; then
     exit 1
 fi
 
-for article_dir in "$SERVING_DIR"/*/; do
-    article_id="$(basename "$article_dir")"
-    echo ""
-    echo "=== fn-index: $article_id ==="
-    (cd "$REPO_ROOT/src/functions" && uv run python -m fn_index "$article_dir")
+for dept_dir in "$SERVING_DIR"/*/; do
+    department="$(basename "$dept_dir")"
+    for article_dir in "$dept_dir"*/; do
+        article_id="$(basename "$article_dir")"
+        echo ""
+        echo "=== fn-index: $department/$article_id ==="
+        (cd "$REPO_ROOT/src/functions" && uv run python -m fn_index "$article_dir")
+    done
 done
 
 echo ""

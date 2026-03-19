@@ -5,7 +5,7 @@
 # Run 'make help' for all available targets.
 # ==============================================================================
 
-analyzer ?= mistral-doc-ai
+analyzer ?= markitdown
 
 .DEFAULT_GOAL := help
 
@@ -264,17 +264,20 @@ index: ## Run fn-index locally (kb/serving → Azure AI Search)
 upload-serving: _check-env ## Upload kb/serving/ images to Azure serving blob
 	@echo "Uploading kb/serving/ to Azure serving blob container..."
 	@ACCOUNT=$$(grep '^SERVING_STORAGE_ACCOUNT=' src/functions/.env | cut -d= -f2 | tr -d '"') && \
-	for dir in kb/serving/*/; do \
-		ARTICLE=$$(basename "$$dir") && \
-		echo "  ↑ $$ARTICLE" && \
-		az storage blob upload-batch \
-			--destination serving \
-			--source "$$dir" \
-			--destination-path "$$ARTICLE" \
-			--account-name "$$ACCOUNT" \
-			--auth-mode login \
-			--overwrite \
-			--only-show-errors; \
+	for dept_dir in kb/serving/*/; do \
+		DEPT=$$(basename "$$dept_dir") && \
+		for dir in $$dept_dir*/; do \
+			ARTICLE=$$(basename "$$dir") && \
+			echo "  \u2191 $$DEPT/$$ARTICLE" && \
+			az storage blob upload-batch \
+				--destination serving \
+				--source "$$dir" \
+				--destination-path "$$DEPT/$$ARTICLE" \
+				--account-name "$$ACCOUNT" \
+				--auth-mode login \
+				--overwrite \
+				--only-show-errors; \
+		done; \
 	done
 	@echo "Done."
 
@@ -344,17 +347,20 @@ azure-setup-auth: ## Configure Entra redirect URIs (idempotent)
 azure-upload-staging: ## Upload kb/staging → Azure staging blob
 	@echo "Uploading kb/staging/ to Azure staging blob container..."
 	@ACCOUNT=$$(azd env get-value STAGING_STORAGE_ACCOUNT) && \
-	for dir in kb/staging/*/; do \
-		ARTICLE=$$(basename "$$dir") && \
-		echo "  ↑ $$ARTICLE" && \
-		az storage blob upload-batch \
-			--destination staging \
-			--source "$$dir" \
-			--destination-path "$$ARTICLE" \
-			--account-name "$$ACCOUNT" \
-			--auth-mode login \
-			--overwrite \
-			--only-show-errors; \
+	for dept_dir in kb/staging/*/; do \
+		DEPT=$$(basename "$$dept_dir") && \
+		for dir in $$dept_dir*/; do \
+			ARTICLE=$$(basename "$$dir") && \
+			echo "  \u2191 $$DEPT/$$ARTICLE" && \
+			az storage blob upload-batch \
+				--destination staging \
+				--source "$$dir" \
+				--destination-path "$$DEPT/$$ARTICLE" \
+				--account-name "$$ACCOUNT" \
+				--auth-mode login \
+				--overwrite \
+				--only-show-errors; \
+		done; \
 	done
 	@echo "Done."
 

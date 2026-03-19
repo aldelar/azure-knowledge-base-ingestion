@@ -16,6 +16,7 @@ from agent.kb_agent import (
     search_knowledge_base,
 )
 from agent.search_tool import SearchResult
+from agent.security_middleware import SecurityFilterMiddleware
 from agent_framework._sessions import InMemoryHistoryProvider
 
 
@@ -90,11 +91,12 @@ class TestSearchKnowledgeBaseTool:
                 content="Test content",
                 title="Test Article",
                 section_header="Section",
+                department="engineering",
                 image_urls=[],
                 score=0.9,
             )
         ]
-        mock_get_url.return_value = "/api/images/article/images/fig.png"
+        mock_get_url.return_value = "/api/images/engineering/article/images/fig.png"
 
         result = search_knowledge_base("test query")
         parsed = json.loads(result)
@@ -111,10 +113,11 @@ class TestSearchKnowledgeBaseTool:
             SearchResult(
                 id="a_0", article_id="a", chunk_index=3,
                 content="C", title="T", section_header="S",
+                department="engineering",
                 image_urls=["images/fig.png"], score=0.5,
             )
         ]
-        mock_get_url.return_value = "/api/images/a/images/fig.png"
+        mock_get_url.return_value = "/api/images/engineering/a/images/fig.png"
 
         result = search_knowledge_base("query")
         parsed = json.loads(result)
@@ -130,10 +133,11 @@ class TestSearchKnowledgeBaseTool:
             SearchResult(
                 id="a_0", article_id="article", chunk_index=0,
                 content="C", title="T", section_header="S",
+                department="engineering",
                 image_urls=["images/fig.png"], score=0.5,
             )
         ]
-        mock_get_url.return_value = "/api/images/article/images/fig.png"
+        mock_get_url.return_value = "/api/images/engineering/article/images/fig.png"
 
         result = search_knowledge_base("query")
         parsed = json.loads(result)
@@ -381,3 +385,65 @@ class TestSDKUpgradeValidation:
         agent_kwargs = mock_agent_cls.call_args.kwargs
         assert "instructions" in agent_kwargs
         assert agent_kwargs["instructions"] == _SYSTEM_PROMPT
+
+    @patch("agent.kb_agent.Agent")
+    @patch("agent.kb_agent.AzureOpenAIChatClient")
+    @patch("agent.kb_agent.DefaultAzureCredential")
+    def test_agent_has_security_filter_middleware(
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_agent_cls: MagicMock,
+    ) -> None:
+        """create_agent() registers SecurityFilterMiddleware on the agent."""
+        create_agent()
+
+        agent_kwargs = mock_agent_cls.call_args.kwargs
+        middleware = agent_kwargs["middleware"]
+        assert any(isinstance(m, SecurityFilterMiddleware) for m in middleware)
+
+
+# ---------------------------------------------------------------------------
+# Security filter wiring tests
+# ---------------------------------------------------------------------------
+
+
+class TestSecurityFilterWiring:
+    """Test that search_knowledge_base builds OData filter from departments."""
+
+    @patch("agent.kb_agent.search_kb")
+    def test_passes_security_filter_with_departments(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+
+        search_knowledge_base("query", departments=["engineering"])
+
+        mock_search.assert_called_once()
+        call_kwargs = mock_search.call_args
+        assert call_kwargs.kwargs["security_filter"] == "search.in(department, 'engineering', ',')"
+
+    @patch("agent.kb_agent.search_kb")
+    def test_passes_security_filter_with_multiple_departments(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+
+        search_knowledge_base("query", departments=["engineering", "research"])
+
+        call_kwargs = mock_search.call_args
+        assert call_kwargs.kwargs["security_filter"] == "search.in(department, 'engineering,research', ',')"
+
+    @patch("agent.kb_agent.search_kb")
+    def test_no_filter_when_departments_empty(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+
+        search_knowledge_base("query", departments=[])
+
+        call_kwargs = mock_search.call_args
+        assert call_kwargs.kwargs["security_filter"] is None
+
+    @patch("agent.kb_agent.search_kb")
+    def test_no_filter_when_no_kwargs(self, mock_search: MagicMock) -> None:
+        mock_search.return_value = []
+
+        search_knowledge_base("query")
+
+        call_kwargs = mock_search.call_args
+        assert call_kwargs.kwargs["security_filter"] is None

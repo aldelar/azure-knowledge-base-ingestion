@@ -16,6 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from middleware.request_context import user_claims_var
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -49,6 +51,13 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         # Skip auth when disabled (local dev)
         require_auth = os.environ.get("REQUIRE_AUTH", "true")
         if require_auth.lower() == "false":
+            # Set default dev claims so tools receive security context
+            user_claims_var.set({
+                "user_id": "dev-user",
+                "tenant_id": "dev-tenant",
+                "groups": ["dev-group-guid"],
+                "roles": ["contributor"],
+            })
             return await call_next(request)
 
         # Skip auth for health probes
@@ -90,6 +99,14 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         except jwt.PyJWTError as exc:
             logger.warning("JWT validation failed: %s", exc)
             return _unauthorized(str(exc))
+
+        # Propagate validated claims to downstream tools via ContextVar
+        user_claims_var.set({
+            "user_id": claims.get("oid", ""),
+            "tenant_id": claims.get("tid", ""),
+            "groups": claims.get("groups", []),
+            "roles": claims.get("roles", []),
+        })
 
         return await call_next(request)
 

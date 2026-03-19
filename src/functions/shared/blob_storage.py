@@ -33,17 +33,19 @@ def _container_client(blob_endpoint: str, container_name: str) -> ContainerClien
 
 
 def list_articles(blob_endpoint: str, container_name: str) -> list[str]:
-    """List article folder names (top-level virtual directories) in a container.
+    """List article paths (``{department}/{article-id}``) in a container.
 
-    Returns a deduplicated, sorted list of folder names like
-    ``["content-understanding-html_en-us", "ymr1770823224196_en-us"]``.
+    Discovers the two-level ``{department}/{article-id}/`` virtual directory
+    structure and returns deduplicated, sorted composite paths like
+    ``["engineering/content-understanding-html_en-us"]``.
     """
     client = _container_client(blob_endpoint, container_name)
     folders: set[str] = set()
     for blob in client.list_blobs():
         parts = blob.name.split("/")
-        if len(parts) >= 2:
-            folders.add(parts[0])
+        if len(parts) >= 3:
+            # {department}/{article-id}/file...
+            folders.add(f"{parts[0]}/{parts[1]}")
     return sorted(folders)
 
 

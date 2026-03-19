@@ -45,13 +45,17 @@ def http_convert(req: func.HttpRequest) -> func.HttpResponse:
     results = []
     for article_id in article_ids:
         try:
+            # article_id may be "{dept}/{id}" composite path
+            parts = article_id.split("/", 1)
+            article_name = parts[1] if len(parts) == 2 else parts[0]
+
             tmp_root = Path(tempfile.mkdtemp(prefix="kb-convert-"))
-            staging_dir = tmp_root / article_id
+            staging_dir = tmp_root / article_name
             download_article(
                 config.staging_blob_endpoint, "staging", article_id, staging_dir
             )
             out_root = Path(tempfile.mkdtemp(prefix="kb-out-"))
-            serving_dir = out_root / article_id
+            serving_dir = out_root / article_name
             serving_dir.mkdir()
 
             fn_convert_cu.run(str(staging_dir), str(serving_dir))

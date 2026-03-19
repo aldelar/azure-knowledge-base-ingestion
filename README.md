@@ -10,7 +10,7 @@ Enterprise knowledge bases store thousands of technical articles as HTML pages b
 
 ## Core Patterns
 
-This solution demonstrates seven architectural patterns for building production-quality AI agents over enterprise content. Each solves a real problem encountered when moving from prototype to production.
+This solution demonstrates eight architectural patterns for building production-quality AI agents over enterprise content. Each solves a real problem encountered when moving from prototype to production.
 
 ### 1. Pluggable Document Normalization
 
@@ -262,6 +262,33 @@ flowchart LR
 ![Agent trace in Azure Monitor — tool calls, model invocations, and session lifecycle as OpenTelemetry spans](docs/assets/trace.png)
 
 *Traces are stored in Application Insights and visualized here in the Microsoft Foundry portal — available when the agent is registered to Foundry via `make azure-register-agent`.*
+
+---
+
+### 8. Contextual Tool Filtering
+
+**Problem:** Agent tools query backends (AI Search, databases) but have no way to apply per-user security filters without leaking identity context into the LLM prompt. Injecting department or role into the system prompt exposes sensitive authorization logic to the model and creates prompt injection risks.
+
+**Pattern:** Three-layer out-of-band propagation using [`ContextVar`](https://docs.python.org/3/library/contextvars.html) → [`FunctionMiddleware`](https://learn.microsoft.com/en-us/agent-framework/) → `**kwargs`. JWT claims are extracted at the HTTP boundary and stored in a `ContextVar`. A `SecurityFilterMiddleware` (Agent Framework `FunctionMiddleware`) resolves Entra group GUIDs to department names and writes enriched values into `context.kwargs`. Tools receive departments, roles, and tenant ID as plain `**kwargs` and build backend-specific filters (OData for AI Search, SQL WHERE clauses for databases). The LLM never sees the filter context. Tools are testable in isolation by passing kwargs directly.
+
+```mermaid
+flowchart LR
+    A["HTTP Request<br/>(Bearer token)"] --> B["JWT Middleware<br/>validates token,<br/>sets ContextVar"]
+    B --> C["Agent Framework<br/>agent.run()"]
+    C --> D["SecurityFilterMiddleware<br/>resolves groups,<br/>writes to kwargs"]
+    D -->|"1 call"| G["Graph API<br/>(simulated)"]
+    D --> E["search_knowledge_base<br/>builds OData from **kwargs"]
+
+    H["Unit Test"] -.->|"departments=[...]"| E
+
+    style B fill:#2e7d32,color:#fff
+    style D fill:#e65100,color:#fff
+    style E fill:#1565c0,color:#fff
+    style G fill:#b71c1c,color:#fff
+    style H fill:#6a1b9a,color:#fff
+```
+
+> See [docs/specs/contextual-tool-filtering.md](docs/specs/contextual-tool-filtering.md) for the full architecture comparison and implementation details.
 
 ---
 

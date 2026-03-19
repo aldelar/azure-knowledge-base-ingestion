@@ -1,8 +1,8 @@
 # Epic 011 — Contextual Tool Filtering
 
-> **Status:** Draft
+> **Status:** Done
 > **Created:** March 18, 2026
-> **Updated:** March 18, 2026
+> **Updated:** March 19, 2026
 
 ## Objective
 
@@ -19,22 +19,22 @@ After this epic:
 
 ## Success Criteria
 
-- [ ] `kb/staging/` reorganized into `kb/staging/engineering/{article-id}/` structure
-- [ ] Serving layer preserves `{department}/{article-id}/` folder structure (local and blob storage)
-- [ ] `kb-articles` index has a `department` field (string, filterable)
-- [ ] `fn-index` populates `department` from the folder path during indexing
-- [ ] `make index` re-indexes successfully with the new field populated
-- [ ] `middleware/request_context.py` defines `user_claims_var` and `resolved_departments_var` ContextVars
-- [ ] `JWTAuthMiddleware` extracts claims into `user_claims_var`; sets default dev claims when auth is disabled
-- [ ] `agent/group_resolver.py` provides a simulated resolver returning `["engineering"]`
-- [ ] `SecurityFilterMiddleware` resolves groups once and writes enriched values to `context.kwargs`
-- [ ] `search_knowledge_base` accepts `**kwargs`, builds OData filter from `departments`, passes it to `search_kb()`
-- [ ] `search_kb()` passes `filter=` parameter to Azure AI Search
-- [ ] Unit tests prove the tool is testable with plain kwargs (no ContextVar, no Graph API)
-- [ ] Integration test proves department filter restricts AI Search results
-- [ ] E2E test validates the full chain: request with claims → agent → filtered search results
-- [ ] `make test` passes with zero regressions
-- [ ] Spec and architecture docs updated
+- [x] `kb/staging/` reorganized into `kb/staging/engineering/{article-id}/` structure
+- [x] Serving layer preserves `{department}/{article-id}/` folder structure (local and blob storage)
+- [x] `kb-articles` index has a `department` field (string, filterable)
+- [x] `fn-index` populates `department` from the folder path during indexing
+- [x] `make index` re-indexes successfully with the new field populated
+- [x] `middleware/request_context.py` defines `user_claims_var` and `resolved_departments_var` ContextVars
+- [x] `JWTAuthMiddleware` extracts claims into `user_claims_var`; sets default dev claims when auth is disabled
+- [x] `agent/group_resolver.py` provides a simulated resolver returning `["engineering"]`
+- [x] `SecurityFilterMiddleware` resolves groups once and writes enriched values to `context.kwargs`
+- [x] `search_knowledge_base` accepts `**kwargs`, builds OData filter from `departments`, passes it to `search_kb()`
+- [x] `search_kb()` passes `filter=` parameter to Azure AI Search
+- [x] Unit tests prove the tool is testable with plain kwargs (no ContextVar, no Graph API)
+- [x] Integration test proves department filter restricts AI Search results
+- [x] E2E test validates the full chain: request with claims → agent → filtered search results
+- [x] `make test` passes with zero regressions
+- [x] Spec and architecture docs updated
 
 ---
 
@@ -56,21 +56,21 @@ See [docs/specs/contextual-tool-filtering.md](../specs/contextual-tool-filtering
 
 ---
 
-### Story 1 — KB Reorganization + Index Department Field
+### Story 1 — KB Reorganization + Index Department Field ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** None
 
 Reorganize the KB staging folder to `kb/staging/{department}/{article-id}/`, update the serving layer to preserve the department folder structure, add a `department` field to the AI Search index, and update `fn-index` to populate it from the folder path. Re-index to populate the new field.
 
 #### Deliverables
 
-- [ ] Move existing articles under `kb/staging/engineering/` (e.g., `kb/staging/engineering/agentic-retrieval-overview-html_en-us/`)
-- [ ] Update `fn-convert` to preserve `{department}/{article-id}/` in the serving layer output path (both local `kb/serving/` and blob storage)
-- [ ] Add `department` field (type: `Edm.String`, filterable: true) to the index schema in `src/functions/fn_index/indexer.py`
-- [ ] Update `fn-index` to extract `department` from the serving folder path (first path segment above `article-id`) and populate the field during indexing
-- [ ] Update any Makefile targets (`convert`, `index`) that reference the old flat path structure
-- [ ] Re-index with `make index` — verify `department=engineering` is populated on all documents
+- [x] Move existing articles under `kb/staging/engineering/` (e.g., `kb/staging/engineering/agentic-retrieval-overview-html_en-us/`)
+- [x] Update `fn-convert` to preserve `{department}/{article-id}/` in the serving layer output path (both local `kb/serving/` and blob storage)
+- [x] Add `department` field (type: `Edm.String`, filterable: true) to the index schema in `src/functions/fn_index/indexer.py`
+- [x] Update `fn-index` to extract `department` from the serving folder path (first path segment above `article-id`) and populate the field during indexing
+- [x] Update any Makefile targets (`convert`, `index`) that reference the old flat path structure
+- [x] Re-index with `make index` — verify `department=engineering` is populated on all documents
 
 #### Implementation Notes
 
@@ -80,29 +80,29 @@ Reorganize the KB staging folder to `kb/staging/{department}/{article-id}/`, upd
 
 #### Definition of Done
 
-- [ ] `ls kb/staging/engineering/` shows all 3 existing articles
-- [ ] `make convert analyzer=markitdown` produces output under `kb/serving/engineering/{article-id}/`
-- [ ] `make index` completes without errors
-- [ ] Azure AI Search explorer query confirms `department` field is `"engineering"` on all indexed documents
-- [ ] `make test-functions` passes with zero regressions
+- [x] `ls kb/staging/engineering/` shows all 3 existing articles
+- [x] `make convert analyzer=markitdown` produces output under `kb/serving/engineering/{article-id}/`
+- [x] `make index` completes without errors
+- [x] Azure AI Search explorer query confirms `department` field is `"engineering"` on all indexed documents
+- [x] `make test-functions` passes with zero regressions
 
 ---
 
-### Story 2 — ContextVar + JWT Claims Extraction
+### Story 2 — ContextVar + JWT Claims Extraction ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** None (parallel with Story 1)
 
 Create the `ContextVar` infrastructure and extend the JWT middleware to extract claims into it. Provide default dev claims when auth is disabled.
 
 #### Deliverables
 
-- [ ] Create `src/agent/middleware/request_context.py` with:
+- [x] Create `src/agent/middleware/request_context.py` with:
   - `user_claims_var: ContextVar[dict]` (default: `{}`)
   - `resolved_departments_var: ContextVar[list[str]]` (default: `[]`)
-- [ ] Extend `JWTAuthMiddleware.dispatch()` to set `user_claims_var` with decoded claims (`oid`, `tid`, `groups`, `roles`) after successful token validation
-- [ ] When `REQUIRE_AUTH=false`, set default dev claims: `{"user_id": "dev-user", "tenant_id": "dev-tenant", "groups": ["dev-group-guid"], "roles": ["contributor"]}`
-- [ ] Create `src/agent/agent/group_resolver.py` with a simulated `resolve_departments(group_guids: list[str]) -> list[str]` that returns `["engineering"]` for any non-empty input
+- [x] Extend `JWTAuthMiddleware.dispatch()` to set `user_claims_var` with decoded claims (`oid`, `tid`, `groups`, `roles`) after successful token validation
+- [x] When `REQUIRE_AUTH=false`, set default dev claims: `{"user_id": "dev-user", "tenant_id": "dev-tenant", "groups": ["dev-group-guid"], "roles": ["contributor"]}`
+- [x] Create `src/agent/agent/group_resolver.py` with a simulated `resolve_departments(group_guids: list[str]) -> list[str]` that returns `["engineering"]` for any non-empty input
 
 #### Implementation Notes
 
@@ -112,36 +112,36 @@ Create the `ContextVar` infrastructure and extend the JWT middleware to extract 
 
 #### Definition of Done
 
-- [ ] `from middleware.request_context import user_claims_var, resolved_departments_var` works from any module in `src/agent/`
-- [ ] With `REQUIRE_AUTH=false`, a request to `/responses` results in `user_claims_var.get()` returning the dev claims dict
-- [ ] `resolve_departments(["any-guid"])` returns `["engineering"]`
-- [ ] `make test` passes with zero regressions
+- [x] `from middleware.request_context import user_claims_var, resolved_departments_var` works from any module in `src/agent/`
+- [x] With `REQUIRE_AUTH=false`, a request to `/responses` results in `user_claims_var.get()` returning the dev claims dict
+- [x] `resolve_departments(["any-guid"])` returns `["engineering"]`
+- [x] `make test` passes with zero regressions
 
 ---
 
-### Story 3 — SecurityFilterMiddleware + Tool Wiring
+### Story 3 — SecurityFilterMiddleware + Tool Wiring ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 1 ✅, Story 2 ✅
 
 Create the `FunctionMiddleware` that resolves groups once per request and writes enriched values to `context.kwargs`. Update `search_knowledge_base` to accept `**kwargs` and build an OData filter. Wire middleware into the agent.
 
 #### Deliverables
 
-- [ ] Create `src/agent/agent/security_middleware.py` with `SecurityFilterMiddleware(FunctionMiddleware)`:
+- [x] Create `src/agent/agent/security_middleware.py` with `SecurityFilterMiddleware(FunctionMiddleware)`:
   - Reads `user_claims_var` to get raw claims
   - Calls `resolve_departments(groups)` once
   - Writes `departments`, `roles`, `tenant_id` to `context.kwargs`
-- [ ] Update `search_knowledge_base()` in `agent/kb_agent.py`:
+- [x] Update `search_knowledge_base()` in `agent/kb_agent.py`:
   - Add `**kwargs` to signature
   - Read `departments = kwargs.get("departments", [])`
   - Build OData filter: `search.in(department, 'engineering,...')` if departments present
   - Pass filter to `search_kb(query, security_filter=odata_filter)`
-- [ ] Update `search_kb()` in `agent/search_tool.py`:
+- [x] Update `search_kb()` in `agent/search_tool.py`:
   - Add `security_filter: str | None = None` parameter
   - Pass `filter=security_filter` to `_search_client.search()`
-- [ ] Register `SecurityFilterMiddleware` on the agent in `agent/kb_agent.py` → `create_agent()`
-- [ ] Update `src/agent/.env.sample` with any new env vars if needed
+- [x] Register `SecurityFilterMiddleware` on the agent in `agent/kb_agent.py` → `create_agent()`
+- [x] Update `src/agent/.env.sample` with any new env vars if needed
 
 #### Implementation Notes
 
@@ -151,34 +151,34 @@ Create the `FunctionMiddleware` that resolves groups once per request and writes
 
 #### Definition of Done
 
-- [ ] `SecurityFilterMiddleware` is registered on the agent and runs before every tool call
-- [ ] In dev mode (no auth), a search query produces results filtered to `department eq 'engineering'` (visible in agent logs)
-- [ ] `search_kb(query, security_filter="department eq 'engineering'")` correctly passes the filter to Azure AI Search
-- [ ] Agent still works end-to-end: ask a question → get a filtered, cited answer
-- [ ] `make test` passes with zero regressions
+- [x] `SecurityFilterMiddleware` is registered on the agent and runs before every tool call
+- [x] In dev mode (no auth), a search query produces results filtered to `department eq 'engineering'` (visible in agent logs)
+- [x] `search_kb(query, security_filter="department eq 'engineering'")` correctly passes the filter to Azure AI Search
+- [x] Agent still works end-to-end: ask a question → get a filtered, cited answer
+- [x] `make test` passes with zero regressions
 
 ---
 
-### Story 4 — Unit Tests (Tool Testability)
+### Story 4 — Unit Tests (Tool Testability) ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 3 ✅
 
 Prove the Architecture 3 value proposition: tools are testable in complete isolation — pass `departments=["engineering"]` as plain kwargs, no ContextVar, no Graph API, no running server.
 
 #### Deliverables
 
-- [ ] Create `src/agent/tests/test_search_tool_filtering.py` with unit tests:
+- [x] Create `src/agent/tests/test_search_tool_filtering.py` with unit tests:
   - `test_build_odata_filter_single_department` — pass `departments=["engineering"]`, verify OData filter string is `"department eq 'engineering'"`
   - `test_build_odata_filter_multiple_departments` — pass `departments=["engineering", "research"]`, verify `search.in(department, 'engineering,research')`
   - `test_build_odata_filter_empty_departments` — pass `departments=[]`, verify no filter applied (None)
   - `test_search_kb_passes_filter` — mock `_search_client.search()`, call `search_kb(query, security_filter="department eq 'engineering'")`, assert `filter=` kwarg was passed to the mock
   - `test_tool_callable_with_plain_kwargs` — call `search_knowledge_base("test query", departments=["engineering"])` with mocked search client, verify it runs without ContextVar or middleware
-- [ ] Create `src/agent/tests/test_security_middleware.py` with unit tests:
+- [x] Create `src/agent/tests/test_security_middleware.py` with unit tests:
   - `test_middleware_resolves_departments` — set `user_claims_var` with test groups, run middleware, assert `context.kwargs["departments"]` is populated
   - `test_middleware_empty_groups` — set claims with no groups, assert `departments` is `[]`
   - `test_middleware_passes_roles_and_tenant` — verify roles and tenant_id are forwarded
-- [ ] Create `src/agent/tests/test_group_resolver.py`:
+- [x] Create `src/agent/tests/test_group_resolver.py`:
   - `test_resolve_returns_engineering` — `resolve_departments(["any-guid"])` returns `["engineering"]`
   - `test_resolve_empty_input` — `resolve_departments([])` returns `[]`
 
@@ -190,27 +190,27 @@ Prove the Architecture 3 value proposition: tools are testable in complete isola
 
 #### Definition of Done
 
-- [ ] `cd src/agent && uv run pytest tests/test_search_tool_filtering.py -v` — all 5 tests pass
-- [ ] `cd src/agent && uv run pytest tests/test_security_middleware.py -v` — all 3 tests pass
-- [ ] `cd src/agent && uv run pytest tests/test_group_resolver.py -v` — all 2 tests pass
-- [ ] `make test` passes with zero regressions (total test count increases by 10)
+- [x] `cd src/agent && uv run pytest tests/test_search_tool_filtering.py -v` — all 5 tests pass
+- [x] `cd src/agent && uv run pytest tests/test_security_middleware.py -v` — all 3 tests pass
+- [x] `cd src/agent && uv run pytest tests/test_group_resolver.py -v` — all 2 tests pass
+- [x] `make test` passes with zero regressions (total test count increases by 10)
 
 ---
 
-### Story 5 — Integration + E2E Tests
+### Story 5 — Integration + E2E Tests ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 3 ✅, Story 4 ✅
 
 Prove the full chain works end-to-end: JWT claims → ContextVar → middleware → tool → filtered AI Search results. Integration tests hit real AI Search; E2E tests validate the complete request lifecycle.
 
 #### Deliverables
 
-- [ ] Create `src/agent/tests/test_department_filter_integration.py` (marked `@pytest.mark.integration`):
+- [x] Create `src/agent/tests/test_department_filter_integration.py` (marked `@pytest.mark.integration`):
   - `test_search_with_engineering_filter` — call `search_kb("azure search", security_filter="department eq 'engineering'")` against real AI Search, verify all returned results have `department == "engineering"`
   - `test_search_without_filter` — call `search_kb("azure search")` with no filter, verify results are returned (baseline)
   - `test_search_with_nonexistent_department` — call with `security_filter="department eq 'nonexistent'"`, verify zero results
-- [ ] Create `src/agent/tests/test_contextual_filtering_e2e.py` (marked `@pytest.mark.integration`):
+- [x] Create `src/agent/tests/test_contextual_filtering_e2e.py` (marked `@pytest.mark.integration`):
   - `test_e2e_dev_mode_applies_filter` — with `REQUIRE_AUTH=false`, send a request through the full agent stack (HTTP → middleware → agent → tool → AI Search), verify response contains only engineering-department articles
   - `test_e2e_filter_visible_in_logs` — verify the OData filter expression appears in agent logs (confirms the filter was applied, not silently dropped)
 
@@ -222,38 +222,38 @@ Prove the full chain works end-to-end: JWT claims → ContextVar → middleware 
 
 #### Definition of Done
 
-- [ ] `cd src/agent && uv run pytest tests/test_department_filter_integration.py -v -m integration` — all 3 tests pass against real AI Search
-- [ ] `cd src/agent && uv run pytest tests/test_contextual_filtering_e2e.py -v -m integration` — all 2 tests pass
-- [ ] Tests confirm: with `department eq 'engineering'` filter, only engineering articles are returned; with `department eq 'nonexistent'`, zero results
-- [ ] `make test` (unit tests only) still passes with zero regressions
+- [x] `cd src/agent && uv run pytest tests/test_department_filter_integration.py -v -m integration` — all 3 tests pass against real AI Search
+- [x] `cd src/agent && uv run pytest tests/test_contextual_filtering_e2e.py -v -m integration` — all 2 tests pass
+- [x] Tests confirm: with `department eq 'engineering'` filter, only engineering articles are returned; with `department eq 'nonexistent'`, zero results
+- [x] `make test` (unit tests only) still passes with zero regressions
 
 ---
 
-### Story 6 — Documentation & Cleanup
+### Story 6 — Documentation & Cleanup ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 5 ✅
 
 Update all documentation to reflect the new contextual filtering architecture. Add Core Pattern 8 to the README with Architecture 3 diagram and link to the spec.
 
 #### Deliverables
 
-- [ ] **`README.md` — add Core Pattern 8: Contextual Tool Filtering**
+- [x] **`README.md` — add Core Pattern 8: Contextual Tool Filtering**
   - Update the intro line from "seven architectural patterns" to "eight architectural patterns"
   - Add a new `### 8. Contextual Tool Filtering` section after Pattern 7, following the same format (Problem / Pattern / diagram / link)
   - **Problem:** Agent tools query backends (AI Search, databases) but have no way to apply per-user security filters without leaking identity context into the LLM prompt
   - **Pattern:** Three-layer out-of-band propagation (ContextVar → FunctionMiddleware → `**kwargs`) using the Microsoft Agent Framework. JWT claims are extracted at the HTTP boundary, enriched by a middleware that resolves group GUIDs to department names (Graph API), and forwarded to tools as plain kwargs. Tools build backend-specific filters (OData, SQL) from the enriched values. The LLM never sees the filter context. Tools are testable in isolation by passing kwargs directly.
   - Include a Mermaid diagram showing the Architecture 3 flow (HTTP Request → JWT Middleware → Agent Framework → FunctionMiddleware → Graph API → Tool with `**kwargs` + Unit Test bypass)
   - Link to the full spec: `docs/specs/contextual-tool-filtering.md`
-- [ ] **`docs/specs/architecture.md`** — add a section on out-of-band context propagation (ContextVar → middleware → kwargs → tool filter), reference the spec and README pattern
-- [ ] **`docs/specs/contextual-tool-filtering.md`** — add "Implementation Status" section noting Epic 011 implemented Architecture 3 with simulated Graph API resolver, department field in AI Search index, and KB reorganized by department
-- [ ] **`src/agent/.env.sample`** — document any new env vars
-- [ ] **`README.md` KB section** — verify it reflects the new `kb/staging/{department}/` layout
-- [ ] **Review other docs for staleness:**
+- [x] **`docs/specs/architecture.md`** — add a section on out-of-band context propagation (ContextVar → middleware → kwargs → tool filter), reference the spec and README pattern
+- [x] **`docs/specs/contextual-tool-filtering.md`** — add "Implementation Status" section noting Epic 011 implemented Architecture 3 with simulated Graph API resolver, department field in AI Search index, and KB reorganized by department
+- [x] **`src/agent/.env.sample`** — document any new env vars
+- [x] **`README.md` KB section** — verify it reflects the new `kb/staging/{department}/` layout
+- [x] **Review other docs for staleness:**
   - `docs/specs/infrastructure.md` — check if the AI Search index field list needs updating (new `department` field)
   - `docs/setup-and-makefile.md` — check if any Makefile target documentation needs updating for the new folder structure
   - `docs/epics/001-local-pipeline-e2e.md` — check if the KB folder structure references need a note
-- [ ] **Update this epic file** — mark all stories as Done, set epic status to Done
+- [x] **Update this epic file** — mark all stories as Done, set epic status to Done
 
 #### Implementation Notes
 
@@ -263,11 +263,11 @@ Update all documentation to reflect the new contextual filtering architecture. A
 
 #### Definition of Done
 
-- [ ] `README.md` contains `### 8. Contextual Tool Filtering` with Problem, Pattern, and Mermaid diagram
-- [ ] `README.md` intro says "eight architectural patterns"
-- [ ] `docs/specs/architecture.md` mentions contextual tool filtering and references the spec
-- [ ] `docs/specs/contextual-tool-filtering.md` has an "Implementation Status" section
-- [ ] `.env.sample` is current
-- [ ] All other docs reviewed and updated if stale
-- [ ] All stories in this epic are marked Done
-- [ ] `git diff --stat` shows no untracked or uncommitted changes related to this epic
+- [x] `README.md` contains `### 8. Contextual Tool Filtering` with Problem, Pattern, and Mermaid diagram
+- [x] `README.md` intro says "eight architectural patterns"
+- [x] `docs/specs/architecture.md` mentions contextual tool filtering and references the spec
+- [x] `docs/specs/contextual-tool-filtering.md` has an "Implementation Status" section
+- [x] `.env.sample` is current
+- [x] All other docs reviewed and updated if stale
+- [x] All stories in this epic are marked Done
+- [x] `git diff --stat` shows no untracked or uncommitted changes related to this epic

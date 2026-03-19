@@ -19,18 +19,25 @@ from fn_index import chunker, embedder, indexer
 logger = logging.getLogger(__name__)
 
 
-def run(article_path: str) -> None:
+def run(article_path: str, department: str = "") -> None:
     """Index a single processed KB article into Azure AI Search.
 
     Parameters
     ----------
     article_path:
         Path to the processed article folder (contains ``article.md`` + ``images/``).
+    department:
+        Department name for the article (e.g. ``"engineering"``).
+        If empty, derived from the parent folder name.
     """
     article_dir = Path(article_path).resolve()
     article_id = article_dir.name
 
-    logger.info("fn-index: %s", article_id)
+    # Derive department from parent folder if not provided
+    if not department:
+        department = article_dir.parent.name
+
+    logger.info("fn-index: %s (department=%s)", article_id, department)
 
     # 1. Read article.md
     article_md = article_dir / "article.md"
@@ -48,5 +55,5 @@ def run(article_path: str) -> None:
 
     # 4. Index
     indexer.ensure_index_exists()
-    indexer.index_chunks(article_id, embedded_chunks)
+    indexer.index_chunks(article_id, embedded_chunks, department=department)
     logger.info("fn-index complete: %s (%d chunks indexed)", article_id, len(embedded_chunks))
