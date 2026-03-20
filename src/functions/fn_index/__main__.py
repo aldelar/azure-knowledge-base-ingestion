@@ -1,4 +1,4 @@
-"""Allow ``python -m fn_index article_dir [department]``."""
+"""Allow ``python -m fn_index article_dir``."""
 
 import logging
 import sys
@@ -12,13 +12,12 @@ def main() -> None:
         format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
     )
 
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python -m fn_index <article_dir> [department]", file=sys.stderr)
+    if len(sys.argv) != 2:
+        print("Usage: python -m fn_index <article_dir>", file=sys.stderr)
         sys.exit(1)
 
     article_dir = sys.argv[1]
-    department = sys.argv[2] if len(sys.argv) == 3 else ""
-    run(article_dir, department=department)
+    run(article_dir)
 
 
 if __name__ == "__main__":

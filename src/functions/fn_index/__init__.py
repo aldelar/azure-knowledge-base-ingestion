@@ -11,6 +11,7 @@ Steps:
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -19,23 +20,29 @@ from fn_index import chunker, embedder, indexer
 logger = logging.getLogger(__name__)
 
 
-def run(article_path: str, department: str = "") -> None:
+def run(article_path: str) -> None:
     """Index a single processed KB article into Azure AI Search.
+
+    Reads ``metadata.json`` from the article folder to discover index fields
+    (e.g. ``department``).  The field names in ``metadata.json`` correspond
+    directly to fields in the AI Search index.
 
     Parameters
     ----------
     article_path:
-        Path to the processed article folder (contains ``article.md`` + ``images/``).
-    department:
-        Department name for the article (e.g. ``"engineering"``).
-        If empty, derived from the parent folder name.
+        Path to the processed article folder (contains ``article.md``,
+        ``metadata.json``, and optionally ``images/``).
     """
     article_dir = Path(article_path).resolve()
     article_id = article_dir.name
 
-    # Derive department from parent folder if not provided
-    if not department:
-        department = article_dir.parent.name
+    # Read metadata.json written by the convert step
+    metadata_file = article_dir / "metadata.json"
+    metadata: dict = {}
+    if metadata_file.exists():
+        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+
+    department = metadata.get("department", "")
 
     logger.info("fn-index: %s (department=%s)", article_id, department)
 

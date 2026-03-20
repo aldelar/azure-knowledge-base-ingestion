@@ -96,7 +96,7 @@ class TestSearchKnowledgeBaseTool:
                 score=0.9,
             )
         ]
-        mock_get_url.return_value = "/api/images/engineering/article/images/fig.png"
+        mock_get_url.return_value = "/api/images/article/images/fig.png"
 
         result = search_knowledge_base("test query")
         parsed = json.loads(result)
@@ -117,7 +117,7 @@ class TestSearchKnowledgeBaseTool:
                 image_urls=["images/fig.png"], score=0.5,
             )
         ]
-        mock_get_url.return_value = "/api/images/engineering/a/images/fig.png"
+        mock_get_url.return_value = "/api/images/a/images/fig.png"
 
         result = search_knowledge_base("query")
         parsed = json.loads(result)
@@ -137,7 +137,7 @@ class TestSearchKnowledgeBaseTool:
                 image_urls=["images/fig.png"], score=0.5,
             )
         ]
-        mock_get_url.return_value = "/api/images/engineering/article/images/fig.png"
+        mock_get_url.return_value = "/api/images/article/images/fig.png"
 
         result = search_knowledge_base("query")
         parsed = json.loads(result)

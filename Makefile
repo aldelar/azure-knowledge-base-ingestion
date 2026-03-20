@@ -244,6 +244,7 @@ grant-dev-roles: ## Grant Cosmos DB native RBAC to current developer
 clean-kb: _check-env ## Clean local serving output + delete search index
 	@echo "Cleaning kb/serving/ article outputs..."
 	@find kb/serving -name "article.md" -delete 2>/dev/null || true
+	@find kb/serving -name "metadata.json" -delete 2>/dev/null || true
 	@find kb/serving -name "*.png" -delete 2>/dev/null || true
 	@echo "Deleting search index..."
 	@cd src/functions && uv run python -c "\
@@ -264,20 +265,17 @@ index: ## Run fn-index locally (kb/serving → Azure AI Search)
 upload-serving: _check-env ## Upload kb/serving/ images to Azure serving blob
 	@echo "Uploading kb/serving/ to Azure serving blob container..."
 	@ACCOUNT=$$(grep '^SERVING_STORAGE_ACCOUNT=' src/functions/.env | cut -d= -f2 | tr -d '"') && \
-	for dept_dir in kb/serving/*/; do \
-		DEPT=$$(basename "$$dept_dir") && \
-		for dir in $$dept_dir*/; do \
-			ARTICLE=$$(basename "$$dir") && \
-			echo "  \u2191 $$DEPT/$$ARTICLE" && \
-			az storage blob upload-batch \
-				--destination serving \
-				--source "$$dir" \
-				--destination-path "$$DEPT/$$ARTICLE" \
-				--account-name "$$ACCOUNT" \
-				--auth-mode login \
-				--overwrite \
-				--only-show-errors; \
-		done; \
+	for dir in kb/serving/*/; do \
+		ARTICLE=$$(basename "$$dir") && \
+		echo "  \u2191 $$ARTICLE" && \
+		az storage blob upload-batch \
+			--destination serving \
+			--source "$$dir" \
+			--destination-path "$$ARTICLE" \
+			--account-name "$$ACCOUNT" \
+			--auth-mode login \
+			--overwrite \
+			--only-show-errors; \
 	done
 	@echo "Done."
 

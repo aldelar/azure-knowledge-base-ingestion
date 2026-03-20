@@ -2,7 +2,7 @@
 
 > **Status:** Done
 > **Created:** March 18, 2026
-> **Updated:** March 19, 2026
+> **Updated:** March 20, 2026
 
 ## Objective
 
@@ -13,16 +13,17 @@ After this epic:
 - **JWT claims flow to tools without touching the LLM prompt** — the middleware extracts Entra group GUIDs from the token, resolves them to department names (simulated Graph API), and forwards enriched values to tools via `**kwargs`
 - **AI Search results are department-scoped** — a new `department` field in the `kb-articles` index enables OData filtering; only articles belonging to the user's department(s) are returned
 - **Tools are fully testable in isolation** — unit tests pass `departments=["engineering"]` as plain kwargs, no ContextVar, no Graph API, no running server
-- **KB is organized by department** — staging articles live under `kb/staging/{department}/{article-id}/`, and the serving layer preserves the same `{department}/{article-id}/` structure (both locally and in blob storage). The indexer derives the `department` field from the folder path.
+- **KB is organized by department** — staging articles live under `kb/staging/{department}/{article-id}/`, while the serving layer is **flat** (`{article-id}/`). The convert step writes a `metadata.json` file into each serving article folder with index-level metadata (e.g. `{"department": "engineering"}`). The indexer reads `metadata.json` to populate search index fields — it has no knowledge of the staging folder structure.
 - **Dev mode works without auth** — when `REQUIRE_AUTH=false`, the middleware sets default dev claims (`department=engineering`) so local development doesn't require a JWT
 - **E2E tests validate filters are applied** — end-to-end tests confirm that department filtering actually restricts search results
 
 ## Success Criteria
 
 - [x] `kb/staging/` reorganized into `kb/staging/engineering/{article-id}/` structure
-- [x] Serving layer preserves `{department}/{article-id}/` folder structure (local and blob storage)
+- [x] Serving layer is flat `{article-id}/` with a `metadata.json` file containing department and other index metadata
 - [x] `kb-articles` index has a `department` field (string, filterable)
-- [x] `fn-index` populates `department` from the folder path during indexing
+- [x] `fn-convert` writes `metadata.json` with `department` derived from the staging folder path
+- [x] `fn-index` reads `metadata.json` and populates index fields accordingly
 - [x] `make index` re-indexes successfully with the new field populated
 - [x] `middleware/request_context.py` defines `user_claims_var` and `resolved_departments_var` ContextVars
 - [x] `JWTAuthMiddleware` extracts claims into `user_claims_var`; sets default dev claims when auth is disabled
@@ -51,7 +52,7 @@ See [docs/specs/contextual-tool-filtering.md](../specs/contextual-tool-filtering
 | Tool receives security context | No — only LLM-provided `query` | Yes — `departments`, `roles`, `tenant_id` via `**kwargs` |
 | AI Search filtering | No filter — all articles returned | `department` OData filter — scoped to user's department(s) |
 | KB staging layout | Flat `kb/staging/{article-id}/` | `kb/staging/{department}/{article-id}/` |
-| Serving layer layout | Flat `{article-id}/` | `{department}/{article-id}/` (local + blob) |
+| Serving layer layout | Flat `{article-id}/` | Flat `{article-id}/` with `metadata.json` (department is metadata, not a folder) |
 | Tool testability | Tool imports module-level clients, hard to unit test | Tool accepts `**kwargs`, testable with plain Python args |
 
 ---
@@ -61,22 +62,23 @@ See [docs/specs/contextual-tool-filtering.md](../specs/contextual-tool-filtering
 > **Status:** Done
 > **Depends on:** None
 
-Reorganize the KB staging folder to `kb/staging/{department}/{article-id}/`, update the serving layer to preserve the department folder structure, add a `department` field to the AI Search index, and update `fn-index` to populate it from the folder path. Re-index to populate the new field.
+Reorganize the KB staging folder to `kb/staging/{department}/{article-id}/`, keep the serving layer flat (`{article-id}/`), add a `department` field to the AI Search index, and update the pipeline so `fn-convert` writes a `metadata.json` file (containing `department` and any future index fields) into each serving article folder. `fn-index` reads `metadata.json` and populates index fields accordingly. Re-index to populate the new field.
 
 #### Deliverables
 
 - [x] Move existing articles under `kb/staging/engineering/` (e.g., `kb/staging/engineering/agentic-retrieval-overview-html_en-us/`)
-- [x] Update `fn-convert` to preserve `{department}/{article-id}/` in the serving layer output path (both local `kb/serving/` and blob storage)
+- [x] Update `fn-convert` to write serving output to flat `{article-id}/` path and generate `metadata.json` with `{"department": "..."}` derived from the staging folder structure
 - [x] Add `department` field (type: `Edm.String`, filterable: true) to the index schema in `src/functions/fn_index/indexer.py`
-- [x] Update `fn-index` to extract `department` from the serving folder path (first path segment above `article-id`) and populate the field during indexing
+- [x] Update `fn-index` to read `metadata.json` from each article folder and use its fields to populate the search index
 - [x] Update any Makefile targets (`convert`, `index`) that reference the old flat path structure
 - [x] Re-index with `make index` — verify `department=engineering` is populated on all documents
 
 #### Implementation Notes
 
-- The serving layer path becomes `{department}/{article-id}/article.md` + `{department}/{article-id}/images/`. The `department` is derived from the folder structure, not from article content.
-- `fn-convert` already copies from staging to serving — adjust the output path to include the department folder.
-- The `article_id` in the index should remain the article folder name (not include department). The `department` is a separate filterable field.
+- The serving layer is flat: `{article-id}/article.md` + `{article-id}/metadata.json` + `{article-id}/images/`. Department is stored as metadata, not as a folder.
+- `fn-convert` reads from staging `{department}/{article-id}/`, writes to serving `{article-id}/`, and generates `metadata.json` as the contract between convert and index.
+- `fn-index` reads `metadata.json` and maps its keys directly to AI Search index fields. Adding a new filterable dimension only requires `fn-convert` to write an additional field.
+- The `article_id` in the index remains the article folder name. The `department` is a separate filterable field.
 
 #### Definition of Done
 

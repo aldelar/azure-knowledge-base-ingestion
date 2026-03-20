@@ -45,18 +45,13 @@ def http_index(req: func.HttpRequest) -> func.HttpResponse:
     results = []
     for article_id in article_ids:
         try:
-            # article_id may be "{dept}/{id}" composite path
-            parts = article_id.split("/", 1)
-            department = parts[0] if len(parts) == 2 else ""
-            article_name = parts[1] if len(parts) == 2 else parts[0]
-
             tmp_root = Path(tempfile.mkdtemp(prefix="kb-index-"))
-            serving_dir = tmp_root / article_name
+            serving_dir = tmp_root / article_id
             download_article(
                 config.serving_blob_endpoint, "serving", article_id, serving_dir
             )
 
-            fn_index.run(str(serving_dir), department=department)
+            fn_index.run(str(serving_dir))
 
             results.append({"article_id": article_id, "status": "ok"})
 

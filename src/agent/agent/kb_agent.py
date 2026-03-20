@@ -110,7 +110,7 @@ def search_knowledge_base(
     if departments:
         dept_list = ",".join(departments)
         security_filter = f"search.in(department, '{dept_list}', ',')"
-        logger.debug("Applying security filter: %s", security_filter)
+        logger.info("Applying security filter: %s", security_filter)
 
     try:
         results: list[SearchResult] = search_kb(query, security_filter=security_filter)
@@ -120,8 +120,6 @@ def search_knowledge_base(
 
     result_dicts: list[dict] = []
     for idx, r in enumerate(results, start=1):
-        # Build blob prefix: {department}/{article_id} for image URLs
-        blob_prefix = f"{r.department}/{r.article_id}" if r.department else r.article_id
         result_dicts.append({
             "ref_number": idx,
             "content": r.content,
@@ -131,7 +129,7 @@ def search_knowledge_base(
             "chunk_index": r.chunk_index,
             "image_urls": list(r.image_urls),  # raw paths like 'images/foo.png'
             "images": [
-                {"name": url.split("/")[-1], "url": get_image_url(blob_prefix, url)}
+                {"name": url.split("/")[-1], "url": get_image_url(r.article_id, url)}
                 for url in r.image_urls
             ] if r.image_urls else [],
         })

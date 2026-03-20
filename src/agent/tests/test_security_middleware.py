@@ -1,7 +1,8 @@
 """Tests for SecurityFilterMiddleware.
 
 Verifies that the middleware reads ContextVar claims, resolves departments,
-and injects them into context.kwargs for downstream tools.
+injects them into context.kwargs for downstream tools, and sets OTel span
+attributes for trace visibility.
 """
 
 from __future__ import annotations
@@ -102,3 +103,28 @@ class TestSecurityFilterMiddleware:
         await middleware.process(context, call_next)
 
         assert resolved_departments_var.get() == ["engineering"]
+
+    @pytest.mark.asyncio
+    async def test_sets_otel_span_attributes(self) -> None:
+        """OTel span attributes are set for trace visibility."""
+        user_claims_var.set({
+            "user_id": "u1",
+            "groups": ["group-guid-1"],
+            "roles": [],
+        })
+
+        middleware = SecurityFilterMiddleware()
+        context = MagicMock()
+        context.kwargs = {}
+        context.function.name = "search_knowledge_base"
+        call_next = AsyncMock()
+
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+        with patch("agent.security_middleware.trace") as mock_trace:
+            mock_trace.get_current_span.return_value = mock_span
+            await middleware.process(context, call_next)
+
+        mock_span.set_attribute.assert_any_call("security.departments", ["engineering"])
+        mock_span.set_attribute.assert_any_call("security.groups", ["group-guid-1"])
+        mock_span.set_attribute.assert_any_call("security.user_id", "u1")

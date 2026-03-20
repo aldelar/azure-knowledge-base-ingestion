@@ -344,7 +344,7 @@ There are **three interchangeable backend implementations** that share the same 
 | **Mistral Document AI** | `fn_convert_mistral` | HTML → PDF rendering (Playwright) with `[[IMG:filename]]` markers, Mistral OCR for text extraction, GPT-4.1 vision for image descriptions | Yes — both OCR and GPT-4.1 are standard Foundry endpoints |
 | **MarkItDown** | `fn_convert_markitdown` | Local Python HTML → Markdown via [MarkItDown](https://github.com/microsoft/markitdown) library, GPT-4.1 vision for image descriptions | Partial — text extraction is local (no API); GPT-4.1 is a standard Foundry endpoint |
 
-All three backends produce the same output: `article.md` + `images/` folder in the serving layer. `fn-index` is completely unaware of which backend generated the content — the serving layer is the contract boundary.
+All three backends produce the same output: `article.md` + `images/` folder + `metadata.json` in the serving layer. `fn-index` is completely unaware of which backend generated the content — the serving layer is the contract boundary. The `metadata.json` file carries index-level metadata (e.g. `department`) that `fn-convert` extracts from the staging path and `fn-index` reads to populate search index fields.
 
 The backend is selected at runtime via the `analyzer=` Makefile argument:
 ```bash
@@ -565,13 +565,14 @@ staging/
 serving/
   └── {article-id}/
         ├── article.md
+        ├── metadata.json
         └── images/
               ├── image1.png
               ├── image2.png
               └── ...
 ```
 
-The `{article-id}` folder name is preserved from the source and stored as `article_id` in the search index, providing traceability from search result back to source article.
+The `{article-id}` folder name is preserved from the source and stored as `article_id` in the search index, providing traceability from search result back to source article. The serving layer is **flat** — articles are not nested under department folders. Department and other metadata are stored in `metadata.json`.
 
 ---
 
@@ -611,7 +612,7 @@ The `{article-id}` folder name is preserved from the source and stored as `artic
 | `source_url` | Original HTML article URL if available |
 | `title` | Article title |
 | `section_header` | H2/H3 heading this chunk belongs to |
-| `department` | Department that owns the article (derived from `kb/staging/{department}/` folder path). Used for OData security filtering via `SecurityFilterMiddleware`. |
+| `department` | Department that owns the article. Written by `fn-convert` into `metadata.json` (derived from `kb/staging/{department}/` folder path) and read by `fn-index` to populate this index field. Used for OData security filtering via `SecurityFilterMiddleware`. |
 | `key_topics` | Filterable topic tags for the chunk |
 
 ---

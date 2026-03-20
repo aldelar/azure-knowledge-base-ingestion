@@ -271,6 +271,8 @@ flowchart LR
 
 **Pattern:** Three-layer out-of-band propagation using [`ContextVar`](https://docs.python.org/3/library/contextvars.html) → [`FunctionMiddleware`](https://learn.microsoft.com/en-us/agent-framework/) → `**kwargs`. JWT claims are extracted at the HTTP boundary and stored in a `ContextVar`. A `SecurityFilterMiddleware` (Agent Framework `FunctionMiddleware`) resolves Entra group GUIDs to department names and writes enriched values into `context.kwargs`. Tools receive departments, roles, and tenant ID as plain `**kwargs` and build backend-specific filters (OData for AI Search, SQL WHERE clauses for databases). The LLM never sees the filter context. Tools are testable in isolation by passing kwargs directly.
 
+**Index metadata pipeline:** The `department` field in the AI Search index is populated via a `metadata.json` contract between the convert and index stages. `fn-convert` reads articles from `staging/{department}/{article-id}/`, writes the processed output to flat `serving/{article-id}/`, and generates a `metadata.json` file containing `{"department": "engineering"}` (and any future index fields). `fn-index` reads `metadata.json` from each article folder and uses its fields directly as AI Search index fields — no knowledge of the staging folder structure is needed. This makes the metadata extensible: adding a new index dimension only requires `fn-convert` to write an additional field to `metadata.json`.
+
 ```mermaid
 flowchart LR
     A["HTTP Request<br/>(Bearer token)"] --> B["JWT Middleware<br/>validates token,<br/>sets ContextVar"]

@@ -5,6 +5,8 @@ resolves Entra group GUIDs to department names via
 :func:`agent.group_resolver.resolve_departments`, and writes the resolved
 values into ``context.kwargs`` so that tool functions receive them via
 ``**kwargs``.
+
+Adds OTel span attributes so department filters are visible in traces.
 """
 
 from __future__ import annotations
@@ -12,11 +14,13 @@ from __future__ import annotations
 import logging
 
 from agent_framework import FunctionMiddleware, FunctionInvocationContext
+from opentelemetry import trace
 
 from agent.group_resolver import resolve_departments
 from middleware.request_context import user_claims_var, resolved_departments_var
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class SecurityFilterMiddleware(FunctionMiddleware):
@@ -46,5 +50,12 @@ class SecurityFilterMiddleware(FunctionMiddleware):
             departments,
             context.function.name,
         )
+
+        # Record security context on the current OTel span for trace visibility
+        span = trace.get_current_span()
+        if span.is_recording():
+            span.set_attribute("security.departments", departments)
+            span.set_attribute("security.groups", groups)
+            span.set_attribute("security.user_id", claims.get("user_id", ""))
 
         await call_next()
