@@ -276,18 +276,21 @@ Update all documentation to reflect the new contextual filtering architecture. A
 
 ---
 
-### Story 7 — Conversation History Compaction & Chunk Citation Cache
+### Story 7 — Conversation History Compaction & Separated Conversation Storage
 
 > **Status:** Not Started
 > **Depends on:** Story 6 ✅, Epic 010 ✅
+> **Spec:** `docs/specs/agent-memory.md` (authoritative — all schema and access pattern details live there)
 
 #### Problem
 
-Every tool call's full output (~2000 tokens of chunk content per search) accumulates in `InMemoryHistoryProvider.state["messages"]` and is replayed verbatim to the LLM on every follow-up turn. A 4-turn conversation sends 5000+ tokens of stale tool output to the model, causing response times to grow from 20s to 200s. Additionally, full chunk content is stored twice in Cosmos: once in the agent session (tool output messages) and once in Chainlit elements (citation content). There is no mechanism to bound history growth or to separate chunk storage from conversation storage.
+Every tool call's full output (~2000 tokens of chunk content per search) accumulates in `InMemoryHistoryProvider.state["messages"]` and is replayed verbatim to the LLM on every follow-up turn. A 4-turn conversation sends 5000+ tokens of stale tool output to the model, causing response times to grow from 20s to 200s. Additionally, the current single-document design in `agent-sessions` mixes agent session state with web app UI data (steps, elements), forcing read-modify-write patterns and preventing independent optimization of either concern.
 
 #### Intent
 
-Make multi-turn conversations fast and bounded regardless of turn count, while ensuring citation content remains accessible to the web app without depending on AI Search at display time.
+1. Make multi-turn conversations fast and bounded regardless of turn count via agent-side compaction.
+2. Separate concerns: the agent owns its session (with compaction), the web app owns conversation display data in dedicated containers.
+3. Eliminate the need for a chunk cache — references are stored at write time and retrieved by direct key lookup.
 
 #### Design
 
@@ -310,18 +313,73 @@ At index time, `fn-index` generates a 1–2 sentence LLM summary per chunk (via 
 
 `search_knowledge_base()` returns `{"results": [...], "summary": "N results covering: topic1, topic2, ..."}`. The LLM receives full chunk `content` in `results` for the current turn. The top-level `summary` is compaction-only metadata — the LLM ignores it, but when `ToolResultCompactionStrategy` later replaces this tool output, it preserves the `summary` instead of raw-truncating. Each result also carries its per-chunk `summary` and `indexed_at` from AI Search.
 
-**4. Demand-driven chunk citation cache (`kb-chunks`)**
+**4. Four Cosmos containers — clean ownership boundaries**
 
-A new Cosmos DB container (`kb-chunks`, partition key `/article_id`) acts as a shared, demand-driven chunk cache. When the search tool retrieves chunks from AI Search, it writes them to `kb-chunks` as a fire-and-forget side effect (best-effort, must not slow the tool response).
+Replace the current single-document design (`agent-sessions` with mixed ownership) with four purpose-specific containers:
 
-Key design decisions:
-- **Chunk key = `{article_id}_{chunk_index}_{indexed_at}`** — the `indexed_at` timestamp in the key ensures a re-index produces new cache entries. Existing conversations keep referencing the exact chunk version they originally retrieved. This preserves citation state across re-indexes.
-- **Create-if-not-exists semantics** — if a chunk with that key already exists, skip the write (409 Conflict is expected and ignored). Chunks are conversation-independent; the cache is shared across all conversations.
-- **Web app reads from this cache** for citation display — no AI Search dependency at display time. The web app exposes a chunk proxy endpoint (`GET /api/chunks/{article_id}/{chunk_index}/{indexed_at}`) that does a Cosmos point read.
+| Container | Owner | Partition Key | Document Granularity | Access Pattern |
+|-----------|-------|---------------|---------------------|----------------|
+| `agent-sessions` | Agent only | `/id` (conversation_id) | One doc per conversation — session state only | Agent read/write per turn (compaction-optimized) |
+| `conversations` | Web app only | `/userId` | One doc per conversation (lightweight metadata) | Create on start; single-partition sidebar list by userId |
+| `messages` | Web app only | `/conversationId` | One doc per message (insert-only, append) | Write: append each message. Read: load full conversation for display |
+| `references` | Web app only | `/conversationId` | One doc per chunk reference | Write: insert per chunk at message time. Read: single key lookup on user click |
 
-**5. Slim Chainlit elements**
+**`agent-sessions` — agent only, session state with compaction.** The agent writes and reads its own session here. No steps, no elements, no web app fields. The `CosmosAgentSessionRepository` becomes simpler — no read-modify-write needed, it fully owns the document. Compaction strategies freely trim and mark messages as excluded without risk of overwriting web app data.
 
-Citation elements in Cosmos stop storing full chunk content. Instead they store only metadata: `article_id`, `chunk_index`, `indexed_at`, `title`, `section_header`. The `indexed_at` field pins the element to the exact chunk version. On resume or display, content is fetched on demand from the `kb-chunks` cache via the chunk proxy.
+**`conversations` container — web app owns conversation metadata.** One document per conversation containing only lightweight metadata: id, userId, name, timestamps. Partitioned by `/userId` so the sidebar is a single-partition query — no cross-partition DISTINCT needed. Updated (upsert `updatedAt`) when new messages arrive.
+
+```json
+{
+  "id": "<conversation-id (UUID)>",
+  "userId": "<user-identifier>",
+  "name": "What is Content Understanding?",
+  "createdAt": "2026-02-26T10:30:00+00:00",
+  "updatedAt": "2026-02-26T10:35:12+00:00"
+}
+```
+
+**`messages` container — web app owns conversation messages.** Each user or assistant message is a separate document, keyed by `{conversationId, messageId}`. Insert-only — the web app appends each message as it streams. Loading a conversation is a partition-scoped query by `conversationId` ordered by `createdAt`. Messages contain message-scoped references via `refIds` (e.g. `["{messageId}-ref-1", "{messageId}-ref-2"]`).
+
+```json
+{
+  "id": "<message-uuid>",
+  "conversationId": "<conversation-id>",
+  "role": "assistant",
+  "content": "Azure Content Understanding is...",
+  "refIds": ["<messageId>-ref-1", "<messageId>-ref-2"],
+  "createdAt": "2026-02-26T10:30:05+00:00"
+}
+```
+
+**`references` container — web app owns chunk references (formerly "elements").** One document per chunk reference, stored when the search tool returns results. Reference IDs are message-scoped (`{messageId}-ref-{N}`) so `[Ref #1]` in two different messages don't collide. Each reference is pinned to a specific chunk version via `article_id`, `chunk_index`, and `indexed_at`. When a user clicks a ref tag, the app does a single point read by `{conversationId, messageId-ref-N}` — no AI Search dependency at display time.
+
+```json
+{
+  "id": "<messageId>-ref-1",
+  "conversationId": "<conversation-id>",
+  "messageId": "<message-uuid>",
+  "articleId": "<article-id>",
+  "chunkIndex": 3,
+  "indexedAt": "2026-03-15T08:00:00Z",
+  "title": "Article Title",
+  "sectionHeader": "Overview",
+  "content": "Full chunk content for display...",
+  "createdAt": "2026-02-26T10:30:05+00:00"
+}
+```
+
+**Key simplifications over the previous design:**
+
+- **No chunk cache.** References store the full chunk content at write time. No fire-and-forget async writes, no 409-conflict handling, no separate cache container.
+- **No read-modify-write on `agent-sessions`.** The agent fully owns its document — no risk of overwriting web app fields or vice versa.
+- **Insert-only message writes.** The web app never updates a message document — it only appends new ones. This eliminates concurrency issues.
+- **Single-partition sidebar.** The `conversations` container (PK `/userId`) answers "list my conversations" without cross-partition queries.
+- **Single key lookup for references.** Clicking `[Ref #1]` does a point read by `{conversationId, messageId-ref-N}` — the cheapest possible Cosmos operation.
+- **No session message synthesis fallback.** The web app reads from `messages`, not from the agent's session. No need to reverse-engineer steps from the agent's internal message format.
+
+**5. Rename: "elements" → "references"**
+
+All code and docs rename the concept of Chainlit "elements" (which stored citation content) to "references" — reflecting their actual purpose as pointers to source chunks. This applies to the Cosmos container name, the `CosmosDataLayer` methods, the web app UI labels, and the spec docs.
 
 #### Estimated Token Savings
 
@@ -338,9 +396,14 @@ Citation elements in Cosmos stop storing full chunk content. Instead they store 
 - [ ] Agent framework upgraded to rc5; `CompactionProvider` active with `SlidingWindowStrategy` (before, 5 groups) + `ToolResultCompactionStrategy` (after, 1 group)
 - [ ] AI Search index includes `summary` and `indexed_at` fields, populated at index time
 - [ ] Search tool returns structured output with full content for current turn + compaction-only summary
-- [ ] Retrieved chunks cached in `kb-chunks` Cosmos container on demand (fire-and-forget, create-if-not-exists, keyed with `indexed_at`)
-- [ ] Web app serves chunk content via proxy endpoint reading from `kb-chunks`
-- [ ] Chainlit elements store metadata only; content fetched on demand from chunk cache
+- [ ] `agent-sessions` container stores agent session state only — no steps, no elements, no web app fields
+- [ ] `conversations` container created (partition key `/userId`); one doc per conversation — lightweight metadata for sidebar
+- [ ] `messages` container created (partition key `/conversationId`); web app writes one document per message (insert-only)
+- [ ] `references` container created (partition key `/conversationId`); one document per chunk reference with message-scoped IDs (`{messageId}-ref-{N}`)
+- [ ] Web app renders `[Ref #N]` tags in messages; clicking a ref does a point read by `{conversationId, messageId-ref-N}`
+- [ ] "elements" renamed to "references" across code, Cosmos containers, and docs
+- [ ] No chunk cache container — references store full chunk content at write time
 - [ ] Follow-up response time bounded — no degradation beyond 5th turn
 - [ ] `make test` passes across all services
-- [ ] Docs updated (agent-memory, infrastructure, architecture specs)
+- [ ] Docs updated (`agent-memory.md`, `infrastructure.md`, `architecture.md`)
+- [ ] README "Agent-Owned Conversation Memory" section updated to reflect the 4-container separated design, compaction, and elements→references rename
