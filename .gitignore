@@ -208,3 +208,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Spike generated artifacts (binary samples and outputs)
+src/spikes/*/samples/
+src/spikes/*/output/
