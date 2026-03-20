@@ -208,3 +208,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Spike generated artifacts (binary samples and outputs)
+src/spikes/*/samples/
+src/spikes/*/output/
+
+# Exception: commit the final sample documents for spike 004 review
+!src/spikes/004-pdf-pptx-conversion/samples/
+src/spikes/004-pdf-pptx-conversion/samples/*.png
+!src/spikes/004-pdf-pptx-conversion/samples/sample-article.pdf
+!src/spikes/004-pdf-pptx-conversion/samples/sample-presentation.pptx
+!src/spikes/004-pdf-pptx-conversion/samples/sample-document.docx
+# Real-world test documents (public domain)
+!src/spikes/004-pdf-pptx-conversion/samples/real-world/
+!src/spikes/004-pdf-pptx-conversion/samples/real-world/*.pdf
+!src/spikes/004-pdf-pptx-conversion/samples/real-world/*.pptx
+!src/spikes/004-pdf-pptx-conversion/samples/real-world/*.docx
