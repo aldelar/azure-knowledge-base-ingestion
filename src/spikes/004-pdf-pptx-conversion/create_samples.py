@@ -5,16 +5,22 @@ Generates test documents with embedded images, tables, headings,
 and (for PPTX) speaker notes — covering the features that matter
 most for conversion quality assessment.
 
+Images are deliberately diverse to stress-test extraction quality:
+  - Architecture diagram (boxes, arrows, labels — typical whiteboard diagram)
+  - Bar chart with axes and labels (data-visualization style)
+  - Photo-like gradient image with noise (simulates a photograph)
+
 Usage:
     cd src/functions && uv run python ../spikes/004-pdf-pptx-conversion/create_samples.py
 """
 
 from __future__ import annotations
 
-import io
+import math
+import random
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -31,21 +37,220 @@ from reportlab.platypus import (
 SAMPLES_DIR = Path(__file__).resolve().parent / "samples"
 
 
-def _create_test_image(filename: str, width: int = 300, height: int = 200, color: str = "blue") -> Path:
-    """Create a simple test PNG image."""
-    img = Image.new("RGB", (width, height), color)
+def _font() -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Return the best available font for labels."""
+    for path in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    ]:
+        try:
+            return ImageFont.truetype(path, 14)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _font_small() -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Return a smaller font for secondary labels."""
+    for path in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]:
+        try:
+            return ImageFont.truetype(path, 11)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _create_architecture_diagram(filename: str, width: int = 600, height: int = 400) -> Path:
+    """Create a realistic architecture diagram with boxes, arrows, and labels.
+
+    Mimics a typical cloud-architecture diagram with named components,
+    directional arrows, and color-coded service groups.
+    """
+    img = Image.new("RGB", (width, height), "#F5F5F5")
+    draw = ImageDraw.Draw(img)
+    font = _font()
+    font_sm = _font_small()
+
+    # Title
+    draw.text((width // 2 - 100, 10), "System Architecture", fill="#1a1a1a", font=font)
+
+    # --- Service boxes ---
+    boxes = [
+        (50, 70, 170, 130, "#4472C4", "Web App"),
+        (220, 70, 370, 130, "#548235", "Agent API"),
+        (420, 70, 560, 130, "#BF8F00", "AI Search"),
+        (50, 190, 170, 250, "#C55A11", "Blob Storage"),
+        (220, 190, 370, 250, "#7030A0", "OpenAI"),
+        (420, 190, 560, 250, "#538DD5", "Cosmos DB"),
+        (220, 310, 370, 370, "#A5A5A5", "Functions"),
+    ]
+    for x1, y1, x2, y2, color, label in boxes:
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=8, fill=color, outline="#333333", width=2)
+        tw = draw.textlength(label, font=font_sm)
+        tx = x1 + (x2 - x1 - tw) / 2
+        ty = y1 + (y2 - y1 - 14) / 2
+        draw.text((tx, ty), label, fill="white", font=font_sm)
+
+    # --- Arrows (lines with arrowheads) ---
+    arrows = [
+        (170, 100, 220, 100),   # Web App → Agent API
+        (370, 100, 420, 100),   # Agent API → AI Search
+        (295, 130, 295, 190),   # Agent API → OpenAI
+        (110, 130, 110, 190),   # Web App → Blob Storage
+        (490, 130, 490, 190),   # AI Search → Cosmos DB
+        (295, 250, 295, 310),   # OpenAI → Functions
+        (170, 220, 220, 220),   # Blob Storage → OpenAI
+    ]
+    for x1, y1, x2, y2 in arrows:
+        draw.line([(x1, y1), (x2, y2)], fill="#333333", width=2)
+        # Simple arrowhead
+        dx, dy = x2 - x1, y2 - y1
+        length = math.sqrt(dx * dx + dy * dy)
+        if length > 0:
+            ux, uy = dx / length, dy / length
+            px, py = -uy, ux  # perpendicular
+            draw.polygon([
+                (x2, y2),
+                (x2 - 8 * ux + 4 * px, y2 - 8 * uy + 4 * py),
+                (x2 - 8 * ux - 4 * px, y2 - 8 * uy - 4 * py),
+            ], fill="#333333")
+
+    # Legend
+    draw.text((30, height - 30), "← data flow    ◼ Azure service", fill="#666", font=font_sm)
+
+    path = SAMPLES_DIR / filename
+    img.save(path)
+    return path
+
+
+def _create_bar_chart(filename: str, width: int = 500, height: int = 350) -> Path:
+    """Create a bar chart with axes, labels, and a legend.
+
+    Simulates a data-visualization image found in performance reports.
+    """
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    font = _font()
+    font_sm = _font_small()
+
+    draw.text((width // 2 - 80, 8), "Conversion Latency (ms)", fill="#1a1a1a", font=font)
+
+    # Chart area
+    left, right, top, bottom = 70, width - 40, 50, height - 60
+    draw.line([(left, top), (left, bottom)], fill="#333", width=2)
+    draw.line([(left, bottom), (right, bottom)], fill="#333", width=2)
+
+    # Y-axis ticks and labels
+    max_val = 500
+    for val in range(0, max_val + 1, 100):
+        y = bottom - (val / max_val) * (bottom - top)
+        draw.line([(left - 5, y), (left, y)], fill="#333", width=1)
+        draw.text((left - 40, y - 7), str(val), fill="#333", font=font_sm)
+        if val > 0:
+            draw.line([(left, y), (right, y)], fill="#E0E0E0", width=1)
+
+    # Data
+    categories = ["CU", "Mistral", "MarkItDown", "MarkItDown\n+ PDF"]
+    values_text = [320, 280, 45, 65]
+    values_image = [180, 210, 180, 195]
+    bar_colors_text = ["#4472C4", "#548235", "#BF8F00", "#C55A11"]
+    bar_colors_img = ["#8FAADC", "#A9D18E", "#FFD966", "#F4B183"]
+
+    n = len(categories)
+    group_width = (right - left - 20) / n
+    bar_width = group_width * 0.35
+
+    for i, (cat, vt, vi) in enumerate(zip(categories, values_text, values_image)):
+        gx = left + 10 + i * group_width
+        # Text extraction bar
+        bh_t = (vt / max_val) * (bottom - top)
+        draw.rectangle([gx, bottom - bh_t, gx + bar_width, bottom], fill=bar_colors_text[i])
+        # Image extraction bar
+        bh_i = (vi / max_val) * (bottom - top)
+        draw.rectangle(
+            [gx + bar_width + 2, bottom - bh_i, gx + 2 * bar_width + 2, bottom],
+            fill=bar_colors_img[i],
+        )
+        # Category label
+        draw.text((gx, bottom + 5), cat, fill="#333", font=font_sm)
+
+    # Legend
+    lx = right - 160
+    draw.rectangle([lx, top, lx + 12, top + 12], fill="#4472C4")
+    draw.text((lx + 16, top - 1), "Text extraction", fill="#333", font=font_sm)
+    draw.rectangle([lx, top + 18, lx + 12, top + 30], fill="#8FAADC")
+    draw.text((lx + 16, top + 17), "Image extraction", fill="#333", font=font_sm)
+
+    path = SAMPLES_DIR / filename
+    img.save(path)
+    return path
+
+
+def _create_photo_like(filename: str, width: int = 500, height: int = 350) -> Path:
+    """Create a photo-like image with gradient, noise, and shapes.
+
+    Simulates a photograph to test extraction of non-diagram images —
+    includes color gradients, random noise, and organic shapes.
+    """
+    img = Image.new("RGB", (width, height))
+    pixels = img.load()
+    rng = random.Random(42)  # reproducible
+
+    # Gradient background (sky-to-ground)
+    for y in range(height):
+        ratio = y / height
+        r = int(135 * (1 - ratio) + 34 * ratio)
+        g = int(206 * (1 - ratio) + 139 * ratio)
+        b = int(235 * (1 - ratio) + 34 * ratio)
+        for x in range(width):
+            nr = max(0, min(255, r + rng.randint(-8, 8)))
+            ng = max(0, min(255, g + rng.randint(-8, 8)))
+            nb = max(0, min(255, b + rng.randint(-8, 8)))
+            pixels[x, y] = (nr, ng, nb)
+
+    draw = ImageDraw.Draw(img)
+
+    # "Trees" — filled green ellipses in the lower half
+    for _ in range(6):
+        cx = rng.randint(30, width - 30)
+        cy = rng.randint(height // 2, height - 40)
+        rw = rng.randint(30, 70)
+        rh = rng.randint(40, 80)
+        green = rng.randint(80, 160)
+        draw.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=(30, green, 20))
+
+    # "Sun" — yellow circle in upper-right
+    draw.ellipse([width - 100, 20, width - 30, 90], fill=(255, 230, 80), outline=(255, 200, 50), width=3)
+
+    # Some "clouds" — semi-transparent white ellipses
+    for _ in range(3):
+        cx = rng.randint(50, width - 100)
+        cy = rng.randint(20, height // 4)
+        draw.ellipse([cx, cy, cx + rng.randint(60, 120), cy + rng.randint(20, 40)], fill=(240, 240, 255))
+
     path = SAMPLES_DIR / filename
     img.save(path)
     return path
 
 
 def create_sample_pdf() -> Path:
-    """Create a sample PDF with headings, tables, images, and links."""
+    """Create a sample PDF with headings, tables, images, and links.
+
+    Uses three distinct image types to stress-test extraction:
+      1. Architecture diagram (boxes + arrows + labels)
+      2. Bar chart (axes + data bars + legend)
+      3. Photo-like (gradient + noise + organic shapes)
+    """
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Create test images first
-    img1_path = _create_test_image("diagram-architecture.png", 400, 250, "steelblue")
-    img2_path = _create_test_image("chart-performance.png", 350, 200, "darkorange")
+    # Create diverse test images
+    img_arch = _create_architecture_diagram("diagram-architecture.png", 600, 400)
+    img_chart = _create_bar_chart("chart-performance.png", 500, 350)
+    img_photo = _create_photo_like("photo-landscape.png", 500, 350)
 
     pdf_path = SAMPLES_DIR / "sample-article.pdf"
     doc = SimpleDocTemplate(str(pdf_path), pagesize=letter)
@@ -73,7 +278,7 @@ def create_sample_pdf() -> Path:
         styles["Normal"],
     ))
     story.append(Spacer(1, 0.1 * inch))
-    story.append(RLImage(str(img1_path), width=4 * inch, height=2.5 * inch))
+    story.append(RLImage(str(img_arch), width=5 * inch, height=3.3 * inch))
     story.append(Spacer(1, 0.15 * inch))
 
     # Table
@@ -117,7 +322,11 @@ def create_sample_pdf() -> Path:
     # Second image
     story.append(Spacer(1, 0.15 * inch))
     story.append(Paragraph("Performance Metrics", styles["Heading2"]))
-    story.append(RLImage(str(img2_path), width=3.5 * inch, height=2 * inch))
+    story.append(Paragraph(
+        "The chart below compares conversion latency across backends:",
+        styles["Normal"],
+    ))
+    story.append(RLImage(str(img_chart), width=4.5 * inch, height=3.15 * inch))
     story.append(Spacer(1, 0.15 * inch))
 
     # Bullet points
@@ -131,6 +340,16 @@ def create_sample_pdf() -> Path:
     ]
     for bullet in bullets:
         story.append(Paragraph(f"• {bullet}", styles["Normal"]))
+
+    # Third image: photo-like (gradient + noise — simulates a photograph)
+    story.append(Spacer(1, 0.15 * inch))
+    story.append(Paragraph("Sample Photo", styles["Heading2"]))
+    story.append(Paragraph(
+        "Photo-like images with complex color gradients and organic shapes "
+        "test whether image extraction preserves color fidelity and detail:",
+        styles["Normal"],
+    ))
+    story.append(RLImage(str(img_photo), width=4.5 * inch, height=3.15 * inch))
 
     # Second table
     story.append(Spacer(1, 0.15 * inch))
@@ -164,9 +383,9 @@ def create_sample_pptx() -> Path:
 
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Create test images
-    img1_path = _create_test_image("slide-diagram.png", 500, 300, "teal")
-    img2_path = _create_test_image("slide-chart.png", 400, 300, "coral")
+    # Create diverse test images
+    img_arch = _create_architecture_diagram("slide-diagram.png", 600, 400)
+    img_chart = _create_bar_chart("slide-chart.png", 500, 350)
 
     prs = Presentation()
     prs.slide_width = Inches(13.333)
@@ -211,7 +430,7 @@ def create_sample_pptx() -> Path:
     # Slide 3: Image slide
     slide3 = prs.slides.add_slide(prs.slide_layouts[5])  # Blank layout
     slide3.shapes.title.text = "Architecture Diagram"
-    slide3.shapes.add_picture(str(img1_path), Inches(2), Inches(2), Inches(9), Inches(4.5))
+    slide3.shapes.add_picture(str(img_arch), Inches(2), Inches(2), Inches(9), Inches(4.5))
     notes3 = slide3.notes_slide
     notes3.notes_text_frame.text = (
         "This diagram shows the data flow from HTML ingestion through "
@@ -248,7 +467,7 @@ def create_sample_pptx() -> Path:
     # Slide 5: Second image + conclusion
     slide5 = prs.slides.add_slide(prs.slide_layouts[5])
     slide5.shapes.title.text = "Performance Results"
-    slide5.shapes.add_picture(str(img2_path), Inches(3), Inches(2), Inches(7), Inches(4))
+    slide5.shapes.add_picture(str(img_chart), Inches(3), Inches(2), Inches(7), Inches(4))
     notes5 = slide5.notes_slide
     notes5.notes_text_frame.text = (
         "Performance chart shows that MarkItDown is 10x faster than cloud-based "
@@ -268,7 +487,7 @@ def create_sample_docx() -> Path:
     from docx.shared import Inches
 
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-    img_path = _create_test_image("docx-diagram.png", 400, 250, "forestgreen")
+    img_path = _create_architecture_diagram("docx-diagram.png", 600, 400)
 
     doc = Document()
     doc.add_heading("Azure KB Agent Setup Guide", level=0)

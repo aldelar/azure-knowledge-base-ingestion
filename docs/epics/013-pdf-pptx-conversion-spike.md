@@ -29,7 +29,7 @@ Test MarkItDown PDF conversion with a representative sample document. Evaluate i
 | Table extraction | ⚠️ Partial | Second table (API Endpoints) perfect; first table partially broken |
 | Bullet points | ⚠️ Artifacts | Rendered as `(cid:127)` — PDF character ID, not `•` or `-` |
 | Image references | ❌ None | MarkItDown does not generate `![](...)` for embedded PDF images |
-| PyMuPDF images | ✅ Excellent | Extracts all embedded images at original resolution (400×250, 350×200 PNG) |
+| PyMuPDF images | ✅ Excellent | Extracts all 3 embedded images at original resolution — architecture diagram (600×400), bar chart (500×350), photo-like (500×350) |
 
 ### Story 2 — PPTX Conversion & Speaker Notes ✅
 

@@ -26,13 +26,20 @@ Key questions:
 
 Sample documents include: headings, paragraphs, bullet points, tables (styled with headers), embedded PNG images, and (for PPTX) speaker notes on every slide.
 
+Three distinct image types stress-test extraction quality:
+1. **Architecture diagram** — color-coded service boxes (Web App, Agent API, AI Search, OpenAI, Cosmos DB, etc.), directional arrows, and text labels — simulates a typical cloud-architecture whiteboard diagram
+2. **Bar chart** — axes, data bars, category labels, and a legend — simulates a data-visualization figure from a performance report
+3. **Photo-like landscape** — pixel-level gradient with noise, organic ellipse shapes (trees, sun, clouds) — simulates a photograph to test color fidelity and detail preservation
+
+The generated sample documents (PDF, PPTX, DOCX) are committed under `src/spikes/004-pdf-pptx-conversion/samples/` for review.
+
 ## Results
 
 ### Conversion Quality Matrix
 
 | Format | Chars | Lines | Headings | Links | Table Rows | Image Refs |
 |--------|------:|------:|---------:|------:|-----------:|-----------:|
-| PDF    | 2,091 |    38 |        0 |     0 |         12 |          0 |
+| PDF    | 2,299 |    43 |        0 |     0 |         12 |          0 |
 | PPTX   | 2,135 |    47 |       10 |     2 |          6 |          2 |
 | DOCX   |   894 |    32 |        4 |     0 |          7 |          1 |
 
@@ -54,9 +61,11 @@ Sample documents include: headings, paragraphs, bullet points, tables (styled wi
 | Approach | Images Found | Resolution | Format | Quality |
 |----------|:----------:|-----------|--------|---------|
 | MarkItDown native | 0 | N/A | N/A | No image extraction from PDF |
-| PyMuPDF (fitz) | 2 | 400×250, 350×200 | PNG | ✅ Original resolution, lossless |
+| PyMuPDF (fitz) | 3 | 600×400 (arch diagram), 500×350 (chart), 500×350 (photo) | PNG | ✅ Original resolution, lossless |
 
-**Verdict:** MarkItDown extracts PDF text well but cannot extract embedded images. **PyMuPDF is required** for PDF image extraction — it extracts at original resolution with zero quality loss.
+PyMuPDF extracts all three image types — architecture diagram (11 KB), bar chart (8 KB), and photo-like image (284 KB) — at their original resolution with no quality loss. The photo-like image with pixel-level noise and gradients preserved perfectly.
+
+**Verdict:** MarkItDown extracts PDF text well but cannot extract embedded images. **PyMuPDF is required** for PDF image extraction — it extracts at original resolution with zero quality loss across all image types (diagrams, charts, and photographs).
 
 ### PPTX Conversion Findings
 
