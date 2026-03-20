@@ -36,32 +36,39 @@ from reportlab.platypus import (
 
 SAMPLES_DIR = Path(__file__).resolve().parent / "samples"
 
+# Font paths for labeling images — checked in order, fallback to Pillow default
+_FONT_PATHS = [
+    # Linux (Debian / Ubuntu)
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    # Linux (Arch)
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    # macOS
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/Library/Fonts/Arial.ttf",
+    # Windows
+    "C:\\Windows\\Fonts\\arial.ttf",
+]
 
-def _font() -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Return the best available font for labels."""
-    for path in [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-    ]:
+
+def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Return the best available font at the given size."""
+    for path in _FONT_PATHS:
         try:
-            return ImageFont.truetype(path, 14)
+            return ImageFont.truetype(path, size)
         except OSError:
             continue
     return ImageFont.load_default()
+
+
+def _font() -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Return the best available font for labels."""
+    return _load_font(14)
 
 
 def _font_small() -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Return a smaller font for secondary labels."""
-    for path in [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    ]:
-        try:
-            return ImageFont.truetype(path, 11)
-        except OSError:
-            continue
-    return ImageFont.load_default()
+    return _load_font(11)
 
 
 def _create_architecture_diagram(filename: str, width: int = 600, height: int = 400) -> Path:
@@ -90,7 +97,8 @@ def _create_architecture_diagram(filename: str, width: int = 600, height: int = 
     ]
     for x1, y1, x2, y2, color, label in boxes:
         draw.rounded_rectangle([x1, y1, x2, y2], radius=8, fill=color, outline="#333333", width=2)
-        tw = draw.textlength(label, font=font_sm)
+        bbox = draw.textbbox((0, 0), label, font=font_sm)
+        tw = bbox[2] - bbox[0]
         tx = x1 + (x2 - x1 - tw) / 2
         ty = y1 + (y2 - y1 - 14) / 2
         draw.text((tx, ty), label, fill="white", font=font_sm)
