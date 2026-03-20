@@ -1,6 +1,6 @@
 # Epic 011 — Contextual Tool Filtering
 
-> **Status:** Done
+> **Status:** In Progress
 > **Created:** March 18, 2026
 > **Updated:** March 20, 2026
 
@@ -273,3 +273,74 @@ Update all documentation to reflect the new contextual filtering architecture. A
 - [x] All other docs reviewed and updated if stale
 - [x] All stories in this epic are marked Done
 - [x] `git diff --stat` shows no untracked or uncommitted changes related to this epic
+
+---
+
+### Story 7 — Conversation History Compaction & Chunk Citation Cache
+
+> **Status:** Not Started
+> **Depends on:** Story 6 ✅, Epic 010 ✅
+
+#### Problem
+
+Every tool call's full output (~2000 tokens of chunk content per search) accumulates in `InMemoryHistoryProvider.state["messages"]` and is replayed verbatim to the LLM on every follow-up turn. A 4-turn conversation sends 5000+ tokens of stale tool output to the model, causing response times to grow from 20s to 200s. Additionally, full chunk content is stored twice in Cosmos: once in the agent session (tool output messages) and once in Chainlit elements (citation content). There is no mechanism to bound history growth or to separate chunk storage from conversation storage.
+
+#### Intent
+
+Make multi-turn conversations fast and bounded regardless of turn count, while ensuring citation content remains accessible to the web app without depending on AI Search at display time.
+
+#### Design
+
+**1. Bounded conversation history via CompactionProvider (rc5)**
+
+Upgrade `agent-framework-core` from rc3 to rc5 to gain access to the built-in `CompactionProvider`. Wire it with two strategies:
+
+- **Before strategy — `SlidingWindowStrategy`** (keep last 5 turn groups): trims what the LLM sees on each turn, dropping the oldest conversation groups so the context window stays bounded.
+- **After strategy — `ToolResultCompactionStrategy`** (keep last 1 tool call group): after the LLM responds, marks older tool outputs as excluded in storage. Only the most recent tool call group retains full content; older ones are replaced with a compact summary marker.
+
+The `InMemoryHistoryProvider` is configured with `skip_excluded=True` so excluded messages are never loaded back into context. Provider order is `[history, compaction]` — history loads first, then compaction trims.
+
+rc5 has two known breaking changes: kwargs cleanup (#4581) and tool results as Content items (#4331). These will require adaptation across agent code.
+
+**2. Index-time chunk summaries and timestamp**
+
+At index time, `fn-index` generates a 1–2 sentence LLM summary per chunk (via gpt-4.1-mini) and stamps each chunk with an `indexed_at` ISO-8601 timestamp. Both are stored as `SimpleField`s in AI Search (not searchable — hybrid search still runs against `content` only). The summary serves as the compacted representation when `ToolResultCompactionStrategy` replaces older tool output. The timestamp enables versioned chunk identity.
+
+**3. Structured search tool output**
+
+`search_knowledge_base()` returns `{"results": [...], "summary": "N results covering: topic1, topic2, ..."}`. The LLM receives full chunk `content` in `results` for the current turn. The top-level `summary` is compaction-only metadata — the LLM ignores it, but when `ToolResultCompactionStrategy` later replaces this tool output, it preserves the `summary` instead of raw-truncating. Each result also carries its per-chunk `summary` and `indexed_at` from AI Search.
+
+**4. Demand-driven chunk citation cache (`kb-chunks`)**
+
+A new Cosmos DB container (`kb-chunks`, partition key `/article_id`) acts as a shared, demand-driven chunk cache. When the search tool retrieves chunks from AI Search, it writes them to `kb-chunks` as a fire-and-forget side effect (best-effort, must not slow the tool response).
+
+Key design decisions:
+- **Chunk key = `{article_id}_{chunk_index}_{indexed_at}`** — the `indexed_at` timestamp in the key ensures a re-index produces new cache entries. Existing conversations keep referencing the exact chunk version they originally retrieved. This preserves citation state across re-indexes.
+- **Create-if-not-exists semantics** — if a chunk with that key already exists, skip the write (409 Conflict is expected and ignored). Chunks are conversation-independent; the cache is shared across all conversations.
+- **Web app reads from this cache** for citation display — no AI Search dependency at display time. The web app exposes a chunk proxy endpoint (`GET /api/chunks/{article_id}/{chunk_index}/{indexed_at}`) that does a Cosmos point read.
+
+**5. Slim Chainlit elements**
+
+Citation elements in Cosmos stop storing full chunk content. Instead they store only metadata: `article_id`, `chunk_index`, `indexed_at`, `title`, `section_header`. The `indexed_at` field pins the element to the exact chunk version. On resume or display, content is fetched on demand from the `kb-chunks` cache via the chunk proxy.
+
+#### Estimated Token Savings
+
+| Turn | Before (tokens to LLM) | After (tokens to LLM) | Reduction |
+|------|----------------------|---------------------|-----------|
+| 1st question | ~5,200 | ~5,200 | 0% (no history yet) |
+| 2nd question | ~10,400 | ~6,200 | ~40% |
+| 3rd question | ~15,600 | ~6,800 | ~56% |
+| 4th question | ~20,800 | ~7,400 | ~64% |
+| 5th+ question | grows unbounded | ~7,400 cap | 100% bounded |
+
+#### Acceptance Criteria
+
+- [ ] Agent framework upgraded to rc5; `CompactionProvider` active with `SlidingWindowStrategy` (before, 5 groups) + `ToolResultCompactionStrategy` (after, 1 group)
+- [ ] AI Search index includes `summary` and `indexed_at` fields, populated at index time
+- [ ] Search tool returns structured output with full content for current turn + compaction-only summary
+- [ ] Retrieved chunks cached in `kb-chunks` Cosmos container on demand (fire-and-forget, create-if-not-exists, keyed with `indexed_at`)
+- [ ] Web app serves chunk content via proxy endpoint reading from `kb-chunks`
+- [ ] Chainlit elements store metadata only; content fetched on demand from chunk cache
+- [ ] Follow-up response time bounded — no degradation beyond 5th turn
+- [ ] `make test` passes across all services
+- [ ] Docs updated (agent-memory, infrastructure, architecture specs)
