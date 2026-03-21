@@ -314,7 +314,7 @@ flowchart LR
     IDX --> AIS["AI Search<br/>kb-articles index"]
 
     subgraph AgentSvc["KB Agent"]
-        AGENT["<b>ChatAgent</b>"]
+        AGENT["<b>Agent</b>"]
         VIS["<b>Vision Middleware</b>"]
     end
 
@@ -322,9 +322,10 @@ flowchart LR
     AGENT -->|reason| AF["Foundry<br/>GPT-4.1 + Embeddings"]
     VIS -->|fetch| IMG
     VIS -->|inject| AGENT
-    AGENT -->|memory| COSMOS["Cosmos DB"]
+    AGENT -->|sessions| COSMOS["Cosmos DB"]
 
     CHAT["Chainlit UI"] --> APIM["APIM"] --> AGENT
+    CHAT -->|conversations| COSMOS
 
     style AgentSvc fill:#3949ab,stroke:#5c6bc0,color:#ffffff
     style Pipeline fill:#455a64,stroke:#546e7a,color:#ffffff
