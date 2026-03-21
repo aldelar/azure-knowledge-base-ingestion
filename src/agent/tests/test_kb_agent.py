@@ -17,6 +17,11 @@ from agent.kb_agent import (
 )
 from agent.search_tool import SearchResult
 from agent.security_middleware import SecurityFilterMiddleware
+from agent_framework._compaction import (
+    CompactionProvider,
+    SlidingWindowStrategy,
+    ToolResultCompactionStrategy,
+)
 from agent_framework._sessions import InMemoryHistoryProvider
 
 
@@ -101,9 +106,11 @@ class TestSearchKnowledgeBaseTool:
         result = search_knowledge_base("test query")
         parsed = json.loads(result)
 
-        assert len(parsed) == 1
-        assert parsed[0]["title"] == "Test Article"
-        assert parsed[0]["content"] == "Test content"
+        assert "results" in parsed
+        assert "summary" in parsed
+        assert len(parsed["results"]) == 1
+        assert parsed["results"][0]["title"] == "Test Article"
+        assert parsed["results"][0]["content"] == "Test content"
 
     @patch("agent.kb_agent.get_image_url")
     @patch("agent.kb_agent.search_kb")
@@ -122,9 +129,9 @@ class TestSearchKnowledgeBaseTool:
         result = search_knowledge_base("query")
         parsed = json.loads(result)
 
-        assert parsed[0]["article_id"] == "a"
-        assert parsed[0]["chunk_index"] == 3
-        assert parsed[0]["image_urls"] == ["images/fig.png"]
+        assert parsed["results"][0]["article_id"] == "a"
+        assert parsed["results"][0]["chunk_index"] == 3
+        assert parsed["results"][0]["image_urls"] == ["images/fig.png"]
 
     @patch("agent.kb_agent.get_image_url")
     @patch("agent.kb_agent.search_kb")
@@ -142,8 +149,8 @@ class TestSearchKnowledgeBaseTool:
         result = search_knowledge_base("query")
         parsed = json.loads(result)
 
-        assert len(parsed[0]["images"]) == 1
-        assert "fig.png" in parsed[0]["images"][0]["url"]
+        assert len(parsed["results"][0]["images"]) == 1
+        assert "fig.png" in parsed["results"][0]["images"][0]["url"]
 
     @patch("agent.kb_agent.search_kb")
     def test_handles_search_error(self, mock_search: MagicMock) -> None:
@@ -262,13 +269,19 @@ class TestCreateAgent:
         mock_client_cls: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
-        """create_agent() configures InMemoryHistoryProvider as context provider."""
+        """create_agent() configures InMemoryHistoryProvider + CompactionProvider."""
         create_agent()
 
         call_kwargs = mock_agent_cls.call_args.kwargs
         providers = call_kwargs["context_providers"]
-        assert len(providers) == 1
+        assert len(providers) == 2
         assert isinstance(providers[0], InMemoryHistoryProvider)
+        assert isinstance(providers[1], CompactionProvider)
+        compaction = providers[1]
+        assert isinstance(compaction.before_strategy, SlidingWindowStrategy)
+        assert compaction.before_strategy.keep_last_groups == 3
+        assert isinstance(compaction.after_strategy, ToolResultCompactionStrategy)
+        assert compaction.after_strategy.keep_last_tool_call_groups == 1
 
     @patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key-123"})
     @patch("agent.kb_agent.Agent")

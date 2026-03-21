@@ -13,15 +13,15 @@ handoffs:
   - label: Quick Fix
     agent: Implementer
     prompt: "Apply the specific fixes listed under 'Critical Issues' and 'Warnings' in the review above. These are targeted, localized changes — do not refactor or change anything beyond the listed items. Run `make test` to verify. The shared scratchpad has been updated with review findings."
-    send: true
+    send: false
   - label: Rework
     agent: Implementer
     prompt: "The review identified structural or design issues that require significant rework. Read the full review above, understand the concerns, and re-implement the affected areas. Run full verification before requesting another review. The shared scratchpad has been updated with review findings."
-    send: true
+    send: false
   - label: Re-plan
     agent: Planner
     prompt: "The review identified fundamental design issues that cannot be fixed in place. Please revise the plan to address the architectural concerns above. The shared scratchpad has been updated with review findings."
-    send: true
+    send: false
 ---
 
 # Reviewer Agent

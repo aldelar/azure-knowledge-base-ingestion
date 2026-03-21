@@ -261,7 +261,7 @@ async def write_to_storage(self, conversation_id, serialized_session):
 
 The agent uses the Agent Framework's `CompactionProvider` (rc5) to keep the LLM context window bounded:
 
-- **Before strategy — `SlidingWindowStrategy`** (keep last 5 turn groups): trims what the LLM sees on each turn, dropping the oldest conversation groups.
+- **Before strategy — `SlidingWindowStrategy`** (keep last 3 turn groups): trims what the LLM sees on each turn, dropping the oldest conversation groups.
 - **After strategy — `ToolResultCompactionStrategy`** (keep last 1 tool call group): after the LLM responds, marks older tool outputs as excluded. Only the most recent tool call group retains full content.
 
 `InMemoryHistoryProvider` is configured with `skip_excluded=True` so excluded messages are never loaded back into context. This keeps follow-up response times bounded regardless of conversation length.

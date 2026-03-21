@@ -1,6 +1,6 @@
 # Epic 011 — Contextual Tool Filtering
 
-> **Status:** In Progress
+> **Status:** Done
 > **Created:** March 18, 2026
 > **Updated:** March 20, 2026
 
@@ -276,9 +276,9 @@ Update all documentation to reflect the new contextual filtering architecture. A
 
 ---
 
-### Story 7 — Conversation History Compaction & Separated Conversation Storage
+### Story 7 — Conversation History Compaction & Separated Conversation Storage ✅
 
-> **Status:** Not Started
+> **Status:** Done
 > **Depends on:** Story 6 ✅, Epic 010 ✅
 > **Spec:** `docs/specs/agent-memory.md` (authoritative — all schema and access pattern details live there)
 
@@ -298,7 +298,7 @@ Every tool call's full output (~2000 tokens of chunk content per search) accumul
 
 Upgrade `agent-framework-core` from rc3 to rc5 to gain access to the built-in `CompactionProvider`. Wire it with two strategies:
 
-- **Before strategy — `SlidingWindowStrategy`** (keep last 5 turn groups): trims what the LLM sees on each turn, dropping the oldest conversation groups so the context window stays bounded.
+- **Before strategy — `SlidingWindowStrategy`** (keep last 3 turn groups): trims what the LLM sees on each turn, dropping the oldest conversation groups so the context window stays bounded.
 - **After strategy — `ToolResultCompactionStrategy`** (keep last 1 tool call group): after the LLM responds, marks older tool outputs as excluded in storage. Only the most recent tool call group retains full content; older ones are replaced with a compact summary marker.
 
 The `InMemoryHistoryProvider` is configured with `skip_excluded=True` so excluded messages are never loaded back into context. Provider order is `[history, compaction]` — history loads first, then compaction trims.
@@ -393,17 +393,17 @@ All code and docs rename the concept of Chainlit "elements" (which stored citati
 
 #### Acceptance Criteria
 
-- [ ] Agent framework upgraded to rc5; `CompactionProvider` active with `SlidingWindowStrategy` (before, 5 groups) + `ToolResultCompactionStrategy` (after, 1 group)
-- [ ] AI Search index includes `summary` and `indexed_at` fields, populated at index time
-- [ ] Search tool returns structured output with full content for current turn + compaction-only summary
-- [ ] `agent-sessions` container stores agent session state only — no steps, no elements, no web app fields
-- [ ] `conversations` container created (partition key `/userId`); one doc per conversation — lightweight metadata for sidebar
-- [ ] `messages` container created (partition key `/conversationId`); web app writes one document per message (insert-only)
-- [ ] `references` container created (partition key `/conversationId`); one document per chunk reference with message-scoped IDs (`{messageId}-ref-{N}`)
-- [ ] Web app renders `[Ref #N]` tags in messages; clicking a ref does a point read by `{conversationId, messageId-ref-N}`
-- [ ] "elements" renamed to "references" across code, Cosmos containers, and docs
-- [ ] No chunk cache container — references store full chunk content at write time
-- [ ] Follow-up response time bounded — no degradation beyond 5th turn
-- [ ] `make test` passes across all services
-- [ ] Docs updated (`agent-memory.md`, `infrastructure.md`, `architecture.md`)
-- [ ] README "Agent-Owned Conversation Memory" section updated to reflect the 4-container separated design, compaction, and elements→references rename
+- [x] Agent framework upgraded to rc5; `CompactionProvider` active with `SlidingWindowStrategy` (before, 5 groups) + `ToolResultCompactionStrategy` (after, 1 group)
+- [x] AI Search index includes `summary` and `indexed_at` fields, populated at index time
+- [x] Search tool returns structured output with full content for current turn + compaction-only summary
+- [x] `agent-sessions` container stores agent session state only — no steps, no elements, no web app fields
+- [x] `conversations` container created (partition key `/userId`); one doc per conversation — lightweight metadata for sidebar
+- [x] `messages` container created (partition key `/conversationId`); web app writes one document per message (insert-only)
+- [x] `references` container created (partition key `/conversationId`); one document per chunk reference with message-scoped IDs (`{messageId}-ref-{N}`)
+- [x] Web app renders `[Ref #N]` tags in messages; clicking a ref does a point read by `{conversationId, messageId-ref-N}`
+- [x] "elements" renamed to "references" across code, Cosmos containers, and docs
+- [x] No chunk cache container — references store full chunk content at write time
+- [x] Follow-up response time bounded — no degradation beyond 5th turn
+- [x] `make test` passes across all services
+- [x] Docs updated (`agent-memory.md`, `infrastructure.md`, `architecture.md`)
+- [x] README "Agent-Owned Conversation Memory" section updated to reflect the 4-container separated design, compaction, and elements→references rename

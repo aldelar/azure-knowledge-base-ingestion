@@ -594,9 +594,13 @@ async def on_message(message: cl.Message) -> None:
                 if item and getattr(item, "type", None) == "function_call_output":
                     output_str = getattr(item, "output", "")
                     try:
-                        results = json.loads(output_str)
-                        if isinstance(results, list):
-                            for r in results:
+                        parsed = json.loads(output_str)
+                        # Structured output: {"results": [...], "summary": "..."}
+                        if isinstance(parsed, dict) and "results" in parsed:
+                            for r in parsed["results"]:
+                                raw_citations.append(r)
+                        elif isinstance(parsed, list):
+                            for r in parsed:
                                 raw_citations.append(r)
                     except (json.JSONDecodeError, TypeError):
                         pass
@@ -661,6 +665,6 @@ async def on_message(message: cl.Message) -> None:
         ))
     if elements:
         msg.elements = elements  # type: ignore[assignment]
-        logger.info("Attached %d citation elements to message", len(elements))
+        logger.info("Attached %d citation references to message", len(elements))
 
     await msg.update()

@@ -17,6 +17,11 @@ from typing import Annotated
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from agent_framework import Agent
+from agent_framework._compaction import (
+    CompactionProvider,
+    SlidingWindowStrategy,
+    ToolResultCompactionStrategy,
+)
 from agent_framework._sessions import InMemoryHistoryProvider
 from agent_framework.azure import AzureOpenAIChatClient
 
@@ -127,6 +132,8 @@ def search_knowledge_base(
             "section_header": r.section_header,
             "article_id": r.article_id,
             "chunk_index": r.chunk_index,
+            "summary": r.summary,
+            "indexed_at": r.indexed_at,
             "image_urls": list(r.image_urls),  # raw paths like 'images/foo.png'
             "images": [
                 {"name": url.split("/")[-1], "url": get_image_url(r.article_id, url)}
@@ -134,7 +141,14 @@ def search_knowledge_base(
             ] if r.image_urls else [],
         })
 
-    return json.dumps(result_dicts, ensure_ascii=False)
+    # Build a top-level summary for compaction metadata
+    topics = list(dict.fromkeys(r.title for r in results if r.title))
+    top_summary = f"{len(results)} results covering: {', '.join(topics[:5])}"
+
+    return json.dumps(
+        {"results": result_dicts, "summary": top_summary},
+        ensure_ascii=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +192,12 @@ def create_agent() -> Agent:
             middleware=[VisionImageMiddleware()],
         )
 
+    history = InMemoryHistoryProvider(skip_excluded=True)
+    compaction = CompactionProvider(
+        before_strategy=SlidingWindowStrategy(keep_last_groups=3),
+        after_strategy=ToolResultCompactionStrategy(keep_last_tool_call_groups=1),
+    )
+
     agent = Agent(
         client=client,
         id=os.environ.get("OTEL_SERVICE_NAME", "kb-agent"),
@@ -185,7 +205,7 @@ def create_agent() -> Agent:
         instructions=_SYSTEM_PROMPT,
         tools=[search_knowledge_base],
         middleware=[SecurityFilterMiddleware()],
-        context_providers=[InMemoryHistoryProvider()],
+        context_providers=[history, compaction],
     )
     logger.info(
         "Created KBSearchAgent (model=%s, endpoint=%s)",

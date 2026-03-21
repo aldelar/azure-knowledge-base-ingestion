@@ -132,11 +132,9 @@ sequenceDiagram
 
 **Problem:** When the web app owns conversation history (the typical pattern), the agent is stateless and the UI layer must build, serialize, trim, and pass the full conversation context on every request. This couples the UI to the agent's context management strategy.
 
-**Pattern:** The agent owns its own memory, using the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/)'s session persistence model. A custom `CosmosAgentSessionRepository` (subclassing the framework's `SerializedAgentSessionRepository`) persists `AgentSession` state to Cosmos DB between requests. The `from_agent_framework()` adapter auto-loads the session before each request and saves it after.
+**Pattern:** The agent owns its own memory using the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/)'s session persistence and compaction. A custom `CosmosAgentSessionRepository` persists `AgentSession` state to an `agent-sessions` container. The `CompactionProvider` (rc5) applies two strategies: `SlidingWindowStrategy` (keep last 3 turn groups) trims context before the LLM call, and `ToolResultCompactionStrategy` (keep last 1 tool call group) replaces older tool output with summaries after the LLM responds.
 
-The web app becomes a **thin client** — it sends only `conversation_id` via `extra_body` and reads from the same Cosmos container for sidebar listing and conversation resume. Neither service overwrites the other's fields (read-modify-write pattern).
-
-**Compaction** (summarization, sliding window, token budget strategies) is designed but awaiting the Agent Framework's `_compaction` module — tracked in [GitHub Issue #10](https://github.com/aldelar/azure-knowledge-base-ingestion/issues/10).
+The web app owns conversation **display data** in three dedicated containers — `conversations` (sidebar metadata, PK `/userId`), `messages` (one doc per message, PK `/conversationId`), and `references` (one doc per citation, PK `/conversationId`). No shared documents, no read-modify-write races, no dependency on the agent's internal session format.
 
 ```mermaid
 flowchart LR
@@ -144,22 +142,30 @@ flowchart LR
         UI["Chainlit UI"]
     end
 
-    subgraph Agent["KB Agent"]
-        FW["from_agent_framework()"]
-        CA["ChatAgent"]
+    subgraph Agent["KB Agent (Microsoft Agent Framework)"]
+        direction LR
+        AG["Agent<br/><small><i>CosmosAgentSessionRepository</i></small>"]
+        CP["CompactionProvider<br/><small><i>SlidingWindowStrategy</i></small><br/><small><i>ToolResultCompactionStrategy</i></small>"]
+        AG --- CP
     end
 
-    DB[("Cosmos DB<br/>agent-sessions")]
+    Sessions[("agent-sessions")]
+    Conv[("conversations")]
+    Msgs[("conversation<br/>messages")]
+    Refs[("message<br/>references")]
 
-    UI -->|"conversation_id<br/>via extra_body"| FW
-    FW -->|"Load session"| DB
-    FW --> CA
-    CA -->|"Save session"| DB
-    UI -->|"Read for sidebar<br/>& resume"| DB
+    UI -->|"conversation_id<br/>via extra_body"| AG
+    AG -->|"Read/write session"| Sessions
+    UI -->|"Sidebar list"| Conv
+    UI -->|"Append messages"| Msgs
+    UI -->|"Write/read refs"| Refs
 
     style WebApp fill:#455a64,stroke:#546e7a,color:#ffffff
     style Agent fill:#3949ab,stroke:#5c6bc0,color:#ffffff
-    style DB fill:#616161,stroke:#757575,color:#ffffff
+    style Sessions fill:#616161,stroke:#757575,color:#ffffff
+    style Conv fill:#616161,stroke:#757575,color:#ffffff
+    style Msgs fill:#616161,stroke:#757575,color:#ffffff
+    style Refs fill:#616161,stroke:#757575,color:#ffffff
 ```
 
 ---

@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fn_index import chunker, embedder, indexer
+from fn_index import chunker, embedder, indexer, summarizer
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,18 @@ def run(article_path: str) -> None:
     embedded_chunks = embedder.embed_chunks(chunks)
     logger.info("Embedded %d chunks", len(embedded_chunks))
 
-    # 4. Index
+    # 4. Summarize
+    summaries = summarizer.summarize_chunks(chunks)
+    logger.info("Summarized %d chunks", len(summaries))
+
+    # 5. Index
+    indexed_at = datetime.now(timezone.utc).isoformat()
     indexer.ensure_index_exists()
-    indexer.index_chunks(article_id, embedded_chunks, department=department)
+    indexer.index_chunks(
+        article_id,
+        embedded_chunks,
+        department=department,
+        summaries=summaries,
+        indexed_at=indexed_at,
+    )
     logger.info("fn-index complete: %s (%d chunks indexed)", article_id, len(embedded_chunks))

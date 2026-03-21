@@ -14,11 +14,11 @@ handoffs:
   - label: Start Implementation
     agent: Implementer
     prompt: "Implement the plan outlined above. Follow the architecture boundaries and write tests alongside the code. The plan references a shared scratchpad — read it before starting and update it as you work."
-    send: true
+    send: false
   - label: Review Plan
     agent: Reviewer
     prompt: "Review the plan above for architecture compliance, feasibility, and completeness before implementation begins. The plan references a shared scratchpad — read it for full design context."
-    send: true
+    send: false
 ---
 
 # Planner Agent

@@ -35,6 +35,8 @@ class SearchResult:
     title: str
     section_header: str
     department: str = ""
+    summary: str = ""
+    indexed_at: str = ""
     image_urls: list[str] = field(default_factory=list)
     score: float = 0.0
 
@@ -107,7 +109,7 @@ def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -
         results = _search_client.search(
             search_text=query,
             vector_queries=[vector_query],
-            select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls", "department"],
+            select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls", "department", "summary", "indexed_at"],
             top=top,
             filter=security_filter,
         )
@@ -123,6 +125,8 @@ def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -
                     title=result.get("title", ""),
                     section_header=result.get("section_header", ""),
                     department=result.get("department", ""),
+                    summary=result.get("summary", ""),
+                    indexed_at=result.get("indexed_at", ""),
                     image_urls=result.get("image_urls") or [],
                     score=result.get("@search.score", 0.0),
                 )

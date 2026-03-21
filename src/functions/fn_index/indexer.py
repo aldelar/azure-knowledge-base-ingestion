@@ -99,6 +99,16 @@ def ensure_index_exists() -> None:
             type=SearchFieldDataType.String,
             filterable=True,
         ),
+        SimpleField(
+            name="summary",
+            type=SearchFieldDataType.String,
+            filterable=False,
+        ),
+        SimpleField(
+            name="indexed_at",
+            type=SearchFieldDataType.String,
+            filterable=True,
+        ),
     ]
 
     vector_search = VectorSearch(
@@ -121,7 +131,14 @@ def ensure_index_exists() -> None:
     logger.info("Created index '%s' with vector search", index_name)
 
 
-def index_chunks(article_id: str, chunks: list[dict], *, department: str = "") -> None:
+def index_chunks(
+    article_id: str,
+    chunks: list[dict],
+    *,
+    department: str = "",
+    summaries: list[str] | None = None,
+    indexed_at: str = "",
+) -> None:
     """Push chunk documents to AI Search using merge-or-upload.
 
     Parameters
@@ -134,6 +151,10 @@ def index_chunks(article_id: str, chunks: list[dict], *, department: str = "") -
         ``section_header``, ``image_refs``.
     department:
         Department name (e.g. ``"engineering"``) for the filterable field.
+    summaries:
+        Optional per-chunk summaries (same order as chunks).
+    indexed_at:
+        ISO-8601 timestamp for this indexing run.
     """
     credential = DefaultAzureCredential()
     client = SearchClient(
@@ -158,6 +179,8 @@ def index_chunks(article_id: str, chunks: list[dict], *, department: str = "") -
             "section_header": chunk.get("section_header", ""),
             "key_topics": [],
             "department": department,
+            "summary": summaries[i] if summaries and i < len(summaries) else "",
+            "indexed_at": indexed_at,
         }
         documents.append(doc)
 
