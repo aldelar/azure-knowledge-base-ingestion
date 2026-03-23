@@ -31,7 +31,7 @@ DOCUMENTS = [
         "OWASP Application Security Verification Standard 4.0.3",
         "PDF",
         "71 pages, complex tables (security controls matrix), "
-        "extensive hyperlinks (162+ in first 10 pages), embedded images, "
+        "extensive hyperlinks (377), 73 embedded images, "
         "multi-level headings, bullet lists, cross-references",
     ),
     (
@@ -39,29 +39,89 @@ DOCUMENTS = [
         "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf",
         "NIST Cybersecurity Framework 2.0",
         "PDF",
-        "Government whitepaper with diagrams, tables, hyperlinks, "
-        "multi-column layout, cross-references, appendices",
+        "Government whitepaper with diagrams, tables, 103 hyperlinks, "
+        "13 images, multi-column layout, cross-references, appendices",
+    ),
+    (
+        "arxiv-attention.pdf",
+        "https://arxiv.org/pdf/1706.03762v5",
+        "Attention Is All You Need (Vaswani et al.)",
+        "PDF",
+        "Seminal ML paper with mathematical equations, 3 figures, "
+        "113 hyperlinks, 2-column layout, bibliography references",
     ),
     # --- PPTX ---
     (
-        "ms-fabric-unified-analytics.pptx",
-        "https://raw.githubusercontent.com/microsoft/Fabric-Readiness/"
-        "31af5096374dc6bf2434713ed7be72d736ae2628/"
-        "presentations/01.%20Introducing%20Unified%20Analytics.pptx",
-        "Microsoft Fabric: Introducing Unified Analytics",
+        "apache-poi-SampleShow.pptx",
+        "https://svn.apache.org/repos/asf/poi/trunk/test-data/slideshow/"
+        "SampleShow.pptx",
+        "Apache POI: SampleShow (2 slides with speaker notes)",
         "PPTX",
-        "Microsoft conference deck with diagrams, screenshots, "
-        "speaker notes (expected), product architecture slides",
+        "2 slides with speaker notes, shapes, text content",
     ),
     (
-        "ms-knowledge-mining.pptx",
-        "https://raw.githubusercontent.com/microsoft/microhacks-knowledge-mining-ai/"
-        "241e26f8b468f2f36c6004a4faa60e36016c5d21/"
-        "docs/Microhack%20Deck%20-%20Knowledge%20Mining.pptx",
-        "Microsoft Microhack: Knowledge Mining with AI",
+        "apache-poi-shapes.pptx",
+        "https://svn.apache.org/repos/asf/poi/trunk/test-data/slideshow/"
+        "shapes.pptx",
+        "Apache POI: Shapes test (6 slides with tables and images)",
         "PPTX",
-        "Workshop deck with architecture diagrams, step-by-step instructions, "
-        "screenshots, and technical content",
+        "6 slides with shapes, tables, image references, URLs",
+    ),
+    (
+        "apache-poi-test.pptx",
+        "https://svn.apache.org/repos/asf/poi/trunk/test-data/slideshow/"
+        "pptx2svg.pptx",
+        "Apache POI: Complex presentation (images and SVG content)",
+        "PPTX",
+        "1 slide with complex visual content (149KB)",
+    ),
+    (
+        "apache-poi-table_test.pptx",
+        "https://svn.apache.org/repos/asf/poi/trunk/test-data/slideshow/"
+        "table_test.pptx",
+        "Apache POI: Table test (PPTX table rendering)",
+        "PPTX",
+        "1 slide with a formatted table",
+    ),
+    (
+        "tika-test.pptx",
+        "https://raw.githubusercontent.com/apache/tika/refs/heads/main/"
+        "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/"
+        "tika-parser-microsoft-module/src/test/resources/test-documents/"
+        "testPPT.pptx",
+        "Apache Tika: Basic PPTX test (3 slides)",
+        "PPTX",
+        "3 slides with text content",
+    ),
+    (
+        "tika-testPPT_various.pptx",
+        "https://raw.githubusercontent.com/apache/tika/refs/heads/main/"
+        "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/"
+        "tika-parser-microsoft-module/src/test/resources/test-documents/"
+        "testPPT_various.pptx",
+        "Apache Tika: Various elements (speaker notes, tables)",
+        "PPTX",
+        "1 slide with speaker notes, tables, and various elements",
+    ),
+    (
+        "tika-testPPT_embedded.pptx",
+        "https://raw.githubusercontent.com/apache/tika/refs/heads/main/"
+        "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/"
+        "tika-parser-microsoft-module/src/test/resources/test-documents/"
+        "testPPT_EmbeddedPDF.pptx",
+        "Apache Tika: Embedded PDF in PPTX",
+        "PPTX",
+        "1 slide with embedded PDF as image",
+    ),
+    (
+        "tika-testPPT_comment.pptx",
+        "https://raw.githubusercontent.com/apache/tika/refs/heads/main/"
+        "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/"
+        "tika-parser-microsoft-module/src/test/resources/test-documents/"
+        "testPPT_comment.pptx",
+        "Apache Tika: PPTX with comments",
+        "PPTX",
+        "1 slide with comments/annotations",
     ),
     # --- DOCX ---
     (
@@ -70,8 +130,38 @@ DOCUMENTS = [
         "MS%20Word%202016%20Basic%20Authoring%20and%20Testing%20Guide-AED%20COP.docx",
         "Section 508: MS Word Authoring & Testing Guide",
         "DOCX",
-        "Government accessibility guide with complex tables, images, "
-        "hyperlinks, headings hierarchy, numbered/bulleted lists",
+        "Government accessibility guide with complex tables, 24 images, "
+        "hyperlinks, headings hierarchy, numbered/bulleted lists (1.8MB)",
+    ),
+    (
+        "tika-testWORD.docx",
+        "https://raw.githubusercontent.com/apache/tika/refs/heads/main/"
+        "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/"
+        "tika-parser-microsoft-module/src/test/resources/test-documents/"
+        "testWORD.docx",
+        "Apache Tika: Basic DOCX test (headings, tables, hyperlinks)",
+        "DOCX",
+        "Headings, tables, hyperlinks, text formatting",
+    ),
+    (
+        "tika-testWORD_various.docx",
+        "https://raw.githubusercontent.com/apache/tika/refs/heads/main/"
+        "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/"
+        "tika-parser-microsoft-module/src/test/resources/test-documents/"
+        "testWORD_various.docx",
+        "Apache Tika: Various DOCX elements",
+        "DOCX",
+        "Various Word elements including tables and hyperlinks",
+    ),
+    (
+        "tika-testWORD_embedded.docx",
+        "https://raw.githubusercontent.com/apache/tika/refs/heads/main/"
+        "tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/"
+        "tika-parser-microsoft-module/src/test/resources/test-documents/"
+        "testWORD_embeded.docx",
+        "Apache Tika: DOCX with embedded images",
+        "DOCX",
+        "6 embedded images in various formats",
     ),
 ]
 

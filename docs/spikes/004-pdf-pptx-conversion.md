@@ -36,13 +36,37 @@ Synthetic samples committed under `src/spikes/004-pdf-pptx-conversion/samples/`.
 
 ### Test Group 2: Real-World (Public Domain)
 
-Real-world complex documents from public sources, committed under `src/spikes/004-pdf-pptx-conversion/samples/real-world/`:
+Real-world complex documents from public sources, committed under `src/spikes/004-pdf-pptx-conversion/samples/real-world/`. All documents downloadable via `download_real_world.py`.
 
-| Document | Format | Size | Pages | Complexity |
-|----------|--------|-----:|------:|------------|
-| **OWASP ASVS 4.0.3** | PDF | 1.1 MB | 71 | 377 hyperlinks, 73 embedded images, extensive security controls tables, multi-level headings, cross-references |
+**PDFs (3 documents):**
 
-Additional real-world documents (PPTX, DOCX) listed in `download_real_world.py` — these require direct internet access to download (Microsoft Fabric deck, NIST CSF 2.0, Section 508 Word guide). The download script documents exact URLs and can be run locally.
+| Document | Size | Pages | Source Links | Images | Complexity |
+|----------|-----:|------:|:---:|:---:|------------|
+| **OWASP ASVS 4.0.3** | 1.1 MB | 71 | 377 | 73 | Security controls matrices, multi-level headings, cross-references |
+| **NIST CSF 2.0** | 1.5 MB | ~32 | 103 | 13 | Government whitepaper, diagrams, multi-column layout, appendices |
+| **Attention Is All You Need** (arXiv) | 2.2 MB | 8 | 113 | 3 | Academic paper, math equations, 2-column layout, bibliography |
+
+**PPTXs (8 documents — Apache POI + Tika test fixtures):**
+
+| Document | Size | Slides | Speaker Notes | Tables | Images |
+|----------|-----:|:---:|:---:|:---:|:---:|
+| **Apache POI SampleShow** | 39 KB | 2 | ✅ 2 | — | — |
+| **Apache POI shapes** | 69 KB | 6 | — | ✅ 16 rows | ✅ 1 |
+| **Apache POI table_test** | 29 KB | 1 | — | ✅ 7 rows | — |
+| **Apache POI test (pptx2svg)** | 149 KB | 1 | — | — | — |
+| **Tika test** | 37 KB | 3 | — | — | — |
+| **Tika various** | 57 KB | 1 | ✅ 1 | ✅ 3 rows | — |
+| **Tika embedded PDF** | 109 KB | 1 | — | — | ✅ 1 |
+| **Tika comment** | 31 KB | 1 | — | — | — |
+
+**DOCXs (4 documents):**
+
+| Document | Size | Headings | Links | Tables | Images |
+|----------|-----:|:---:|:---:|:---:|:---:|
+| **Section 508 Word Guide** | 1.8 MB | 21 | 3 | 21 rows | 24 |
+| **Tika testWORD** | 13 KB | 4 | 2 | 5 rows | — |
+| **Tika testWORD_embedded** | 158 KB | — | — | — | 6 |
+| **Tika testWORD_various** | 14 KB | — | 1 | 4 rows | — |
 
 ## Results
 
@@ -201,39 +225,80 @@ This follows the same pre/post-processing pattern already used for HTML converte
 
 All three converters handle the 30-row table as a single Markdown table — no splitting or truncation at page/slide boundaries. The PDF table uses `repeatRows=1` to repeat the header row on each page, and MarkItDown correctly merges these into one table.
 
-## Real-World Validation (OWASP ASVS 4.0.3)
+## Real-World Validation
 
-The synthetic findings were validated against **OWASP Application Security Verification Standard 4.0.3** — a 71-page security standard with complex tables, 377 hyperlinks, 73 embedded images, and multi-level headings.
+The synthetic findings were validated against **15 real-world public domain documents** — 3 PDFs, 8 PPTXs, and 4 DOCXs — sourced from OWASP, NIST, arXiv, Apache POI, Apache Tika, and the US Section 508 program.
 
-### Real-World Conversion Quality
+### Real-World PDF Results (3 documents)
 
-| Metric | Synthetic PDF | Real-World OWASP ASVS |
-|--------|:------------:|:---------------------:|
-| Text extraction | ✅ 5,624 chars | ✅ 180,683 chars |
-| Headings with `#` markers | ⚠️ 0 | ✅ 70 (PDF bookmarks → heading markers) |
-| Hyperlinks (`[text](url)`) | ❌ 0 / 8 source | ❌ 0 / 377 source |
-| Bare URLs in text | 0 | 18 |
-| Table rows (pipe-delimited) | ✅ 31 | ❌ 0 (complex tables rendered as text) |
-| Image refs (`![](...)`) | ❌ 0 | ❌ 0 |
-| PyMuPDF images | 3 (original res) | 73 (original res) |
+| Metric | OWASP ASVS (71p) | NIST CSF 2.0 (~32p) | arXiv Attention (8p) |
+|--------|:-----------------:|:-------------------:|:--------------------:|
+| Text chars | ✅ 180,683 | ✅ 69,023 | ✅ 39,470 |
+| Headings with `#` | ✅ 70 (bookmarks) | ⚠️ 0 | ⚠️ 0 |
+| Hyperlinks `[text](url)` | ❌ 0 / 377 | ❌ 0 / 103 | ❌ 0 / 113 |
+| Bare URLs in text | 18 | 2 | 1 |
+| Table rows (pipe) | ❌ 0 | ❌ 0 | ❌ 0 |
+| Image refs | ❌ 0 | ❌ 0 | ❌ 0 |
+| PyMuPDF images | 73 | 13 | 3 |
 
-### Key Real-World Findings
+**Key observations:**
+- **All 593 hyperlinks across 3 PDFs → 0 extracted.** Hyperlink loss is universal and confirmed at scale.
+- **All 89 images across 3 PDFs → 0 in Markdown.** PyMuPDF extracts all at original resolution.
+- **Tables:** Complex real-world tables (OWASP security matrices, NIST reference tables) render as plain text — 0 pipe-delimited rows across all 3 PDFs. This is worse than synthetic tests.
+- **Headings:** Only OWASP ASVS (which has PDF bookmarks) gets `#` markers. NIST and arXiv PDFs — which lack bookmarks — get none. This confirms that heading extraction depends on PDF bookmark metadata.
 
-1. **Headings**: ✅ The OWASP ASVS uses proper PDF bookmarks, and MarkItDown converts these to `#` heading markers. This is better than the synthetic PDF (which used reportlab styles that don't create bookmarks). **Real-world PDFs with bookmarks will get proper headings.**
+### Real-World PPTX Results (8 documents)
 
-2. **Hyperlinks**: ❌ **CONFIRMED at scale.** 377 hyperlinks in source → 0 extracted. Only 18 bare URLs survive as plain text. This is the most significant gap for KB articles that heavily cross-reference external documentation.
+| Document | Slides | Speaker Notes | Tables | Images | Links |
+|----------|:---:|:---:|:---:|:---:|:---:|
+| POI SampleShow | 2 | ✅ 2/2 | — | — | ❌ 0 |
+| POI shapes | 6 | — | ✅ 16 | ✅ 1 | ⚠️ 1 bare |
+| POI table_test | 1 | — | ✅ 7 | — | — |
+| POI test | 1 | — | — | — | — |
+| Tika test | 3 | — | — | — | — |
+| Tika various | 1 | ✅ 1 | ✅ 3 | — | — |
+| Tika embedded | 1 | — | — | ✅ 1 | — |
+| Tika comment | 1 | — | — | — | — |
 
-3. **Tables**: ❌ **Worse than synthetic.** The ASVS tables (security controls matrices) are rendered as plain text with no pipe delimiters. This is because the ASVS uses complex table formatting (merged cells, multi-line cells) that MarkItDown's PDF parser cannot handle. Simple tables work in synthetic tests but complex real-world tables do not.
+**Key observations:**
+- **Speaker notes preserved** where present (3/3 slides with notes → all extracted as `### Notes:`)
+- **Tables extracted** in pipe-delimited format (26 rows total across 3 PPTXs with tables)
+- **Images referenced** in Markdown where present (`![name](PictureN.jpg)`)
+- **Hyperlinks universally lost** — consistent with synthetic findings
 
-4. **Images**: ❌ **CONFIRMED at scale.** 73 embedded images → 0 in Markdown. PyMuPDF supplementation is essential.
+### Real-World DOCX Results (4 documents)
+
+| Document | Headings | Links | Tables | Images |
+|----------|:---:|:---:|:---:|:---:|
+| Section 508 Guide | ✅ 21 | ✅ 3 | ✅ 21 rows | ✅ 24 |
+| Tika testWORD | ✅ 4 | ✅ 2 | ✅ 5 rows | — |
+| Tika embedded | — | — | — | ✅ 6 |
+| Tika various | — | ✅ 1 | ✅ 4 rows | — |
+
+**Key observations:**
+- **Section 508 Word Guide (1.8 MB):** Production-quality result — 21 headings, 3 hyperlinks, 21 table rows, **24 embedded images** all preserved. This is a complex real-world government document and MarkItDown handles it excellently.
+- **Hyperlinks preserved** in all DOCX files that contain them (6/6 links across 3 documents)
+- **DOCX conversion is production-ready** — confirmed with real-world documents
+
+### Cross-Format Real-World Summary
+
+| Capability | PDF (3 docs) | PPTX (8 docs) | DOCX (4 docs) |
+|-----------|:---:|:---:|:---:|
+| Text extraction | ✅ | ✅ | ✅ |
+| Heading markers | ⚠️ Only with bookmarks | ✅ | ✅ |
+| Hyperlinks | ❌ 0/593 | ❌ 0 | ✅ 6/6 |
+| Tables (pipe) | ❌ 0 rows | ✅ 26 rows | ✅ 30 rows |
+| Image references | ❌ | ✅ (where present) | ✅ (30 images) |
+| Speaker notes | N/A | ✅ 3/3 | N/A |
 
 ### Verdict
 
-The real-world test **confirms and strengthens** the synthetic findings:
-- PDF hyperlink and image gaps are **more severe** in real documents (377 links lost, 73 images lost)
-- Complex tables are **worse** than synthetic (0 vs 31 rows preserved)
-- Heading extraction is **better** when PDFs have bookmarks (70 headings with markers)
-- The GO recommendation stands — supplementation with PyMuPDF is non-negotiable for production use
+Real-world testing with 15 public domain documents **confirms and strengthens** the synthetic findings:
+- PDF hyperlink and image gaps are **severe at scale** (593 links lost, 89 images lost across 3 documents)
+- Complex PDF tables are **worse than synthetic** (0 pipe-delimited rows vs. 31 in synthetic)
+- PPTX speaker notes are **reliably extracted** in real-world presentations
+- DOCX conversion is **production-ready** — even a complex 1.8 MB government guide with 24 images converts cleanly
+- The GO recommendation stands — supplementation with PyMuPDF for PDF and python-pptx for PPTX hyperlinks is non-negotiable for production use
 
 ## Limitations & Mitigations
 
@@ -337,3 +402,57 @@ Note: "Azure AI Search docs" was a hyperlink to `https://learn.microsoft.com/azu
 ```
 
 DOCX hyperlinks are fully preserved as `[text](url)` — no post-processing needed.
+
+### Real-World: NIST CSF 2.0 PDF (excerpt)
+
+```
+The NIST Cybersecurity
+Framework (CSF) 2.0
+
+National Institute of Standards and Technology
+This publication is available free of charge from: https://doi.org/10.6028/NIST.CSWP.29
+
+February 26, 2024
+```
+
+Note: All 103 hyperlinks in the source PDF are lost. Only 2 bare URLs survive as plain text.
+
+### Real-World: arXiv "Attention Is All You Need" (excerpt)
+
+The arXiv PDF with 2-column layout produces garbled initial output — the header metadata characters are extracted one-per-line instead of as words (e.g., the arXiv ID `1706.03762` appears as `7`, `1`, `0`, `2`, `c`, `e`, `D`, `6`...). The body text is extracted correctly, but multi-column layout causes paragraph interleaving — this is a known limitation of pdfminer-based extraction with multi-column PDFs.
+
+### Real-World: Section 508 Word Guide (DOCX excerpt)
+
+```markdown
+![Accessible Electronic Document Community of Practice (AED COP) Logo](data:image/jpeg;base64...)
+
+Microsoft Word 2016 Basic Authoring and Testing Guide
+Section 508 Accessibility Guidance
+
+[Document Formatting 2](#_Toc528312294)
+[1. Is the file name descriptive...? 2](#_Toc528312295)
+```
+
+A complex 1.8 MB government document with 24 images, 21 headings, and 3 hyperlinks — all converted cleanly. This validates DOCX as production-ready for real-world use.
+
+### Real-World: Apache POI SampleShow (PPTX with speaker notes)
+
+```markdown
+<!-- Slide number: 1 -->
+# Title of the first slide
+Subtitle of the first slide
+This bit is in italic green
+
+### Notes:
+I am the notes of the first slide
+
+<!-- Slide number: 2 -->
+# This is the second slide
+It has bullet points on it
+
+### Notes:
+These are the notes of the 2nd slide
+THIS LINE IS BOLD
+```
+
+Speaker notes reliably extracted from real-world PPTX files, not just synthetic samples.

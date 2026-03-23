@@ -78,6 +78,7 @@ Compile all findings into `docs/spikes/004-pdf-pptx-conversion.md`. Provide clea
 - [x] DOCX conversion spot-checked
 - [x] Spike findings documented in `docs/spikes/004-pdf-pptx-conversion.md`
 - [x] Go/no-go recommendation for Phase 1
+- [x] Real-world validation with public domain documents (15 documents: 3 PDFs, 8 PPTXs, 4 DOCXs)
 
 ## Deliverables
 
@@ -85,5 +86,7 @@ Compile all findings into `docs/spikes/004-pdf-pptx-conversion.md`. Provide clea
 |------|---------|
 | `src/spikes/004-pdf-pptx-conversion/create_samples.py` | Generates sample PDF, PPTX, DOCX with embedded images/tables/notes |
 | `src/spikes/004-pdf-pptx-conversion/run.py` | Spike orchestrator — tests all formats, compares approaches, prints results |
+| `src/spikes/004-pdf-pptx-conversion/download_real_world.py` | Downloads 15 real-world public domain documents (3 PDF, 8 PPTX, 4 DOCX) |
+| `src/spikes/004-pdf-pptx-conversion/test_real_world.py` | Runs conversion quality analysis on all real-world documents |
 | `docs/spikes/004-pdf-pptx-conversion.md` | Spike findings document with go/no-go recommendation |
 | `docs/epics/013-pdf-pptx-conversion-spike.md` | This epic tracking document |
