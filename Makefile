@@ -56,9 +56,7 @@ dev-setup:
 	@cd src/functions && uv sync --extra dev
 	@cd src/agent && uv sync --extra dev
 	@cd src/web-app && uv sync --extra dev
-	@if [ ! -f $(DEV_ENV_FILE) ]; then \
-		echo "Copy .env.dev.template to $(DEV_ENV_FILE) before starting the local stack."; \
-	fi
+	@test -f $(DEV_ENV_FILE) || (echo "Missing $(DEV_ENV_FILE) after dev-setup." >&2; exit 1)
 
 .PHONY: dev-setup-gpu
 dev-setup-gpu:

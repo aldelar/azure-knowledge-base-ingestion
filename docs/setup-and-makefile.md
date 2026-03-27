@@ -27,25 +27,22 @@ The repo now has two explicit workflows:
 ## Dev Quick Start
 
 ```bash
-# 1. Create the local environment file
-cp .env.dev.template .env.dev
-
-# 2. Install local dependencies and optional GPU runtime support
+# 1. Install local dependencies and create/update .env.dev
 make dev-setup
 
-# 3. Start local emulators and initialize databases, containers, and Ollama models
+# 2. Start local emulators and initialize databases, containers, and Ollama models
 make dev-infra-up
 
-# 4. Build and start all application services
+# 3. Build and start all application services
 make dev-services-up
 
-# 5. Run the local KB pipeline
+# 4. Run the local KB pipeline
 make dev-pipeline
 
-# 6. Run tests
+# 5. Run tests
 make dev-test
 
-# 7. Open the UI
+# 6. Open the UI
 make dev-ui
 ```
 
@@ -54,6 +51,9 @@ The local UI is served at `http://localhost:8080`.
 ### What `dev-setup` now does
 
 - Installs Azure CLI, Azure Developer CLI, `uv`, Azure Functions Core Tools, and the Playwright Chromium browser.
+- Creates `.env.dev` from `.env.dev.template` if it does not exist.
+- Detects the first NVIDIA GPU UUID from `nvidia-smi -L` and writes `OLLAMA_GPU_DEVICE=<uuid>` into `.env.dev`.
+- If no NVIDIA GPU is detected, removes `OLLAMA_GPU_DEVICE` from `.env.dev` so Ollama is not pinned to a specific device.
 - Detects whether it is running on native Linux, WSL with a local Docker Engine, or WSL with Docker Desktop integration.
 - If an NVIDIA GPU is visible and Docker is local to Linux, installs and configures `nvidia-container-toolkit`, generates the CDI spec, restarts Docker, and validates `docker run --gpus all`.
 - If it detects WSL backed by Docker Desktop, it skips Linux-side toolkit installation and only validates whether Docker Desktop GPU passthrough is already working.
@@ -64,7 +64,7 @@ The local UI is served at `http://localhost:8080`.
 - WSL with Docker Desktop is different: GPU support is managed on the Windows side by Docker Desktop plus the Windows NVIDIA driver.
 - GPU acceleration is optional. If no NVIDIA GPU is visible, Ollama still runs on CPU.
 - To skip GPU setup explicitly, run `DEV_SETUP_SKIP_GPU=1 make dev-setup`.
-- `.env.dev.template` defaults `OLLAMA_GPU_DEVICE=all`. To pin Ollama to a specific NVIDIA GPU, replace it with a GPU UUID from `nvidia-smi -L`.
+- `dev-setup` pins Ollama to the first detected NVIDIA GPU UUID. If no GPU is detected, it leaves `OLLAMA_GPU_DEVICE` unset.
 
 ### What `dev-infra-up` starts
 
@@ -99,29 +99,26 @@ The repo now has two explicit workflows:
 ## Dev Quick Start
 
 ```bash
-# 1. Create the local environment file
-cp .env.dev.template .env.dev
-
-# 2. Install local dependencies as your normal user
+# 1. Install local dependencies as your normal user and create/update .env.dev
 make dev-setup
 
-# 3. If dev-setup tells you Docker GPU support is missing and you use
+# 2. If dev-setup tells you Docker GPU support is missing and you use
 #    a local Linux/WSL Docker engine with an NVIDIA GPU, configure it once
 sudo make dev-setup-gpu
 
-# 4. Start local emulators and initialize databases, containers, and Ollama models
+# 3. Start local emulators and initialize databases, containers, and Ollama models
 make dev-infra-up
 
-# 5. Build and start all application services
+# 4. Build and start all application services
 make dev-services-up
 
-# 6. Run the local KB pipeline
+# 5. Run the local KB pipeline
 make dev-pipeline
 
-# 7. Run tests
+# 6. Run tests
 make dev-test
 
-# 8. Open the UI
+# 7. Open the UI
 make dev-ui
 ```
 
@@ -131,6 +128,9 @@ The local UI is served at `http://localhost:8080`.
 
 - Installs Azure CLI, Azure Developer CLI, `uv`, Azure Functions Core Tools, and the Playwright Chromium browser.
 - Must be run as your normal user, not via `sudo`.
+- Creates `.env.dev` from `.env.dev.template` if needed.
+- Detects the first NVIDIA GPU UUID from `nvidia-smi -L` and writes it to `OLLAMA_GPU_DEVICE` in `.env.dev`.
+- If no NVIDIA GPU is detected, removes `OLLAMA_GPU_DEVICE` from `.env.dev` so Ollama is not pinned.
 - Detects whether it is running on native Linux, WSL with a local Docker Engine, or WSL with Docker Desktop integration.
 - Validates whether Docker GPU support is already working and, when it is missing on a local Linux engine, tells you to run `sudo make dev-setup-gpu`.
 
@@ -145,7 +145,7 @@ The local UI is served at `http://localhost:8080`.
 - Native Linux and WSL with a local `dockerd` use the same Linux-side NVIDIA container toolkit flow.
 - WSL with Docker Desktop is different: GPU support is managed on the Windows side by Docker Desktop plus the Windows NVIDIA driver.
 - GPU acceleration is optional. If no NVIDIA GPU is visible, Ollama still runs on CPU.
-- `.env.dev.template` defaults `OLLAMA_GPU_DEVICE=all`. To pin Ollama to a specific NVIDIA GPU, replace it with a GPU UUID from `nvidia-smi -L`.
+- `dev-setup` pins Ollama to the first detected NVIDIA GPU UUID. If no GPU is detected, it leaves `OLLAMA_GPU_DEVICE` unset.
 
 ### What `dev-infra-up` starts
 

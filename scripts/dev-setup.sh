@@ -5,6 +5,8 @@
 set -euo pipefail
 
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly DEV_ENV_FILE="${REPO_ROOT}/.env.dev"
+readonly DEV_ENV_TEMPLATE="${REPO_ROOT}/.env.dev.template"
 readonly WSL_NVIDIA_SMI="/usr/lib/wsl/lib/nvidia-smi"
 readonly CUDA_TEST_IMAGE="nvidia/cuda:12.4.1-base-ubuntu22.04"
 
@@ -65,6 +67,90 @@ docker_backend() {
 
 validate_docker_gpu_support() {
     docker run --rm --gpus all "${CUDA_TEST_IMAGE}" nvidia-smi >/dev/null 2>&1
+}
+
+ensure_dev_env_file() {
+    if [[ -f "${DEV_ENV_FILE}" ]]; then
+        return
+    fi
+
+    if [[ ! -f "${DEV_ENV_TEMPLATE}" ]]; then
+        echo "Missing ${DEV_ENV_TEMPLATE}; cannot create ${DEV_ENV_FILE}." >&2
+        exit 1
+    fi
+
+    cp "${DEV_ENV_TEMPLATE}" "${DEV_ENV_FILE}"
+    echo "  env         created .env.dev from template"
+}
+
+first_nvidia_gpu_uuid() {
+    local nvidia_smi
+
+    nvidia_smi="$(nvidia_smi_path 2>/dev/null)" || return 1
+    "${nvidia_smi}" -L 2>/dev/null | sed -n 's/.*(UUID: \(GPU-[^)[:space:]]*\)).*/\1/p' | head -n 1
+}
+
+first_nvidia_gpu_description() {
+    local nvidia_smi
+
+    nvidia_smi="$(nvidia_smi_path 2>/dev/null)" || return 1
+    "${nvidia_smi}" -L 2>/dev/null | sed -n 's/^GPU \([0-9]\+\): \(.*\) (UUID: GPU-[^)[:space:]]*)$/GPU \1 — \2/p' | head -n 1
+}
+
+set_env_value() {
+    local file="$1"
+    local key="$2"
+    local value="$3"
+    local tmp_file
+
+    tmp_file="$(mktemp)"
+    awk -v key="${key}" -v value="${value}" '
+        BEGIN { updated = 0 }
+        $0 ~ "^[[:space:]]*" key "=" {
+            print key "=" value
+            updated = 1
+            next
+        }
+        { print }
+        END {
+            if (!updated) {
+                print key "=" value
+            }
+        }
+    ' "${file}" > "${tmp_file}"
+    mv "${tmp_file}" "${file}"
+}
+
+remove_env_key() {
+    local file="$1"
+    local key="$2"
+    local tmp_file
+
+    tmp_file="$(mktemp)"
+    awk -v key="${key}" '$0 !~ "^[[:space:]]*" key "=" { print }' "${file}" > "${tmp_file}"
+    mv "${tmp_file}" "${file}"
+}
+
+configure_ollama_gpu_device_env() {
+    local gpu_uuid
+    local gpu_description
+
+    ensure_dev_env_file
+
+    gpu_uuid="$(first_nvidia_gpu_uuid || true)"
+    gpu_description="$(first_nvidia_gpu_description || true)"
+    if [[ -n "${gpu_uuid}" ]]; then
+        set_env_value "${DEV_ENV_FILE}" "OLLAMA_GPU_DEVICE" "${gpu_uuid}"
+        if [[ -n "${gpu_description}" ]]; then
+            echo "  env         pinned Ollama to ${gpu_description} (${gpu_uuid}) in .env.dev"
+        else
+            echo "  env         pinned Ollama to ${gpu_uuid} in .env.dev"
+        fi
+        return
+    fi
+
+    remove_env_key "${DEV_ENV_FILE}" "OLLAMA_GPU_DEVICE"
+    echo "  env         no NVIDIA GPU detected; left OLLAMA_GPU_DEVICE unset in .env.dev"
 }
 
 install_azure_cli() {
@@ -172,10 +258,11 @@ main() {
     install_uv
     install_functions_core_tools
     install_playwright_browser
+    configure_ollama_gpu_device_env
     print_gpu_guidance
 
     echo ""
-    echo "Done. Next: copy .env.dev.template to .env.dev, then run make dev-infra-up."
+    echo "Done. Next: run make dev-infra-up."
 }
 
 main "$@"
