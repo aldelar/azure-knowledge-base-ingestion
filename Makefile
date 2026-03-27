@@ -33,6 +33,7 @@ help:
 	@echo ""
 	@echo "  make dev-test                       Run unit + integration tests"
 	@echo "  make dev-test-ui                    Run browser UI tests"
+	@echo "  make dev-otel-dashboard             Print the local Aspire dashboard URL"
 	@echo ""
 	@echo "  ── Clean up / Reset ──"
 	@echo "  make dev-clean                      Clean all local data (calls targets below)"
@@ -156,6 +157,10 @@ dev-test-ui:
 .PHONY: dev-ui
 dev-ui:
 	@echo http://localhost:8080
+
+.PHONY: dev-otel-dashboard
+dev-otel-dashboard:
+	@echo http://localhost:18888
 
 .PHONY: dev-pipeline
 dev-pipeline: dev-pipeline-convert dev-pipeline-index

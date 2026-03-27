@@ -38,6 +38,7 @@ make dev-up                         Full local bring-up (calls targets below)
 
 make dev-test                       Run unit + integration tests
 make dev-test-ui                    Run browser UI tests
+make dev-otel-dashboard             Print the local Aspire dashboard URL
 
 ── Clean up / Reset ──
 make dev-clean                      Clean all local data (calls targets below)
@@ -58,6 +59,7 @@ make dev-down                       Stop everything local (calls targets below)
 - `.env.dev.template` uses Docker Compose service hostnames (`ollama`, `agent`, `azurite`, `cosmos-emulator`). If you call services from the host instead of inside Compose, use `localhost` equivalents.
 - `dev-test` runs all non-UI tests across agent, functions, and web-app. Integration tests expect local infra to be running.
 - `dev-test-ui` runs browser-based UI tests separately.
+- `dev-otel-dashboard` prints the URL for the local [Aspire Dashboard](https://learn.microsoft.com/dotnet/aspire/fundamentals/dashboard/overview) (OpenTelemetry traces, logs, metrics) at `http://localhost:18888`.
 
 ---
 
