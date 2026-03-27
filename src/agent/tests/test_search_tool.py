@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent.search_tool import SearchResult, search_kb
+from agent.search_tool import SearchResult, _normalize_security_filter_for_local_search, search_kb
 
 
 class TestSearchResult:
@@ -117,3 +118,27 @@ class TestSearchKb:
 
         call_kwargs = mock_client.search.call_args
         assert call_kwargs.kwargs["top"] == 3
+        assert call_kwargs.kwargs["vector_queries"][0].k == 3
+
+
+class TestLocalFilterNormalization:
+    def test_rewrites_search_in_filter_in_dev(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "agent.search_tool.config",
+            SimpleNamespace(is_dev=True),
+        )
+
+        normalized = _normalize_security_filter_for_local_search(
+            "search.in(department, 'engineering,research', ',')"
+        )
+
+        assert normalized == "(department eq 'engineering' or department eq 'research')"
+
+    def test_keeps_filter_unchanged_outside_dev(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "agent.search_tool.config",
+            SimpleNamespace(is_dev=False),
+        )
+
+        original = "search.in(department, 'engineering', ',')"
+        assert _normalize_security_filter_for_local_search(original) == original

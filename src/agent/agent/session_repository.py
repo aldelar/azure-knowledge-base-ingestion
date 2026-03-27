@@ -12,10 +12,11 @@ from typing import Any, Optional
 
 from azure.cosmos.aio import CosmosClient
 from azure.cosmos.exceptions import CosmosResourceNotFoundError
-from azure.identity.aio import DefaultAzureCredential
 from azure.ai.agentserver.agentframework.persistence import (
     SerializedAgentSessionRepository,
 )
+
+from agent.client_factories import create_async_cosmos_client
 
 logger = logging.getLogger(__name__)
 
@@ -38,16 +39,12 @@ class CosmosAgentSessionRepository(SerializedAgentSessionRepository):
         self._endpoint = endpoint
         self._database_name = database_name
         self._container_name = container_name
-        self._credential = DefaultAzureCredential()
         self._client: CosmosClient | None = None
 
     async def _get_container(self):
         """Lazy-init the Cosmos container client."""
         if self._client is None:
-            self._client = CosmosClient(
-                url=self._endpoint,
-                credential=self._credential,
-            )
+            self._client = create_async_cosmos_client(self._endpoint)
         db = self._client.get_database_client(self._database_name)
         return db.get_container_client(self._container_name)
 

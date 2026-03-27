@@ -16,6 +16,7 @@ class TestImportDoesNotCrash:
     def test_import_config_module_without_env_vars(self, monkeypatch):
         """Importing the module should succeed — no sys.exit, no KeyError."""
         for var in (
+            "ENVIRONMENT",
             "AI_SERVICES_ENDPOINT",
             "SEARCH_ENDPOINT",
             "STAGING_BLOB_ENDPOINT",
@@ -34,6 +35,7 @@ class TestImportDoesNotCrash:
     def test_config_proxy_attribute_access_without_env_vars(self, monkeypatch):
         """The module-level `config` proxy must be accessible without crash."""
         for var in (
+            "ENVIRONMENT",
             "AI_SERVICES_ENDPOINT",
             "SEARCH_ENDPOINT",
             "STAGING_BLOB_ENDPOINT",
@@ -54,6 +56,7 @@ class TestGetConfigDefaults:
 
     def test_returns_empty_strings_without_env_vars(self, monkeypatch):
         for var in (
+            "ENVIRONMENT",
             "AI_SERVICES_ENDPOINT",
             "SEARCH_ENDPOINT",
             "STAGING_BLOB_ENDPOINT",
@@ -74,6 +77,8 @@ class TestGetConfigDefaults:
         assert cfg.search_endpoint == ""
         assert cfg.staging_blob_endpoint == ""
         assert cfg.serving_blob_endpoint == ""
+        assert cfg.environment == "prod"
+        assert cfg.embedding_vector_dimensions == 1536
 
     def test_default_index_name(self, monkeypatch):
         monkeypatch.delenv("SEARCH_INDEX_NAME", raising=False)
@@ -100,6 +105,7 @@ class TestGetConfigPicksUpEnvVars:
     """get_config() reads env vars when they are set."""
 
     def test_reads_all_env_vars(self, monkeypatch):
+        monkeypatch.setenv("ENVIRONMENT", "dev")
         monkeypatch.setenv("AI_SERVICES_ENDPOINT", "https://ai.example.com")
         monkeypatch.setenv("SEARCH_ENDPOINT", "https://search.example.com")
         monkeypatch.setenv("STAGING_BLOB_ENDPOINT", "https://staging.blob.example.com")
@@ -107,6 +113,8 @@ class TestGetConfigPicksUpEnvVars:
         monkeypatch.setenv("SEARCH_INDEX_NAME", "custom-index")
         monkeypatch.setenv("EMBEDDING_DEPLOYMENT_NAME", "custom-embed")
         monkeypatch.setenv("MISTRAL_DEPLOYMENT_NAME", "custom-mistral")
+        monkeypatch.setenv("SEARCH_API_KEY", "query-key")
+        monkeypatch.setenv("EMBEDDING_VECTOR_DIMENSIONS", "1024")
 
         import shared.config as cfg_mod
 
@@ -120,6 +128,9 @@ class TestGetConfigPicksUpEnvVars:
         assert cfg.search_index_name == "custom-index"
         assert cfg.embedding_deployment_name == "custom-embed"
         assert cfg.mistral_deployment_name == "custom-mistral"
+        assert cfg.environment == "dev"
+        assert cfg.search_api_key == "query-key"
+        assert cfg.embedding_vector_dimensions == 1024
 
     def test_is_azure_mode_when_blob_endpoints_set(self, monkeypatch):
         monkeypatch.setenv("STAGING_BLOB_ENDPOINT", "https://staging.blob.example.com")
@@ -161,6 +172,15 @@ class TestConfigProxy:
 
         cfg_mod._config = None
         assert cfg_mod.config.search_index_name == "proxy-index"
+
+    def test_dev_environment_defaults_vector_dimensions(self, monkeypatch):
+        monkeypatch.setenv("ENVIRONMENT", "dev")
+        monkeypatch.delenv("EMBEDDING_VECTOR_DIMENSIONS", raising=False)
+
+        import shared.config as cfg_mod
+
+        cfg_mod._config = None
+        assert cfg_mod.config.embedding_vector_dimensions == 1024
 
     def test_proxy_raises_on_nonexistent_attr(self, monkeypatch):
         import shared.config as cfg_mod

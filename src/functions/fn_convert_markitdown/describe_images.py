@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 from pathlib import Path
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from openai import AzureOpenAI
+from openai import AzureOpenAI, OpenAI
+
+from shared.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -49,14 +52,24 @@ def describe_image(image_path: Path, endpoint: str, deployment: str) -> str:
     Returns:
         The model's text description of the image.
     """
-    token_provider = get_bearer_token_provider(
-        DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
-    )
-    client = AzureOpenAI(
-        azure_endpoint=endpoint,
-        azure_ad_token_provider=token_provider,
-        api_version="2025-03-01-preview",
-    )
+    cfg = get_config()
+    if cfg.is_dev:
+        client: OpenAI | AzureOpenAI = OpenAI(
+            base_url=cfg.ollama_endpoint,
+            api_key=cfg.ollama_api_key,
+        )
+        model_name = cfg.vision_deployment_name
+    else:
+        token_provider = get_bearer_token_provider(
+            DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+        )
+        client = AzureOpenAI(
+            azure_endpoint=endpoint,
+            azure_ad_token_provider=token_provider,
+            api_version="2025-03-01-preview",
+            api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+        )
+        model_name = deployment
 
     image_data = image_path.read_bytes()
     encoded = base64.b64encode(image_data).decode("utf-8")
@@ -72,7 +85,7 @@ def describe_image(image_path: Path, endpoint: str, deployment: str) -> str:
     data_uri = f"data:{media_type};base64,{encoded}"
 
     response = client.chat.completions.create(
-        model=deployment,
+        model=model_name,
         messages=[
             {
                 "role": "user",

@@ -15,21 +15,21 @@ import mimetypes
 from dataclasses import dataclass
 from urllib.parse import quote
 
-from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 
+from agent.client_factories import create_blob_service_client
 from agent.config import config
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Module-level blob client (config is available at import time)
-# ---------------------------------------------------------------------------
+_blob_service_client: BlobServiceClient | None = None
 
-_blob_service_client = BlobServiceClient(
-    account_url=config.serving_blob_endpoint,
-    credential=DefaultAzureCredential(),
-)
+
+def _get_blob_service_client() -> BlobServiceClient:
+    global _blob_service_client
+    if _blob_service_client is None:
+        _blob_service_client = create_blob_service_client(config.serving_blob_endpoint)
+    return _blob_service_client
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ def download_image(article_id: str, image_path: str) -> ImageBlob | None:
     """
     blob_path = f"{article_id}/{image_path}"
     try:
-        blob_client = _blob_service_client.get_blob_client(
+        blob_client = _get_blob_service_client().get_blob_client(
             container=config.serving_container_name,
             blob=blob_path,
         )

@@ -7,21 +7,24 @@ Embeds the user query with ``text-embedding-3-small`` and performs a hybrid sear
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from opentelemetry import trace
 
-from azure.ai.inference import EmbeddingsClient
-from azure.identity import DefaultAzureCredential
-from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
 
+from agent.client_factories import (
+    EmbeddingBackend,
+    create_query_embedding_backend,
+    create_search_client,
+)
 from agent.config import config
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
-VECTOR_DIMENSIONS = 1536
+VECTOR_DIMENSIONS = config.embedding_vector_dimensions
 
 
 @dataclass
@@ -41,34 +44,54 @@ class SearchResult:
     score: float = 0.0
 
 
-# ---------------------------------------------------------------------------
-# Module-level clients (config is available at import time)
-# ---------------------------------------------------------------------------
+_embedding_backend: EmbeddingBackend | None = None
+_search_client = None
 
-_credential = DefaultAzureCredential()
 
-_embedding_endpoint = (
-    f"{config.ai_services_endpoint.rstrip('/')}/openai/deployments/{config.embedding_deployment_name}"
-)
-_embeddings_client = EmbeddingsClient(
-    endpoint=_embedding_endpoint,
-    credential=_credential,
-    credential_scopes=["https://cognitiveservices.azure.com/.default"],
-)
+def _get_embedding_backend() -> EmbeddingBackend:
+    global _embedding_backend
+    if _embedding_backend is None:
+        _embedding_backend = create_query_embedding_backend()
+    return _embedding_backend
 
-_search_client = SearchClient(
-    endpoint=config.search_endpoint,
-    index_name=config.search_index_name,
-    credential=_credential,
-)
+
+def _get_search_client():
+    global _search_client
+    if _search_client is None:
+        _search_client = create_search_client()
+    return _search_client
 
 
 def _embed_query(query: str) -> list[float]:
-    """Embed a query string. Returns a 1536-dimension vector."""
-    response = _embeddings_client.embed(input=[query])
-    vector = response.data[0].embedding
+    """Embed a query string. Returns an environment-specific vector."""
+    vector = _get_embedding_backend().embed([query])[0]
     logger.debug("Embedded query (%d chars) → %d-dim vector", len(query), len(vector))
     return vector
+
+
+def _normalize_security_filter_for_local_search(security_filter: str | None) -> str | None:
+    """Rewrite `search.in(...)` filters to simple OData OR clauses for local emulators.
+
+    The Azure AI Search simulator used for local dev does not reliably honor
+    `search.in(...)` in the same way the managed service does. For dev-mode
+    integration tests, convert department filters to an equivalent `eq`/`or`
+    expression while leaving production behavior unchanged.
+    """
+    if not security_filter or not config.is_dev:
+        return security_filter
+
+    match = re.fullmatch(r"search\.in\(department, '([^']*)', ','\)", security_filter)
+    if not match:
+        return security_filter
+
+    departments = [part.strip() for part in match.group(1).split(",") if part.strip()]
+    if not departments:
+        return None
+    if len(departments) == 1:
+        return f"department eq '{departments[0]}'"
+
+    joined = " or ".join(f"department eq '{department}'" for department in departments)
+    return f"({joined})"
 
 
 def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -> list[SearchResult]:
@@ -91,12 +114,14 @@ def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -
     if not query.strip():
         return []
 
+    security_filter = _normalize_security_filter_for_local_search(security_filter)
+
     # Embed the query for vector search
     query_vector = _embed_query(query)
 
     vector_query = VectorizedQuery(
         vector=query_vector,
-        k_nearest_neighbors=top,
+        k=top,
         fields="content_vector",
     )
 
@@ -106,7 +131,7 @@ def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -
         if security_filter:
             span.set_attribute("search.filter", security_filter)
 
-        results = _search_client.search(
+        results = _get_search_client().search(
             search_text=query,
             vector_queries=[vector_query],
             select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls", "department", "summary", "indexed_at"],

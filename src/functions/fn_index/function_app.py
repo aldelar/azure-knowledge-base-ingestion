@@ -20,6 +20,8 @@ import fn_index
 
 logger = logging.getLogger(__name__)
 
+_SERVING_CONTAINER = config.serving_container_name
+
 app = func.FunctionApp()
 
 
@@ -34,7 +36,7 @@ def http_index(req: func.HttpRequest) -> func.HttpResponse:
     """
     logging.basicConfig(level=logging.INFO)
 
-    article_ids = get_article_ids(req, config.serving_blob_endpoint, "serving")
+    article_ids = get_article_ids(req, config.serving_blob_endpoint, _SERVING_CONTAINER)
     if not article_ids:
         return func.HttpResponse(
             json.dumps({"error": "No articles found in serving container"}),
@@ -48,7 +50,7 @@ def http_index(req: func.HttpRequest) -> func.HttpResponse:
             tmp_root = Path(tempfile.mkdtemp(prefix="kb-index-"))
             serving_dir = tmp_root / article_id
             download_article(
-                config.serving_blob_endpoint, "serving", article_id, serving_dir
+                config.serving_blob_endpoint, _SERVING_CONTAINER, article_id, serving_dir
             )
 
             fn_index.run(str(serving_dir))

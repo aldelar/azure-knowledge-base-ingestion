@@ -29,6 +29,19 @@ logger = logging.getLogger(__name__)
 MAX_VISION_IMAGES = 6
 
 
+def _extract_result_items(payload: object) -> list[dict]:
+    """Return search result items from legacy list or current dict payloads."""
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+
+    if isinstance(payload, dict):
+        results = payload.get("results")
+        if isinstance(results, list):
+            return [item for item in results if isinstance(item, dict)]
+
+    return []
+
+
 class VisionImageMiddleware(ChatMiddleware):
     """Inject images from search results so GPT-4.1 can reason about them.
 
@@ -58,14 +71,22 @@ class VisionImageMiddleware(ChatMiddleware):
 
                 # Parse the JSON tool result to find image references
                 try:
-                    results = json.loads(str(content.result))
+                    parsed = json.loads(str(content.result))
                 except (json.JSONDecodeError, TypeError):
                     continue
 
-                if not isinstance(results, list):
+                results = _extract_result_items(parsed)
+                if not results:
                     continue
 
                 for result in results:
+                    if len(image_items) >= MAX_VISION_IMAGES:
+                        logger.info(
+                            "Vision image cap reached (%d), skipping remaining images",
+                            MAX_VISION_IMAGES,
+                        )
+                        break
+
                     for img_info in result.get("images", []):
                         url = img_info.get("url", "")
                         if "/api/images/" not in url:
@@ -89,10 +110,6 @@ class VisionImageMiddleware(ChatMiddleware):
 
                         # Respect the cap
                         if len(image_items) >= MAX_VISION_IMAGES:
-                            logger.info(
-                                "Vision image cap reached (%d), skipping remaining images",
-                                MAX_VISION_IMAGES,
-                            )
                             break
 
                         blob = download_image(article_id, image_path)

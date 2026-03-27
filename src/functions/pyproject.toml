@@ -37,7 +37,7 @@ fn-index = { workspace = true }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-markers = ["integration: tests that call live Azure services"]
+markers = ["integration: tests that call local Docker-backed emulators and services"]
 
 [tool.hatch.build.targets.wheel]
 packages = [

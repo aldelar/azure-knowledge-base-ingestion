@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "Shared utilities for KB ingestion pipeline functions"
 requires-python = ">=3.11"
 dependencies = [
+    "azure-ai-inference>=1.0.0b1",
+    "azure-cosmos>=4.9.0",
     "azure-identity>=1.19.0",
+    "azure-search-documents>=11.6.0b5",
     "azure-storage-blob>=12.20.0",
+    "openai>=1.60.0",
     "python-dotenv>=1.0.0",
 ]
 

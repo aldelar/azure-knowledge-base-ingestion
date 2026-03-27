@@ -16,10 +16,7 @@ class TestSummarizeChunk:
     @patch("fn_index.summarizer._get_client")
     def test_returns_summary_on_success(self, mock_get_client):
         mock_client = MagicMock()
-        mock_response = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="A concise summary."))]
-        )
-        mock_client.complete.return_value = mock_response
+        mock_client.complete.return_value = "A concise summary."
         mock_get_client.return_value = mock_client
 
         result = summarize_chunk("Some content", "Article Title", "Section A")
@@ -40,17 +37,14 @@ class TestSummarizeChunk:
     @patch("fn_index.summarizer._get_client")
     def test_truncates_content_to_2000_chars(self, mock_get_client):
         mock_client = MagicMock()
-        mock_response = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="Summary."))]
-        )
-        mock_client.complete.return_value = mock_response
+        mock_client.complete.return_value = "Summary."
         mock_get_client.return_value = mock_client
 
         long_content = "x" * 5000
         summarize_chunk(long_content, "Title", "Section")
 
         call_args = mock_client.complete.call_args
-        prompt = call_args[1]["messages"][0]["content"]
+        prompt = call_args.kwargs["prompt"]
         # The content portion should be truncated to 2000 chars
         assert "x" * 2000 in prompt
         assert "x" * 2001 not in prompt

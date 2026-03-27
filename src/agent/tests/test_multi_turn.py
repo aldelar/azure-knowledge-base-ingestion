@@ -6,6 +6,8 @@ depending on whether COSMOS_ENDPOINT is configured.
 
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,14 +24,106 @@ def _env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 class TestSessionRepoWiring:
     """Verify main() passes session_repository to from_agent_framework."""
 
+    @pytest.mark.asyncio
+    async def test_streaming_patch_filters_null_text_deltas(self) -> None:
+        """The startup workaround should skip null text deltas from streamed updates."""
+        from azure.ai.agentserver.agentframework.models.agent_framework_output_streaming_converter import (
+            AgentFrameworkOutputStreamingConverter,
+        )
+
+        from main import _patch_agentserver_streaming_converter
+
+        _patch_agentserver_streaming_converter()
+
+        converter = object.__new__(AgentFrameworkOutputStreamingConverter)
+        update = SimpleNamespace(
+            contents=[
+                SimpleNamespace(type="text", text=None),
+                SimpleNamespace(type="text", text="hello"),
+                SimpleNamespace(type="function_call", arguments="{}", call_id="call-1", name="search"),
+            ],
+            author_name="assistant",
+        )
+
+        async def updates():
+            yield update
+
+        results = [
+            item
+            async for item in AgentFrameworkOutputStreamingConverter._read_updates(converter, updates())
+        ]
+
+        assert len(results) == 2
+        assert results[0][0].type == "text"
+        assert results[0][0].text == "hello"
+        assert results[0][1] == "assistant"
+        assert results[1][0].type == "function_call"
+
+    @pytest.mark.asyncio
+    async def test_streaming_patch_handles_null_text_inside_converter_state(self) -> None:
+        """The text-content state patch should ignore null deltas instead of crashing."""
+        from types import SimpleNamespace
+
+        from azure.ai.agentserver.agentframework.models.agent_framework_output_streaming_converter import (
+            _TextContentStreamingState,
+        )
+
+        from main import _patch_agentserver_streaming_converter
+
+        _patch_agentserver_streaming_converter()
+
+        parent = SimpleNamespace(
+            context=SimpleNamespace(id_generator=SimpleNamespace(generate_message_id=lambda: "msg-1")),
+            _build_created_by=lambda author_name: {"agent": {"name": author_name}},
+            next_output_index=lambda: 0,
+            next_sequence=(lambda counter=iter(range(1000)): lambda: next(counter))(),
+            add_completed_output_item=lambda item: None,
+        )
+        state = _TextContentStreamingState(parent)
+
+        async def contents():
+            yield SimpleNamespace(text="Hello")
+            yield SimpleNamespace(text=None)
+            yield SimpleNamespace(text=" world")
+
+        events = [event async for event in state.convert_contents(contents(), "assistant")]
+        done_event = next(event for event in events if getattr(event, "type", None) == "response.output_text.done")
+        assert done_event.text == "Hello world"
+
+    @patch("main._patch_agentserver_streaming_converter")
     @patch("main.from_agent_framework")
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
+    def test_main_applies_streaming_patch_before_server_start(
+        self,
+        mock_create_chat_client: MagicMock,
+        mock_agent_cls: MagicMock,
+        mock_adapter: MagicMock,
+        mock_patch_streaming: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """main() should install the streaming workaround before creating the server."""
+        monkeypatch.setenv("COSMOS_ENDPOINT", "")
+
+        import agent.config
+        monkeypatch.setattr("agent.config.config", agent.config._load_config())
+
+        mock_server = MagicMock()
+        mock_adapter.return_value = mock_server
+
+        from main import main
+
+        main()
+
+        mock_patch_streaming.assert_called_once()
+        mock_adapter.assert_called_once()
+
+    @patch("main.from_agent_framework")
+    @patch("agent.kb_agent.Agent")
+    @patch("agent.kb_agent.create_chat_client")
     def test_cosmos_endpoint_set_creates_repo(
         self,
-        mock_cred: MagicMock,
-        mock_client: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
         mock_adapter: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
@@ -57,12 +151,10 @@ class TestSessionRepoWiring:
 
     @patch("main.from_agent_framework")
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_no_cosmos_endpoint_passes_none(
         self,
-        mock_cred: MagicMock,
-        mock_client: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
         mock_adapter: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
@@ -86,12 +178,10 @@ class TestSessionRepoWiring:
 
     @patch("main.from_agent_framework")
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_repo_constructed_with_correct_params(
         self,
-        mock_cred: MagicMock,
-        mock_client: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
         mock_adapter: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
@@ -117,12 +207,10 @@ class TestSessionRepoWiring:
 
     @patch("main.from_agent_framework")
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_default_cosmos_database_name(
         self,
-        mock_cred: MagicMock,
-        mock_client: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
         mock_adapter: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
@@ -149,12 +237,10 @@ class TestSessionRepoWiring:
 
     @patch("main.from_agent_framework")
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_repo_uses_default_container_name(
         self,
-        mock_cred: MagicMock,
-        mock_client: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
         mock_adapter: MagicMock,
         monkeypatch: pytest.MonkeyPatch,

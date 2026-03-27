@@ -25,7 +25,7 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 markers = [
-    "integration: requires running services and Azure credentials",
+    "integration: requires running local Docker-backed services and emulators",
     "uitest: browser-based UI tests requiring running agent + app",
 ]
 addopts = "-m 'not integration and not uitest'"

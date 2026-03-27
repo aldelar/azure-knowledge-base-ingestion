@@ -7,6 +7,7 @@ dependencies = [
     "azure-search-documents>=11.6.0b5",
     "azure-ai-inference>=1.0.0b1",
     "kb-ingestion-shared",
+    "openai>=1.60.0",
 ]
 
 [tool.uv.sources]

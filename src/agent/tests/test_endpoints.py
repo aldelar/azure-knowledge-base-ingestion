@@ -27,12 +27,10 @@ class TestCreateAgentFactory:
     """Test the create_agent() factory used by main()."""
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_factory_returns_agent(
         self,
-        mock_cred: MagicMock,
-        mock_client: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() returns an Agent instance."""
@@ -53,12 +51,10 @@ class TestFromAgentFramework:
     """Test that from_agent_framework accepts our agent."""
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_adapter_accepts_agent(
         self,
-        mock_cred: MagicMock,
-        mock_client: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """from_agent_framework(agent) returns a runnable server."""

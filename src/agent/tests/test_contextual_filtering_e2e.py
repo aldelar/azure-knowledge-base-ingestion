@@ -1,9 +1,9 @@
-"""E2E tests for the contextual filtering pipeline.
+"""Integration tests for the contextual filtering pipeline.
 
 Validates the full chain: JWT claims -> ContextVar -> SecurityFilterMiddleware
 -> search_knowledge_base -> OData filter -> AI Search.
 
-Requires REQUIRE_AUTH=false (dev mode) plus live Azure services.
+Requires REQUIRE_AUTH=false (dev mode) plus a running local search-backed environment.
 
 Run with: uv run pytest tests/test_contextual_filtering_e2e.py -v -m integration
 """
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.integration
 
 
 class TestContextualFilteringE2E:
-    """E2E tests for the full contextual filtering pipeline."""
+    """Integration tests for the full contextual filtering pipeline."""
 
     def test_e2e_dev_mode_applies_filter(self, monkeypatch) -> None:
         """In dev mode, default claims apply engineering filter to search."""
@@ -42,10 +42,11 @@ class TestContextualFilteringE2E:
             "azure search", departments=["engineering"]
         )
         parsed = json.loads(result)
+        results = parsed["results"] if isinstance(parsed, dict) else parsed
 
-        assert len(parsed) > 0
+        assert len(results) > 0
         # Verify all returned results have engineering department
-        for item in parsed:
+        for item in results:
             assert item.get("article_id"), "Result should have an article_id"
 
     def test_e2e_filter_visible_in_logs(self, monkeypatch, caplog) -> None:

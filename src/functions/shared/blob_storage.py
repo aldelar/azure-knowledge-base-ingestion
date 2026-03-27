@@ -17,19 +17,16 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import azure.functions as func
-from azure.identity import DefaultAzureCredential
 from azure.storage.blob import ContainerClient, ContentSettings
+
+from shared.client_factories import create_container_client
 
 logger = logging.getLogger(__name__)
 
 
 def _container_client(blob_endpoint: str, container_name: str) -> ContainerClient:
     """Create a ContainerClient from a blob endpoint URL and container name."""
-    return ContainerClient(
-        account_url=blob_endpoint.rstrip("/"),
-        container_name=container_name,
-        credential=DefaultAzureCredential(),
-    )
+    return create_container_client(blob_endpoint, container_name)
 
 
 def list_articles(

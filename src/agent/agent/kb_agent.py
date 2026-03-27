@@ -7,15 +7,17 @@ grounded in Azure AI Search results.
 Exports a ``create_agent()`` factory used by the hosting adapter (``main.py``).
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
 from typing import Annotated
 
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from pydantic import BeforeValidator
+
 from agent_framework import Agent
 from agent_framework._compaction import (
     CompactionProvider,
@@ -23,8 +25,8 @@ from agent_framework._compaction import (
     ToolResultCompactionStrategy,
 )
 from agent_framework._sessions import InMemoryHistoryProvider
-from agent_framework.azure import AzureOpenAIChatClient
 
+from agent.client_factories import create_chat_client
 from agent.search_tool import SearchResult, search_kb
 from agent.image_service import get_image_url
 from agent.vision_middleware import VisionImageMiddleware
@@ -32,38 +34,43 @@ from agent.security_middleware import SecurityFilterMiddleware
 from agent.config import config
 
 logger = logging.getLogger(__name__)
+_PROMPTS_DIR = Path(__file__).with_name("prompts")
 
-_SYSTEM_PROMPT = """\
-You are a helpful knowledge-base assistant. You answer questions about Azure \
-services, features, and how-to guides using the search_knowledge_base tool.
 
-Rules:
-1. ALWAYS use the search_knowledge_base tool to find relevant information \
-   before answering.
-2. Ground your answers in the search results — do not make up information.
-3. You have vision capabilities. The actual images from search results are \
-   attached to the conversation so you can see them. When an image would \
-   genuinely help illustrate or clarify your answer, embed it inline using \
-   standard Markdown: ![brief description](url). You MUST copy the URL \
-   exactly from the "url" field in each search result's "images" array — \
-   it will always start with "/api/images/". \
-   CORRECT example: ![Architecture diagram](/api/images/my-article/images/arch.png) \
-   WRONG — do NOT use any of these formats: \
-     • https://learn.microsoft.com/... (external URLs) \
-     • attachment:filename.png (attachment scheme) \
-     • api/images/... (missing leading slash) \
-   Only include images that add value — do not embed every available image. \
-   Refer to visual details you can see in the images when they are relevant.
-4. Use inline reference markers to attribute information to its source. Each \
-   search result has a ref_number — insert [Ref #N] immediately after the \
-   sentence or paragraph that uses that result. For example: \
-   "Azure AI Search supports IP firewall rules [Ref #1]."
-5. Do NOT include a Sources section at the end — the UI handles that.
-6. If the search results don't contain enough information to answer the \
-   question, say so honestly.
-7. Use clear Markdown formatting: headings, bullet points, bold for emphasis.
-8. Be concise but thorough.
-"""
+def _resolve_prompt_environment(environment: str | None = None) -> str:
+    normalized = (environment or config.environment or "prod").strip().lower()
+    return "dev" if normalized == "dev" else "prod"
+
+
+def _get_system_prompt_path(environment: str | None = None) -> Path:
+    prompt_environment = _resolve_prompt_environment(environment)
+    return _PROMPTS_DIR / f"system_prompt-{prompt_environment}.md"
+
+
+def _coerce_search_query(value: Any) -> str:
+    normalized = _normalize_search_query(value)
+    if not normalized:
+        raise ValueError("Search query was missing or malformed.")
+    return normalized
+
+
+@lru_cache(maxsize=2)
+def _load_system_prompt(environment: str | None = None) -> str:
+    """Load the agent system prompt from the external prompt file."""
+    system_prompt_path = _get_system_prompt_path(environment)
+    try:
+        prompt = system_prompt_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RuntimeError(f"Unable to load system prompt from {system_prompt_path}") from exc
+
+    if not prompt:
+        raise RuntimeError(f"System prompt file is empty: {system_prompt_path}")
+
+    return prompt
+
+
+_SYSTEM_PROMPT_PATH = _get_system_prompt_path()
+_SYSTEM_PROMPT = _load_system_prompt()
 
 
 # ---------------------------------------------------------------------------
@@ -100,14 +107,22 @@ class AgentResponse:
 
 
 def search_knowledge_base(
-    query: Annotated[str, "The search query — use natural language describing what information is needed"],
+    query: Annotated[
+        str,
+        BeforeValidator(_coerce_search_query),
+        "The search query — use natural language describing what information is needed",
+    ],
     **kwargs,
 ) -> str:
     """Search the knowledge base for articles about Azure services, features, and how-to guides.
 
     Returns relevant text chunks with optional images.
     """
-    logger.info("search_knowledge_base(query='%s')", query[:80])
+    normalized_query = _normalize_search_query(query)
+    if not normalized_query:
+        return json.dumps({"error": "Search query was missing or malformed."})
+
+    logger.info("search_knowledge_base(query='%s')", normalized_query[:80])
 
     # Build OData filter from departments injected by SecurityFilterMiddleware
     departments = kwargs.get("departments", [])
@@ -118,7 +133,7 @@ def search_knowledge_base(
         logger.info("Applying security filter: %s", security_filter)
 
     try:
-        results: list[SearchResult] = search_kb(query, security_filter=security_filter)
+        results: list[SearchResult] = search_kb(normalized_query, security_filter=security_filter)
     except Exception:
         logger.error("search_kb execution failed", exc_info=True)
         return json.dumps({"error": "Search failed. Please try again."})
@@ -151,6 +166,34 @@ def search_knowledge_base(
     )
 
 
+def _normalize_search_query(query: str | dict[str, Any]) -> str | None:
+    """Accept plain-string tool args and typed wrappers emitted by local models."""
+    if isinstance(query, str):
+        normalized = query.strip()
+        return normalized or None
+
+    if not isinstance(query, dict):
+        return None
+
+    value = query.get("value")
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized or None
+
+    nested_query = query.get("query")
+    if isinstance(nested_query, str):
+        normalized = nested_query.strip()
+        return normalized or None
+
+    if isinstance(nested_query, dict):
+        nested_value = nested_query.get("value")
+        if isinstance(nested_value, str):
+            normalized = nested_value.strip()
+            return normalized or None
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Agent factory — used by the hosting adapter
 # ---------------------------------------------------------------------------
@@ -165,32 +208,8 @@ def create_agent() -> Agent:
     and returns an ``Agent`` configured with the search tool and
     vision middleware.
     """
-    # Use API key if provided (local dev), otherwise credential chain
-    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
-
-    if api_key:
-        client = AzureOpenAIChatClient(
-            api_key=api_key,
-            endpoint=config.ai_services_endpoint,
-            deployment_name=config.agent_model_deployment_name,
-            api_version="2025-03-01-preview",
-            middleware=[VisionImageMiddleware()],
-        )
-    else:
-        # Use ad_token_provider pattern (not credential=) to avoid eager token
-        # acquisition and support automatic token refresh for long-running servers.
-        # Reference: foundry-samples/agent-with-foundry-tools/main.py
-        credential = DefaultAzureCredential()
-        token_provider = get_bearer_token_provider(
-            credential, "https://cognitiveservices.azure.com/.default"
-        )
-        client = AzureOpenAIChatClient(
-            credential=token_provider,
-            endpoint=config.ai_services_endpoint,
-            deployment_name=config.agent_model_deployment_name,
-            api_version="2025-03-01-preview",
-            middleware=[VisionImageMiddleware()],
-        )
+    client = create_chat_client()
+    client.middleware = [VisionImageMiddleware()]
 
     history = InMemoryHistoryProvider(skip_excluded=True)
     compaction = CompactionProvider(

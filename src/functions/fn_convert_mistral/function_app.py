@@ -18,8 +18,8 @@ from shared.config import config
 
 import fn_convert_mistral
 
-_STAGING_CONTAINER = "staging"
-_SERVING_CONTAINER = "serving"
+_STAGING_CONTAINER = config.staging_container_name
+_SERVING_CONTAINER = config.serving_container_name
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def http_convert_mistral(req: func.HttpRequest) -> func.HttpResponse:
     """
     logging.basicConfig(level=logging.INFO)
 
-    article_ids = get_article_ids(req, config.staging_blob_endpoint, "staging", depth=2)
+    article_ids = get_article_ids(req, config.staging_blob_endpoint, _STAGING_CONTAINER, depth=2)
     if not article_ids:
         return func.HttpResponse(
             json.dumps({"error": "No articles found in staging container"}),

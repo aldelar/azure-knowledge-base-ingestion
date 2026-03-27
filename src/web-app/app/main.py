@@ -43,7 +43,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Matches any markdown image syntax — used to strip stray images the LLM may emit
 _MD_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\s*\([^)]*\)")
-_REF_MARKER_RE = re.compile(r"\[Ref\s+(#\d+(?:\s*,\s*#\d+)*)\]")
+_REF_MARKER_RE = re.compile(
+    r"\[(?:Refs?\s*)?(#\s*\d+(?:\s*(?:,|/|and|or)\s*#\s*\d+)*)\]",
+    re.IGNORECASE,
+)
+_REF_SEQUENCE_RE = re.compile(
+    r"\bRefs?\s*#\s*\d+(?:\s*(?:,|/|and|or)\s*#\s*\d+)+",
+    re.IGNORECASE,
+)
 # Matches [Image: name](images/file.png) references produced by the convert pipeline
 _CONTENT_IMAGE_RE = re.compile(
     r"\[Image:\s*([^\]]+)\]\(images/([^)]+\.(?:png|jpg|jpeg|gif|svg|webp))\)"
@@ -94,8 +101,39 @@ def _remap_ref_numbers(text: str, old_to_new: dict[int, int]) -> str:
     return _REF_NUM_RE.sub(_rewrite, text)
 
 
+def _canonicalise_ref_sequence(text: str) -> str:
+    r"""Convert ref lists into repeated literal ``Ref #N`` tokens.
+
+    Examples
+    --------
+    - ``Ref #1, #2``       → ``Ref #1, Ref #2``
+    - ``Refs #1 and #2``   → ``Ref #1 and Ref #2``
+    - ``ref#1/#2``         → ``Ref #1 / Ref #2``
+    """
+    cleaned = text.strip()
+    cleaned = re.sub(r"(?i)\brefs?\s*#\s*(\d+)", r"Ref #\1", cleaned)
+    if cleaned.startswith("#"):
+        cleaned = f"Ref {cleaned}"
+
+    head_match = re.match(r"Ref\s*#\s*(\d+)", cleaned, re.IGNORECASE)
+    if not head_match:
+        return cleaned
+
+    result = f"Ref #{head_match.group(1)}"
+    tail = cleaned[head_match.end():]
+    for separator, number in re.findall(r"\s*(,|/|and|or)\s*#\s*(\d+)", tail, re.IGNORECASE):
+        separator = separator.lower()
+        if separator == ",":
+            result += f", Ref #{number}"
+        elif separator == "/":
+            result += f" / Ref #{number}"
+        else:
+            result += f" {separator} Ref #{number}"
+    return result
+
+
 def _expand_ref_markers(text: str) -> str:
-    r"""Expand ``[Ref #N]`` and ``[Ref #N, #M]`` markers into bare tokens.
+    r"""Expand bracketed ref markers into repeated bare ``Ref #N`` tokens.
 
     Chainlit auto-links element names that appear literally in the message
     content.  The elements are named ``Ref #1``, ``Ref #2``, etc., so we
@@ -105,13 +143,24 @@ def _expand_ref_markers(text: str) -> str:
     --------
     - ``[Ref #1]``       → ``Ref #1``
     - ``[Ref #1, #5]``   → ``Ref #1, Ref #5``
+    - ``[Refs #1 and #5]`` → ``Ref #1 and Ref #5``
     """
     def _expand(m: re.Match) -> str:
-        inner = m.group(1)
-        nums = re.findall(r"#(\d+)", inner)
-        return ", ".join(f"Ref #{n}" for n in nums)
+        return _canonicalise_ref_sequence(m.group(1))
 
     return _REF_MARKER_RE.sub(_expand, text)
+
+
+def _normalise_ref_mentions(text: str) -> str:
+    r"""Canonicalise mixed bare ref forms so every citation is linkable.
+
+    The local model often emits partial lists such as ``Ref #1, #2`` where
+    only the first citation is a literal element name. Chainlit only links
+    the literal ``Ref #N`` tokens, so we expand the remaining bare ``#N``
+    values into repeated ``Ref #N`` mentions.
+    """
+    text = re.sub(r"(?i)\bRefs?\s*#\s*(\d+)", r"Ref #\1", text)
+    return _REF_SEQUENCE_RE.sub(lambda m: _canonicalise_ref_sequence(m.group(0)), text)
 
 
 def _strip_md_images(text: str) -> str:
@@ -174,6 +223,31 @@ def _build_filename_lookup(citations: list[Citation]) -> dict[str, str]:
     return lookup
 
 
+def _extract_tool_results(payload: object) -> list[dict]:
+    """Parse Responses API tool output payloads into result dictionaries."""
+    if isinstance(payload, str):
+        try:
+            return _extract_tool_results(json.loads(payload))
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    if isinstance(payload, list):
+        results: list[dict] = []
+        for item in payload:
+            results.extend(_extract_tool_results(item))
+        return results
+
+    if isinstance(payload, dict):
+        nested_results = payload.get("results")
+        if isinstance(nested_results, list):
+            return [item for item in nested_results if isinstance(item, dict)]
+
+        if "article_id" in payload or "ref_number" in payload:
+            return [payload]
+
+    return []
+
+
 def _normalise_inline_images(text: str, citations: list[Citation]) -> str:
     """Normalise every ``![alt](url)`` so the URL is a clean proxy path.
 
@@ -217,6 +291,56 @@ def _normalise_inline_images(text: str, citations: list[Citation]) -> str:
     text = _ANY_IMAGE_RE.sub(_normalise, text)
     logger.info("_normalise_inline_images: normalised %d image(s)", count)
     return text
+
+
+def _append_reference_tokens(text: str, citations: list[Citation]) -> str:
+    """Inject discoverable reference tokens inline when the model omits them."""
+    if not citations or re.search(r"\bRef\s+#\d+\b", text):
+        return text
+
+    refs = ", ".join(f"Ref #{idx}" for idx in range(1, len(citations) + 1))
+    lines = text.splitlines()
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#") or stripped.startswith("!["):
+            continue
+
+        lines[idx] = f"{line.rstrip()} ({refs})"
+        return "\n".join(lines)
+
+    body = text.rstrip()
+    return f"{body} ({refs})" if body else refs
+
+
+def _append_inline_image_fallbacks(text: str, citations: list[Citation], *, max_images: int = 2) -> str:
+    """Surface cited images when the model answer omitted inline markdown."""
+    if not citations or _ANY_IMAGE_RE.search(text):
+        return text
+
+    image_lines: list[str] = []
+    seen_urls: set[str] = set()
+    for idx, cit in enumerate(citations, 1):
+        for path in cit.image_urls:
+            proxy_url = get_image_url(cit.article_id, path)
+            if proxy_url in seen_urls:
+                continue
+            seen_urls.add(proxy_url)
+
+            alt = f"Ref #{idx} — {cit.title}" if cit.title else f"Ref #{idx} image"
+            image_lines.append(f"![{alt}]({proxy_url})")
+            if len(image_lines) >= max_images:
+                break
+        if len(image_lines) >= max_images:
+            break
+
+    if not image_lines:
+        return text
+
+    body = text.rstrip()
+    separator = "\n\n" if body else ""
+    return f"{body}{separator}" + "\n\n".join(image_lines)
 
 
 def _build_citation_content(cit: Citation, idx: int) -> str:
@@ -592,18 +716,7 @@ async def on_message(message: cl.Message) -> None:
                 # Extract citation data from search tool's function call output
                 item = getattr(event, "item", None)
                 if item and getattr(item, "type", None) == "function_call_output":
-                    output_str = getattr(item, "output", "")
-                    try:
-                        parsed = json.loads(output_str)
-                        # Structured output: {"results": [...], "summary": "..."}
-                        if isinstance(parsed, dict) and "results" in parsed:
-                            for r in parsed["results"]:
-                                raw_citations.append(r)
-                        elif isinstance(parsed, list):
-                            for r in parsed:
-                                raw_citations.append(r)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                    raw_citations.extend(_extract_tool_results(getattr(item, "output", "")))
 
             elif event_type == "response.completed":
                 # Fallback: extract full text if streaming didn't capture it
@@ -648,15 +761,20 @@ async def on_message(message: cl.Message) -> None:
             image_urls=c.get("image_urls", []),
         ))
 
-    # Expand ref markers so Chainlit can auto-link them
-    # (no de-dup/remap — the agent assigns ref numbers 1..N directly)
+    unique_citations, old_to_new = _build_ref_map(citations)
+
+    # Expand and normalize references so Chainlit can auto-link the side elements.
+    msg.content = _remap_ref_numbers(msg.content, old_to_new)
     msg.content = _expand_ref_markers(msg.content)
-    msg.content = _normalise_inline_images(msg.content, [])
+    msg.content = _normalise_ref_mentions(msg.content)
+    msg.content = _normalise_inline_images(msg.content, unique_citations)
+    msg.content = _append_reference_tokens(msg.content, unique_citations)
+    msg.content = _append_inline_image_fallbacks(msg.content, unique_citations)
 
     # Create cl.Text elements for each citation — Chainlit auto-links
     # element names that appear literally in the message content
     elements: list[cl.Text] = []
-    for idx, cit in enumerate(citations, 1):
+    for idx, cit in enumerate(unique_citations, 1):
         content = _build_citation_content(cit, idx)
         elements.append(cl.Text(
             name=f"Ref #{idx}",
