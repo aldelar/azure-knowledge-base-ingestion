@@ -12,10 +12,8 @@ from agent.session_repository import CosmosAgentSessionRepository
 
 @pytest.fixture
 def repo():
-    """Create a repository with mocked credential."""
-    with patch(
-        "agent.session_repository.DefaultAzureCredential", return_value=MagicMock()
-    ):
+    """Create a repository with a mocked client factory."""
+    with patch("agent.session_repository.create_async_cosmos_client"):
         return CosmosAgentSessionRepository(
             endpoint="https://test-cosmos.documents.azure.com:443/",
             database_name="kb-agent",
@@ -149,56 +147,45 @@ async def test_lazy_init_client_is_none_before_first_use(repo):
 @pytest.mark.asyncio
 async def test_lazy_init_creates_client_on_first_call(repo):
     """First call to _get_container() should create the CosmosClient."""
-    with patch("agent.session_repository.CosmosClient") as mock_cosmos_cls:
-        mock_cosmos_cls.return_value = MagicMock()
+    with patch("agent.session_repository.create_async_cosmos_client") as mock_factory:
+        mock_factory.return_value = MagicMock()
         await repo._get_container()
 
-        mock_cosmos_cls.assert_called_once_with(
-            url=repo._endpoint,
-            credential=repo._credential,
-        )
+        mock_factory.assert_called_once_with(repo._endpoint)
         assert repo._client is not None
 
 
 @pytest.mark.asyncio
 async def test_lazy_init_reuses_client_on_subsequent_calls(repo):
     """Subsequent calls to _get_container() must NOT create a new client."""
-    with patch("agent.session_repository.CosmosClient") as mock_cosmos_cls:
-        mock_cosmos_cls.return_value = MagicMock()
+    with patch("agent.session_repository.create_async_cosmos_client") as mock_factory:
+        mock_factory.return_value = MagicMock()
         await repo._get_container()
         await repo._get_container()
 
         # Still only one client instantiation
-        mock_cosmos_cls.assert_called_once()
+        mock_factory.assert_called_once()
 
 
-# ── DefaultAzureCredential verification ──────────────────────────────────
+# ── Constructor defaults ─────────────────────────────────────────────────
 
 
-def test_uses_default_azure_credential():
-    """Constructor must use DefaultAzureCredential (managed identity)."""
-    with patch(
-        "agent.session_repository.DefaultAzureCredential"
-    ) as mock_cred_cls:
-        mock_cred_cls.return_value = MagicMock()
-        repo = CosmosAgentSessionRepository(
-            endpoint="https://test.documents.azure.com:443/",
-            database_name="db",
-        )
-        mock_cred_cls.assert_called_once()
-        assert repo._credential is mock_cred_cls.return_value
+def test_constructor_stores_endpoint_and_database_name():
+    repo = CosmosAgentSessionRepository(
+        endpoint="https://test.documents.azure.com:443/",
+        database_name="db",
+    )
+    assert repo._endpoint == "https://test.documents.azure.com:443/"
+    assert repo._database_name == "db"
 
 
 def test_default_container_name():
     """Container name defaults to 'agent-sessions' when not specified."""
-    with patch(
-        "agent.session_repository.DefaultAzureCredential", return_value=MagicMock()
-    ):
-        repo = CosmosAgentSessionRepository(
-            endpoint="https://test.documents.azure.com:443/",
-            database_name="db",
-        )
-        assert repo._container_name == "agent-sessions"
+    repo = CosmosAgentSessionRepository(
+        endpoint="https://test.documents.azure.com:443/",
+        database_name="db",
+    )
+    assert repo._container_name == "agent-sessions"
 
 
 # ── Error propagation ────────────────────────────────────────────────────

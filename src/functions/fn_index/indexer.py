@@ -8,9 +8,6 @@ from __future__ import annotations
 
 import logging
 
-from azure.identity import DefaultAzureCredential
-from azure.search.documents import SearchClient
-from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
     HnswAlgorithmConfiguration,
     SearchableField,
@@ -22,11 +19,12 @@ from azure.search.documents.indexes.models import (
     VectorSearchProfile,
 )
 
+from shared.client_factories import create_search_client, create_search_index_client
 from shared.config import config
 
 logger = logging.getLogger(__name__)
 
-VECTOR_DIMENSIONS = 1536
+VECTOR_DIMENSIONS = config.embedding_vector_dimensions
 VECTOR_PROFILE_NAME = "default-profile"
 ALGORITHM_CONFIG_NAME = "default-hnsw"
 
@@ -37,11 +35,7 @@ def ensure_index_exists() -> None:
     Uses HNSW algorithm for vector search.  Idempotent — safe to call
     multiple times.
     """
-    credential = DefaultAzureCredential()
-    client = SearchIndexClient(
-        endpoint=config.search_endpoint,
-        credential=credential,
-    )
+    client = create_search_index_client()
 
     index_name = config.search_index_name
 
@@ -156,12 +150,7 @@ def index_chunks(
     indexed_at:
         ISO-8601 timestamp for this indexing run.
     """
-    credential = DefaultAzureCredential()
-    client = SearchClient(
-        endpoint=config.search_endpoint,
-        index_name=config.search_index_name,
-        credential=credential,
-    )
+    client = create_search_client(config.search_index_name)
 
     documents = []
     for i, chunk in enumerate(chunks):

@@ -15,9 +15,9 @@ import mimetypes
 from dataclasses import dataclass
 from urllib.parse import quote
 
-from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 
+from app.client_factories import create_blob_service_client
 from app.config import config
 
 logger = logging.getLogger(__name__)
@@ -33,10 +33,7 @@ def _get_blob_service_client() -> BlobServiceClient:
     """Lazy singleton for the BlobServiceClient."""
     global _blob_service_client
     if _blob_service_client is None:
-        _blob_service_client = BlobServiceClient(
-            account_url=config.serving_blob_endpoint,
-            credential=DefaultAzureCredential(),
-        )
+        _blob_service_client = create_blob_service_client(config.serving_blob_endpoint)
     return _blob_service_client
 
 

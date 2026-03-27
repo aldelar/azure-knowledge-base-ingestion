@@ -49,16 +49,19 @@ def _make_message(contents: list) -> MagicMock:
 
 def _search_result_json(images: list[dict] | None = None) -> str:
     """Build a JSON string mimicking search_knowledge_base output."""
-    return json.dumps([{
-        "ref_number": 1,
-        "content": "Test content",
-        "title": "Test Article",
-        "section_header": "Overview",
-        "article_id": "test-article",
-        "chunk_index": 0,
-        "image_urls": [],
-        "images": images or [],
-    }])
+    return json.dumps({
+        "results": [{
+            "ref_number": 1,
+            "content": "Test content",
+            "title": "Test Article",
+            "section_header": "Overview",
+            "article_id": "test-article",
+            "chunk_index": 0,
+            "image_urls": [],
+            "images": images or [],
+        }],
+        "summary": "Test summary",
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +206,33 @@ class TestVisionMiddlewareProcess:
         await middleware.process(context, next_fn)
 
         assert len(context.messages) == 1
+
+    @pytest.mark.asyncio
+    @patch("agent.vision_middleware.download_image")
+    async def test_handles_legacy_list_result(self, mock_download: MagicMock) -> None:
+        """Legacy list-shaped tool results remain supported."""
+        mock_download.return_value = ImageBlob(data=b"img", content_type="image/png")
+        legacy_payload = json.dumps([
+            {
+                "ref_number": 1,
+                "content": "Legacy content",
+                "title": "Legacy Article",
+                "section_header": "Overview",
+                "article_id": "legacy-article",
+                "chunk_index": 0,
+                "image_urls": [],
+                "images": [{"name": "fig.png", "url": "/api/images/legacy-article/images/fig.png"}],
+            }
+        ])
+        context = MagicMock()
+        context.messages = [_make_message([_make_function_result_content(legacy_payload)])]
+
+        next_fn = AsyncMock()
+        middleware = VisionImageMiddleware()
+        await middleware.process(context, next_fn)
+
+        assert len(context.messages) == 2
+        mock_download.assert_called_once_with("legacy-article", "images/fig.png")
 
     @pytest.mark.asyncio
     @patch("agent.vision_middleware.download_image")

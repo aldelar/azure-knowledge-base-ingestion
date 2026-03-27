@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -36,7 +37,42 @@ def _unique_id() -> str:
 
 
 @pytest.fixture(scope="module")
-def data_layer():
+def local_test_env():
+    updates = {
+        "ENVIRONMENT": "dev",
+        "COSMOS_ENDPOINT": "https://localhost:8081/",
+        "COSMOS_KEY": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+        "COSMOS_VERIFY_CERT": "false",
+        "COSMOS_DATABASE_NAME": "kb-agent-test",
+        "COSMOS_CONVERSATIONS_CONTAINER": "conversations-test",
+        "COSMOS_MESSAGES_CONTAINER": "messages-test",
+        "COSMOS_REFERENCES_CONTAINER": "references-test",
+    }
+    previous = {key: os.environ.get(key) for key in updates}
+    os.environ.update(updates)
+
+    import app.config as config_module
+    import app.data_layer as data_layer_module
+
+    config_module._config = None
+    data_layer_module._cosmos_client = None
+    data_layer_module._cosmos_client_failed = False
+
+    yield
+
+    for key, value in previous.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+    config_module._config = None
+    data_layer_module._cosmos_client = None
+    data_layer_module._cosmos_client_failed = False
+
+
+@pytest.fixture(scope="module")
+def data_layer(local_test_env):
     """Create a real CosmosDataLayer backed by Azure Cosmos DB."""
     from app.data_layer import CosmosDataLayer
 

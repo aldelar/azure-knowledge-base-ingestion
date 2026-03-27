@@ -64,6 +64,115 @@ logging.getLogger("opentelemetry.context").setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
+def _patch_agentserver_streaming_converter() -> None:
+    """Work around null text deltas emitted by some local streaming responses."""
+    from azure.ai.agentserver.agentframework.models.agent_framework_output_streaming_converter import (
+        AgentFrameworkOutputStreamingConverter,
+        ItemContentOutputText,
+        ResponsesAssistantMessageItemResource,
+        ResponseContentPartAddedEvent,
+        ResponseContentPartDoneEvent,
+        ResponseOutputItemAddedEvent,
+        ResponseOutputItemDoneEvent,
+        ResponseTextDeltaEvent,
+        ResponseTextDoneEvent,
+        _TextContentStreamingState,
+    )
+
+    if getattr(AgentFrameworkOutputStreamingConverter, "_kb_agent_null_text_patch", False):
+        return
+
+    async def _read_updates_without_null_text(self, updates):
+        async for update in updates:
+            if not update.contents:
+                continue
+
+            author_name = getattr(update, "author_name", "") or ""
+            accepted_types = {"text", "function_call", "user_input_request", "function_result", "error"}
+            for content in update.contents:
+                if content.type not in accepted_types:
+                    continue
+                if content.type == "text" and getattr(content, "text", None) is None:
+                    logger.debug("Skipping null text delta from agent stream")
+                    continue
+                yield (content, author_name)
+
+    AgentFrameworkOutputStreamingConverter._read_updates = _read_updates_without_null_text
+
+    async def _convert_contents_without_null_text(self, contents, author_name):
+        item_id = self._parent.context.id_generator.generate_message_id()
+        output_index = self._parent.next_output_index()
+
+        yield ResponseOutputItemAddedEvent(
+            sequence_number=self._parent.next_sequence(),
+            output_index=output_index,
+            item=ResponsesAssistantMessageItemResource(
+                id=item_id,
+                status="in_progress",
+                content=[],
+                created_by=self._parent._build_created_by(author_name),
+            ),
+        )
+
+        yield ResponseContentPartAddedEvent(
+            sequence_number=self._parent.next_sequence(),
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=ItemContentOutputText(text="", annotations=[], logprobs=[]),
+        )
+
+        text = ""
+        async for content in contents:
+            delta = getattr(content, "text", None)
+            if delta is None:
+                logger.debug("Skipping null text delta inside converter state")
+                continue
+            text += delta
+
+            yield ResponseTextDeltaEvent(
+                sequence_number=self._parent.next_sequence(),
+                item_id=item_id,
+                output_index=output_index,
+                content_index=0,
+                delta=delta,
+            )
+
+        yield ResponseTextDoneEvent(
+            sequence_number=self._parent.next_sequence(),
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            text=text,
+        )
+
+        content_part = ItemContentOutputText(text=text, annotations=[], logprobs=[])
+        yield ResponseContentPartDoneEvent(
+            sequence_number=self._parent.next_sequence(),
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=content_part,
+        )
+
+        item = ResponsesAssistantMessageItemResource(
+            id=item_id,
+            status="completed",
+            content=[content_part],
+            created_by=self._parent._build_created_by(author_name),
+        )
+        yield ResponseOutputItemDoneEvent(
+            sequence_number=self._parent.next_sequence(),
+            output_index=output_index,
+            item=item,
+        )
+
+        self._parent.add_completed_output_item(item)
+
+    _TextContentStreamingState.convert_contents = _convert_contents_without_null_text
+    AgentFrameworkOutputStreamingConverter._kb_agent_null_text_patch = True
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -72,6 +181,7 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     """Run the KB Agent as an HTTP server on port 8088."""
     logger.info("[KB-AGENT] Starting agent server (port 8088)…")
+    _patch_agentserver_streaming_converter()
 
     from agent.kb_agent import create_agent
     from agent.session_repository import CosmosAgentSessionRepository
@@ -85,6 +195,7 @@ def main() -> None:
         session_repo = CosmosAgentSessionRepository(
             endpoint=config.cosmos_endpoint,
             database_name=config.cosmos_database_name,
+            container_name=config.cosmos_sessions_container,
         )
         logger.info("[KB-AGENT] Session persistence enabled (Cosmos DB)")
     else:

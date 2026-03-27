@@ -21,10 +21,10 @@ class TestDocumentStructure:
 
     def test_document_schema_fields(self):
         """The document dict produced by index_chunks should have all required fields."""
-        from fn_index.indexer import index_chunks
+        from shared.config import config
 
         # We can't push to indexer without Azure, but we can verify the constants
-        assert VECTOR_DIMENSIONS == 1536
+        assert VECTOR_DIMENSIONS == config.embedding_vector_dimensions
         assert VECTOR_PROFILE_NAME == "default-profile"
         assert ALGORITHM_CONFIG_NAME == "default-hnsw"
 

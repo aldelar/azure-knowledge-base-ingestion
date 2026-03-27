@@ -1,10 +1,13 @@
 # Infrastructure
 
 > **Status:** Updated — March 12, 2026
+> **Status:** Updated — March 26, 2026
 
 ## Overview
 
 All infrastructure is defined as **Bicep IaC** under `/infra/` and deployed via **Azure Developer CLI (AZD)**. The design follows zero-trust principles: all inter-service authentication is via **managed identity** with RBAC — no keys, secrets, or connection strings are stored in application settings.
+
+This document is intentionally **prod-only**. Local development infrastructure now lives in Docker Compose and is documented in [docs/specs/environments-setup.md](./environments-setup.md).
 
 **Region:** East US 2 — selected for availability of all required services: Content Understanding, text-embedding-3-small, gpt-5-mini, Azure AI Search, and Azure Functions Flex Consumption.
 

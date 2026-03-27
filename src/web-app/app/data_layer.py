@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from azure.cosmos import CosmosClient
 from azure.cosmos.exceptions import CosmosResourceNotFoundError
-from azure.identity import DefaultAzureCredential
 from chainlit.data import BaseDataLayer
 from chainlit.types import (
     Feedback,
@@ -31,6 +30,7 @@ from chainlit.types import (
     ThreadFilter,
 )
 
+from app.client_factories import create_cosmos_client
 from app.config import config
 
 if TYPE_CHECKING:
@@ -62,10 +62,7 @@ def _get_cosmos_client() -> CosmosClient | None:
     if _cosmos_client_failed:
         return None
     try:
-        _cosmos_client = CosmosClient(
-            url=config.cosmos_endpoint,
-            credential=DefaultAzureCredential(),
-        )
+        _cosmos_client = create_cosmos_client(config.cosmos_endpoint)
         return _cosmos_client
     except Exception:
         _cosmos_client_failed = True

@@ -11,6 +11,8 @@ Usage:
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from app.image_service import ImageBlob, download_image, get_image_url, resolve_image_urls
@@ -39,6 +41,42 @@ class TestImageUrlHelpers:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="module", autouse=True)
+def local_blob_test_env():
+    updates = {
+        "ENVIRONMENT": "dev",
+        "SERVING_BLOB_ENDPOINT": "http://localhost:10000/devstoreaccount1",
+        "AZURITE_CONNECTION_STRING": (
+            "DefaultEndpointsProtocol=http;"
+            "AccountName=devstoreaccount1;"
+            "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
+            "BlobEndpoint=http://localhost:10000/devstoreaccount1;"
+            "QueueEndpoint=http://localhost:10001/devstoreaccount1;"
+            "TableEndpoint=http://localhost:10002/devstoreaccount1;"
+        ),
+        "SERVING_CONTAINER_NAME": "serving-test",
+    }
+    previous = {key: os.environ.get(key) for key in updates}
+    os.environ.update(updates)
+
+    import app.config as config_module
+    import app.image_service as image_service_module
+
+    config_module._config = None
+    image_service_module._blob_service_client = None
+
+    yield
+
+    for key, value in previous.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+    config_module._config = None
+    image_service_module._blob_service_client = None
+
+
 @pytest.mark.integration
 class TestBlobDownload:
     """Download a real image from the serving container."""
@@ -52,15 +90,10 @@ class TestBlobDownload:
         """
         # Use a known article from the KB —
         # content-understanding-overview has images in the index
-        from azure.identity import DefaultAzureCredential
-        from azure.storage.blob import BlobServiceClient
-
+        from app.client_factories import create_blob_service_client
         from app.config import config
 
-        client = BlobServiceClient(
-            account_url=config.serving_blob_endpoint,
-            credential=DefaultAzureCredential(),
-        )
+        client = create_blob_service_client(config.serving_blob_endpoint)
         container = client.get_container_client(config.serving_container_name)
 
         # Find the first image blob in the container

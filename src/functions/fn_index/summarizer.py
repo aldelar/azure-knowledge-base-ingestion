@@ -10,10 +10,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from azure.ai.inference import ChatCompletionsClient
-from azure.identity import DefaultAzureCredential
-
-import os
+from shared.client_factories import ChatBackend, create_chat_backend
 
 from shared.config import config
 
@@ -22,22 +19,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_SUMMARY_DEPLOYMENT = os.environ.get("SUMMARY_DEPLOYMENT_NAME", "gpt-4.1-mini")
-
-_client: ChatCompletionsClient | None = None
+_client: ChatBackend | None = None
 
 
-def _get_client() -> ChatCompletionsClient:
-    """Lazy singleton for the chat completions client."""
+def _get_client() -> ChatBackend:
+    """Lazy singleton for the chat backend."""
     global _client
     if _client is None:
-        endpoint = config.ai_services_endpoint.rstrip("/")
-        model_endpoint = f"{endpoint}/openai/deployments/{_SUMMARY_DEPLOYMENT}"
-        _client = ChatCompletionsClient(
-            endpoint=model_endpoint,
-            credential=DefaultAzureCredential(),
-            credential_scopes=["https://cognitiveservices.azure.com/.default"],
-        )
+        _client = create_chat_backend(config.summary_deployment_name)
     return _client
 
 
@@ -67,12 +56,11 @@ def summarize_chunk(chunk_content: str, title: str, section_header: str) -> str:
     )
     try:
         client = _get_client()
-        response = client.complete(
-            messages=[{"role": "user", "content": prompt}],
+        summary = client.complete(
+            prompt=prompt,
             max_tokens=100,
             temperature=0.0,
         )
-        summary = response.choices[0].message.content.strip()
         logger.debug("Summarized chunk (%s > %s): %s", title, section_header, summary[:80])
         return summary
     except Exception:

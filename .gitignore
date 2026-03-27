@@ -139,6 +139,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.dev
 .envrc
 .venv
 env/
@@ -193,6 +194,8 @@ cython_debug/
 
 # Chainlit runtime files
 .files/
+
+!.env.dev.template
 
 # Agent shared scratchpads (ephemeral cross-agent context)
 shared-scratchpads/

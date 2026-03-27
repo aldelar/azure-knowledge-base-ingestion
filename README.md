@@ -6,6 +6,42 @@ Enterprise knowledge bases store thousands of technical articles as HTML pages b
 
 ![Context Aware & Vision Grounded KB Agent — using an image from a search chunk to support its answer](docs/assets/app.png)
 
+## Quick Start
+
+### Local Dev
+
+The default local workflow is Docker-first and does not require Azure credentials.
+
+```bash
+cp .env.dev.template .env.dev
+make dev-setup
+sudo make dev-setup-gpu  # only if dev-setup tells you GPU runtime is missing
+make dev-infra-up
+make dev-services-up
+make dev-pipeline
+make dev-test
+make dev-ui
+```
+
+This starts local Cosmos, Azurite, Azure AI Search Simulator, Ollama, and Aspire Dashboard, then runs the app stack on top.
+
+`make dev-setup` should be run as your normal user. If it detects an NVIDIA GPU but Docker GPU support is missing on a native Linux or local-WSL Docker engine, it will tell you to run `sudo make dev-setup-gpu` once. On WSL with Docker Desktop integration, GPU support remains a Docker Desktop and Windows driver concern.
+
+### Production
+
+Azure workflows are now namespaced under `prod-*` targets.
+
+```bash
+make set-project name=myproj
+make set-converter name=markitdown
+make prod-infra-up
+make prod-services-up
+make prod-pipeline
+make prod-ui-url
+```
+
+See [docs/setup-and-makefile.md](docs/setup-and-makefile.md) for the full command reference.
+
 ---
 
 ## Core Patterns

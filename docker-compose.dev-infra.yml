@@ -1,0 +1,112 @@
+services:
+  cosmos-emulator:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
+    ports:
+      - "8081:8081"
+      - "1234:1234"
+    environment:
+      PROTOCOL: https
+    volumes:
+      - cosmos-emulator-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kfsS https://localhost:8081/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks:
+      - kb-agent-dev
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --debug /data/debug.log --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:10000/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - kb-agent-dev
+
+  search-simulator:
+    image: ghcr.io/ellerbach/azure-ai-search-simulator:latest
+    ports:
+      - "7250:8443"
+      - "5250:8080"
+    environment:
+      SimulatorSettings__AdminApiKey: dev-admin-key
+      SimulatorSettings__QueryApiKey: dev-query-key
+    volumes:
+      - search-simulator-data:/app/data
+      - search-simulator-files:/app/files
+      - search-simulator-logs:/app/logs
+      - search-simulator-lucene-indexes:/app/lucene-indexes
+      - search-simulator-models:/app/models
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kfsS 'https://localhost:8443/indexes?api-version=2025-03-01-preview' -H 'api-key: dev-admin-key' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks:
+      - kb-agent-dev
+
+  ollama:
+    image: ollama/ollama:latest
+    gpus: all
+    ports:
+      - "11434:11434"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${OLLAMA_GPU_DEVICE:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks:
+      - kb-agent-dev
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:latest
+    ports:
+      - "18888:18888"
+      - "18889:18889"
+      - "18890:18890"
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    volumes:
+      - aspire-dashboard-data:/apphost
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:18888/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - kb-agent-dev
+
+volumes:
+  cosmos-emulator-data:
+  azurite-data:
+  search-simulator-data:
+  search-simulator-files:
+  search-simulator-logs:
+  search-simulator-lucene-indexes:
+  search-simulator-models:
+  ollama-data:
+  aspire-dashboard-data:
+
+networks:
+  kb-agent-dev:
+    name: kb-agent-dev

@@ -1,6 +1,7 @@
 # Environments Setup
 
 > **Status:** Draft — March 26, 2026
+> **Status:** Updated — March 26, 2026
 
 ## Overview
 
@@ -10,7 +11,7 @@ Two environments: **Dev** (fully local, Docker-only) and **Prod** (Azure). No st
 
 | Environment | Infra Location | Services Run As | LLM / Embeddings Source | Purpose |
 |-------------|---------------|-----------------|------------------------|--------|
-| **Dev** (local) | Docker containers only — **zero Azure cloud dependency** | Docker containers (our code + emulators + Ollama) | Ollama (local): `phi4-mini` for chat, `mxbai-embed-large` for embeddings, `moondream` for vision | Daily development, fast iteration, unit + integration tests |
+| **Dev** (local) | Docker containers only — **zero Azure cloud dependency** | Docker containers (our code + emulators + Ollama) | Ollama (local): `qwen2.5:3b` for chat, `mxbai-embed-large` for embeddings, `moondream` for vision | Daily development, fast iteration, unit + integration tests |
 | **Prod** | Azure RG (`rg-{project}-prod`) | Azure Container Apps | Azure AI Services (GPT-4.1, text-embedding-3-small, GPT-4.1 vision) | Production |
 
 **Key design decision:** Dev has **no Azure cloud dependency**. All runtime infrastructure runs in Docker. Bicep/IaC exists only for prod. AZD may still be used locally as a parameter store for `PROJECT_NAME` and `CONVERTER`, but dev does not require `az login`, an Azure subscription, or Azure spend.
@@ -24,7 +25,7 @@ Two parameters stored in AZD env: `PROJECT_NAME` is shared across environment wo
 | **Project name** | `PROJECT_NAME` | 2–8 chars | _(required)_ | `make set-project name=<value>` |
 | **Converter** | `CONVERTER` | `markitdown`, `content-understanding`, `mistral-doc-ai` | `markitdown` | `make set-converter converter=<value>` |
 
-`CONVERTER` is a prod-only selector for deploy and pipeline targets. Local dev always runs the MarkItDown converter. End-state for this environment model keeps the current three-service prod converter topology in Azure and uses `CONVERTER` as an operational selector, not as an Azure-enforced exclusivity switch.
+`CONVERTER` is a prod-only selector for deploy and pipeline targets. Local dev always runs the MarkItDown converter. The implemented model keeps the current three-service prod converter topology in Azure and uses `CONVERTER` as an operational selector, not as an Azure-enforced exclusivity switch.
 
 ## Service Dependency Map
 
@@ -76,7 +77,7 @@ Two parameters stored in AZD env: `PROJECT_NAME` is shared across environment wo
 | **Cosmos DB** | Cosmos DB Linux Emulator (vNext preview) | `mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview` | 8081 (API), 1234 (UI) | Well-known emulator key |
 | **Azure Blob Storage** | Azurite | `mcr.microsoft.com/azure-storage/azurite:latest` | 10000 (Blob), 10001 (Queue), 10002 (Table) | Well-known key / connection string |
 | **Azure AI Search** | AI Search Simulator | `ghcr.io/ellerbach/azure-ai-search-simulator:latest` | 7250 (HTTPS), 5250 (HTTP) | API key (`dev-admin-key`) |
-| **AI Services (LLM)** | Ollama — `phi4-mini` | `ollama/ollama` (GPU) | 11434 | No auth (key required but ignored) |
+| **AI Services (LLM)** | Ollama — `qwen2.5:3b` | `ollama/ollama` (GPU optional) | 11434 | No auth (key required but ignored) |
 | **AI Services (Embeddings)** | Ollama — `mxbai-embed-large` | (same ollama) | 11434 | No auth |
 | **AI Services (Vision)** | Ollama — `moondream` | (same ollama) | 11434 | No auth |
 | **Foundry Project** | Not needed | N/A | N/A | Agent runs as local HTTP service |
@@ -84,17 +85,17 @@ Two parameters stored in AZD env: `PROJECT_NAME` is shared across environment wo
 
 ## Ollama Models
 
-Target hardware minimum: **32 GB RAM + RTX 1050 4 GB VRAM**.
+Target hardware minimum for comfortable local inference: **32 GB RAM + RTX 1050 4 GB VRAM**. The local stack now starts in CPU-compatible mode by default; a GPU improves latency but is no longer required just to boot the dev environment.
 
 | Model | Role | Size | Fits 4 GB VRAM? | Notes |
 |-------|------|------|-----------------|-------|
-| `phi4-mini` | Chat / reasoning (agent, summarizer) | 2.5 GB | Yes | Microsoft Phi-4-mini-instruct. 3.8B params, 128K context, tool calling. Text-only. |
+| `qwen2.5:3b` | Chat / reasoning (agent, summarizer) | 1.9 GB | Yes | Qwen 2.5 3B Instruct. 128K context, strong structured-output behavior, and validated locally to return proper OpenAI-style `tool_calls` through Ollama. |
 | `mxbai-embed-large` | Embeddings (fn-index) | 670 MB | Yes | 335M params, 1024-dim vectors. MTEB SOTA for BERT-large class. End-state code must read vector dimensions from config in dev. |
 | `moondream` | Vision / image analysis (fn-convert) | 1.7 GB | Yes | moondream2. 1.8B params, image+text input. Edge-optimized. |
 
 Total local disk: ~4.9 GB. Models load one at a time into VRAM.
 
-> **Quality caveat:** `phi4-mini` (3.8B) is substantially smaller than Azure GPT-4.1. Integration tests validate **data flow and connectivity**, not response quality. Quality evaluation must use prod models.
+> **Quality caveat:** `qwen2.5:3b` is still much smaller than Azure GPT-4.1. Integration tests validate **data flow and connectivity**, not production answer quality. Quality evaluation must use prod models.
 
 ## Vector Dimensions
 
@@ -131,7 +132,7 @@ web-app  ──Responses API──▶  agent (FastAPI /v1/responses)
 | LLM API | `/v1/chat/completions` → Ollama | `/v1/chat/completions` → Azure AI Services |
 | Embeddings API | `/v1/embeddings` → Ollama | `/v1/embeddings` → Azure AI Services |
 | Vision (fn-convert) | `/v1/chat/completions` + `image_url` → Ollama (`moondream`) | `/v1/chat/completions` + `image_url` → Azure (GPT-4.1) |
-| Tool calling | Supported (phi4-mini) | Supported (GPT-4.1) |
+| Tool calling | Supported (`qwen2.5:3b`) | Supported (GPT-4.1) |
 | Streaming | Supported | Supported |
 
 ## Credential Strategy
@@ -184,6 +185,8 @@ Both environments use OpenTelemetry as the telemetry protocol. Only the exporter
 
 ## `.env.dev` Template
 
+The checked-in template uses Docker Compose service hostnames. If you run a client directly from the host machine, replace service hostnames with `localhost` equivalents.
+
 ```env
 # === Environment ===
 ENVIRONMENT=dev
@@ -207,15 +210,15 @@ SEARCH_QUERY_KEY=dev-query-key
 
 # === Ollama (local LLM + embeddings + vision) ===
 OLLAMA_ENDPOINT=http://localhost:11434/v1
-OLLAMA_CHAT_MODEL=phi4-mini
+OLLAMA_CHAT_MODEL=qwen2.5:3b
 OLLAMA_EMBEDDING_MODEL=mxbai-embed-large
 OLLAMA_VISION_MODEL=moondream
 EMBEDDING_VECTOR_DIMENSIONS=1024
 
 # === Model deployment overrides ===
-AGENT_MODEL_DEPLOYMENT_NAME=phi4-mini
+AGENT_MODEL_DEPLOYMENT_NAME=qwen2.5:3b
 EMBEDDING_DEPLOYMENT_NAME=mxbai-embed-large
-SUMMARY_DEPLOYMENT_NAME=phi4-mini
+SUMMARY_DEPLOYMENT_NAME=qwen2.5:3b
 
 # === Auth ===
 REQUIRE_AUTH=false
@@ -253,7 +256,7 @@ OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 | `prod-infra-up` | Provision full Azure prod RG |
 | `prod-infra-down` | Delete Azure prod RG (destructive, confirmation required) |
 | `prod-services-up` | Build + deploy web-app, agent, fn-index, and the selected converter service for the current workflow; other converter services may still remain provisioned in Azure |
-| `prod-services-down` | Scale down / stop all services |
+| `prod-services-down` | Print scale-down guidance for deployed services |
 | `prod-services-pipeline-up` | Deploy the selected converter service for the current workflow + fn-index |
 | `prod-services-app-up` | Deploy web-app |
 | `prod-services-agents-up` | Deploy agent(s) |

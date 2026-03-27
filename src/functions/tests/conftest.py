@@ -6,6 +6,12 @@ from pathlib import Path
 import pytest
 
 
+os.environ.setdefault("ENVIRONMENT", "dev")
+os.environ.setdefault("STAGING_CONTAINER_NAME", "staging-test")
+os.environ.setdefault("SERVING_CONTAINER_NAME", "serving-test")
+os.environ.setdefault("SEARCH_INDEX_NAME", "kb-articles-test")
+
+
 @pytest.fixture
 def project_root() -> Path:
     """Return the project root directory (repo root)."""
@@ -31,3 +37,15 @@ def sample_article_ids(staging_path: Path) -> list[str]:
     if not staging_path.exists():
         pytest.skip("kb/staging/ not found")
     return [d.name for d in staging_path.iterdir() if d.is_dir()]
+
+
+@pytest.fixture
+def test_blob_container_names() -> tuple[str, str]:
+    """Return staging/serving container names reserved for integration tests."""
+    return ("staging-test", "serving-test")
+
+
+@pytest.fixture
+def test_search_index_name() -> str:
+    """Return the search index name reserved for integration tests."""
+    return "kb-articles-test"

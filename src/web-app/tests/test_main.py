@@ -9,15 +9,19 @@ import pytest
 from app.main import (
     _DEFAULT_USER_GROUP,
     Citation,  # re-exported from app.main
+    _append_inline_image_fallbacks,
+    _append_reference_tokens,
     _build_citation_content,
     _build_filename_lookup,
     _build_ref_map,
     _create_agent_client,
+    _extract_tool_results,
     _expand_ref_markers,
     _get_user_groups,
     _get_user_id,
     _is_oauth_configured,
     _normalise_inline_images,
+    _normalise_ref_mentions,
     _remap_ref_numbers,
     _rewrite_image_refs,
     _strip_md_images,
@@ -149,6 +153,24 @@ class TestExpandRefMarkers:
         result = _expand_ref_markers("[Ref #1, #5]")
         assert result == "Ref #1, Ref #5"
 
+    def test_expands_ref_markers_with_and(self) -> None:
+        result = _expand_ref_markers("[Refs #1 and #5]")
+        assert result == "Ref #1 and Ref #5"
+
+
+class TestNormaliseRefMentions:
+    """Test canonicalisation of mixed bare ref formats."""
+
+    def test_expands_mixed_bare_ref_list(self) -> None:
+        text = "See ref#1, #2 and #3 for details."
+        result = _normalise_ref_mentions(text)
+        assert result == "See Ref #1, Ref #2 and Ref #3 for details."
+
+    def test_expands_slash_separated_refs(self) -> None:
+        text = "Supported by Refs #1/#2."
+        result = _normalise_ref_mentions(text)
+        assert result == "Supported by Ref #1 / Ref #2."
+
 
 # ---------------------------------------------------------------------------
 # Image helpers
@@ -193,6 +215,46 @@ class TestNormaliseInlineImages:
         result = _normalise_inline_images(text, [])
         assert "*[Image: fig]*" in result
 
+    def test_resolves_filename_using_citations(self) -> None:
+        text = "![fig](attachment:fig.png)"
+        citations = [Citation("a1", "Title", "Section", 0, image_urls=["images/fig.png"])]
+        result = _normalise_inline_images(text, citations)
+        assert result == "![fig](/api/images/a1/images/fig.png)"
+
+
+class TestAppendReferenceTokens:
+    """Test fallback reference tokens for weak local model output."""
+
+    def test_injects_reference_tokens_inline_when_missing(self) -> None:
+        citations = [Citation("a1", "Title", "Section", 0)]
+        result = _append_reference_tokens("Grounded answer.", citations)
+        assert result == "Grounded answer. (Ref #1)"
+
+    def test_injects_reference_tokens_into_first_bullet(self) -> None:
+        citations = [Citation("a1", "Title", "Section", 0), Citation("a2", "Title", "Section", 1)]
+        text = "- First supported point\n- Second supported point"
+        result = _append_reference_tokens(text, citations)
+        assert result.splitlines()[0].endswith("(Ref #1, Ref #2)")
+
+    def test_preserves_existing_reference_tokens(self) -> None:
+        citations = [Citation("a1", "Title", "Section", 0)]
+        text = "Grounded answer with Ref #1 already present."
+        assert _append_reference_tokens(text, citations) == text
+
+
+class TestAppendInlineImageFallbacks:
+    """Test inline image fallback rendering from citations."""
+
+    def test_appends_images_from_citations_when_missing(self) -> None:
+        citations = [Citation("a1", "Title", "Section", 0, image_urls=["images/fig1.png"])]
+        result = _append_inline_image_fallbacks("Grounded answer.", citations)
+        assert "![Ref #1 — Title](/api/images/a1/images/fig1.png)" in result
+
+    def test_skips_fallback_when_answer_already_has_image(self) -> None:
+        citations = [Citation("a1", "Title", "Section", 0, image_urls=["images/fig1.png"])]
+        text = "Grounded answer.\n\n![existing](/api/images/a1/images/fig1.png)"
+        assert _append_inline_image_fallbacks(text, citations) == text
+
 
 class TestBuildFilenameLooup:
     """Test filename → proxy URL map building."""
@@ -208,6 +270,22 @@ class TestBuildFilenameLooup:
 
     def test_empty_citations(self) -> None:
         assert _build_filename_lookup([]) == {}
+
+
+class TestExtractToolResults:
+    """Test tool output parsing for streamed Responses API events."""
+
+    def test_extracts_results_from_json_string(self) -> None:
+        payload = '{"results": [{"ref_number": 1, "article_id": "a1"}]}'
+        assert _extract_tool_results(payload) == [{"ref_number": 1, "article_id": "a1"}]
+
+    def test_extracts_results_from_list_of_json_strings(self) -> None:
+        payload = ['{"results": [{"ref_number": 1, "article_id": "a1"}]}']
+        assert _extract_tool_results(payload) == [{"ref_number": 1, "article_id": "a1"}]
+
+    def test_extracts_legacy_list_of_result_dicts(self) -> None:
+        payload = [{"ref_number": 1, "article_id": "a1"}]
+        assert _extract_tool_results(payload) == [{"ref_number": 1, "article_id": "a1"}]
 
 
 # ---------------------------------------------------------------------------

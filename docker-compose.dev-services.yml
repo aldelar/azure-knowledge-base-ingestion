@@ -1,0 +1,83 @@
+services:
+  fn-convert:
+    build:
+      context: ./src/functions
+      dockerfile: ./fn_convert_markitdown/Dockerfile
+    env_file:
+      - ./.env.dev
+    environment:
+      OTEL_SERVICE_NAME: fn-convert
+      AzureWebJobsStorage: ${AZURITE_CONNECTION_STRING}
+    ports:
+      - "7071:80"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 80), 2); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - kb-agent-dev
+
+  fn-index:
+    build:
+      context: ./src/functions
+      dockerfile: ./fn_index/Dockerfile
+    env_file:
+      - ./.env.dev
+    environment:
+      OTEL_SERVICE_NAME: fn-index
+      AzureWebJobsStorage: ${AZURITE_CONNECTION_STRING}
+    ports:
+      - "7072:80"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 80), 2); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - kb-agent-dev
+
+  agent:
+    build:
+      context: ./src/agent
+      dockerfile: ./Dockerfile
+    env_file:
+      - ./.env.dev
+    environment:
+      OTEL_SERVICE_NAME: kb-agent
+    ports:
+      - "8088:8088"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 8088), 2); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - kb-agent-dev
+
+  web-app:
+    build:
+      context: ./src/web-app
+      dockerfile: ./Dockerfile
+    env_file:
+      - ./.env.dev
+    environment:
+      OTEL_SERVICE_NAME: kb-web-app
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 8080), 2); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - kb-agent-dev
+
+networks:
+  kb-agent-dev:
+    external: true
+    name: kb-agent-dev

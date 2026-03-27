@@ -15,6 +15,7 @@ dependencies = [
     "azure-monitor-opentelemetry>=1.8.0",
     "opentelemetry-sdk>=1.20.0",
     "azure-core-tracing-opentelemetry>=1.0.0b12",
+    "openai>=1.60.0",
     "python-dotenv>=1.0.0",
     "starlette>=1.0.0rc1,<2.0.0",
     "PyJWT[crypto]>=2.8.0",
@@ -32,7 +33,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-markers = ["integration: requires running services and Azure credentials"]
+markers = ["integration: requires running local Docker-backed services and emulators"]
 addopts = "-m 'not integration'"
 
 [tool.hatch.build.targets.wheel]

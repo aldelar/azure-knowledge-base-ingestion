@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from agent.config import config
 from agent.search_tool import SearchResult, search_kb
 
 
@@ -25,7 +26,8 @@ class TestSearchKbSecurityFilter:
         search_kb("test query", security_filter="search.in(department, 'engineering', ',')")
 
         call_kwargs = mock_client.search.call_args
-        assert call_kwargs.kwargs["filter"] == "search.in(department, 'engineering', ',')"
+        expected = "department eq 'engineering'" if config.is_dev else "search.in(department, 'engineering', ',')"
+        assert call_kwargs.kwargs["filter"] == expected
 
     def test_no_filter_when_none(
         self, mock_client: MagicMock, mock_embed: MagicMock
@@ -61,7 +63,8 @@ class TestSearchKbSecurityFilter:
         )
 
         call_kwargs = mock_client.search.call_args
-        assert "engineering,research" in call_kwargs.kwargs["filter"]
+        assert "engineering" in call_kwargs.kwargs["filter"]
+        assert "research" in call_kwargs.kwargs["filter"]
 
     def test_results_returned_with_filter(
         self, mock_client: MagicMock, mock_embed: MagicMock

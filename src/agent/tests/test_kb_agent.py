@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,6 +12,9 @@ from agent.kb_agent import (
     AgentResponse,
     Citation,
     _SYSTEM_PROMPT,
+    _SYSTEM_PROMPT_PATH,
+    _load_system_prompt,
+    _normalize_search_query,
     create_agent,
     search_knowledge_base,
 )
@@ -67,6 +70,13 @@ class TestDataclasses:
 class TestSystemPrompt:
     """Test the system prompt content."""
 
+    def test_prompt_file_exists(self) -> None:
+        assert _SYSTEM_PROMPT_PATH.exists()
+        assert _SYSTEM_PROMPT_PATH == Path("/home/aldelar/Code/context-aware-vision-grounded-kb-agent/src/agent/agent/prompts/system_prompt.md")
+
+    def test_loaded_prompt_matches_file(self) -> None:
+        assert _load_system_prompt() == _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
+
     def test_prompt_mentions_search_tool(self) -> None:
         assert "search_knowledge_base" in _SYSTEM_PROMPT
 
@@ -76,6 +86,52 @@ class TestSystemPrompt:
     def test_prompt_mentions_images(self) -> None:
         assert "image" in _SYSTEM_PROMPT.lower()
 
+    def test_prompt_forbids_narrating_tool_use(self) -> None:
+        assert "Do NOT say things like \"let's search\"" in _SYSTEM_PROMPT
+
+    def test_prompt_requires_inline_citations(self) -> None:
+        assert "Every factual sentence or bullet must include at least one inline citation" in _SYSTEM_PROMPT
+
+    def test_prompt_forbids_external_docs_links(self) -> None:
+        assert "Do NOT output bare external documentation links" in _SYSTEM_PROMPT
+
+    def test_prompt_requires_cite_or_omit_behavior(self) -> None:
+        assert "If you cannot cite a statement, omit it" in _SYSTEM_PROMPT
+
+    def test_prompt_forbids_placeholder_image_urls(self) -> None:
+        assert "Do NOT output placeholders such as <image-id>, <article-id>, <filename>" in _SYSTEM_PROMPT
+
+    def test_prompt_forbids_resource_list_tails(self) -> None:
+        assert 'Do NOT add a "For more resources"' in _SYSTEM_PROMPT
+
+    def test_prompt_requires_image_lead_in(self) -> None:
+        assert "explain the image's relevance in a cited sentence or bullet immediately before it" in _SYSTEM_PROMPT
+
+    def test_prompt_forbids_orphan_citation_lines(self) -> None:
+        assert "Do NOT leave a citation marker on its own line" in _SYSTEM_PROMPT
+
+    def test_prompt_forbids_bulletized_image_lines(self) -> None:
+        assert "The image line itself must begin with ![ and must NOT begin with -, *, or a numbered-list marker" in _SYSTEM_PROMPT
+
+    def test_prompt_forbids_speculative_image_leadins(self) -> None:
+        assert 'Do NOT write speculative lead-ins such as "a helpful diagram would illustrate"' in _SYSTEM_PROMPT
+
+    def test_prompt_has_final_answer_checklist(self) -> None:
+        assert "Before sending the final answer, verify" in _SYSTEM_PROMPT
+
+    def test_prompt_includes_network_security_few_shot(self) -> None:
+        assert "Example 1" in _SYSTEM_PROMPT
+        assert "What are the network security options for Azure AI Search?" in _SYSTEM_PROMPT
+
+    def test_prompt_includes_image_usage_few_shot(self) -> None:
+        assert "Example 2" in _SYSTEM_PROMPT
+        assert "include one helpful diagram if available" in _SYSTEM_PROMPT
+        assert (
+            "![Agentic retrieval architecture](/api/images/agentic-retrieval-overview-html_en-us/images/agentic-retrieval-architecture.png)"
+            in _SYSTEM_PROMPT
+        )
+        assert "This diagram is helpful because it shows the request flow" in _SYSTEM_PROMPT
+
 
 # ---------------------------------------------------------------------------
 # Tool function tests
@@ -84,6 +140,19 @@ class TestSystemPrompt:
 
 class TestSearchKnowledgeBaseTool:
     """Test the search_knowledge_base tool function directly."""
+
+    def test_normalize_search_query_plain_string(self) -> None:
+        assert _normalize_search_query("  azure content understanding  ") == "azure content understanding"
+
+    def test_normalize_search_query_typed_wrapper(self) -> None:
+        assert _normalize_search_query({"type": "string", "value": "Azure Content Understanding"}) == (
+            "Azure Content Understanding"
+        )
+
+    def test_normalize_search_query_nested_wrapper(self) -> None:
+        assert _normalize_search_query({"query": {"type": "string", "value": "Azure AI Search"}}) == (
+            "Azure AI Search"
+        )
 
     @patch("agent.kb_agent.get_image_url")
     @patch("agent.kb_agent.search_kb")
@@ -111,6 +180,16 @@ class TestSearchKnowledgeBaseTool:
         assert len(parsed["results"]) == 1
         assert parsed["results"][0]["title"] == "Test Article"
         assert parsed["results"][0]["content"] == "Test content"
+
+    @patch("agent.kb_agent.get_image_url")
+    @patch("agent.kb_agent.search_kb")
+    def test_accepts_typed_query_wrapper(self, mock_search: MagicMock, mock_get_url: MagicMock) -> None:
+        mock_search.return_value = []
+        mock_get_url.return_value = "/api/images/article/images/fig.png"
+
+        search_knowledge_base({"type": "string", "value": "Azure Content Understanding"})
+
+        mock_search.assert_called_once_with("Azure Content Understanding", security_filter=None)
 
     @patch("agent.kb_agent.get_image_url")
     @patch("agent.kb_agent.search_kb")
@@ -161,6 +240,10 @@ class TestSearchKnowledgeBaseTool:
 
         assert "error" in parsed
 
+    def test_handles_malformed_query_wrapper(self) -> None:
+        parsed = json.loads(search_knowledge_base({"type": "string"}))
+        assert parsed["error"] == "Search query was missing or malformed."
+
 
 # ---------------------------------------------------------------------------
 # create_agent() factory tests
@@ -171,105 +254,77 @@ class TestCreateAgent:
     """Test the create_agent factory function."""
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_returns_chat_agent(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() returns an Agent instance."""
         mock_agent_instance = MagicMock()
         mock_agent_cls.return_value = mock_agent_instance
+        mock_create_chat_client.return_value = MagicMock()
 
         agent = create_agent()
 
         assert agent is mock_agent_instance
-        mock_credential.assert_called_once()
-        mock_client_cls.assert_called_once()
+        mock_create_chat_client.assert_called_once()
         mock_agent_cls.assert_called_once()
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_agent_has_search_tool(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() configures the search tool."""
+        mock_create_chat_client.return_value = MagicMock()
         create_agent()
 
         call_kwargs = mock_agent_cls.call_args
         assert search_knowledge_base in call_kwargs.kwargs["tools"]
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_agent_name(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() sets the agent name."""
+        mock_create_chat_client.return_value = MagicMock()
         create_agent()
 
         call_kwargs = mock_agent_cls.call_args
         assert call_kwargs.kwargs["name"] == "KBSearchAgent"
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_client_uses_vision_middleware(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() configures vision middleware on the client."""
+        mock_client = MagicMock()
+        mock_create_chat_client.return_value = mock_client
         create_agent()
 
-        call_kwargs = mock_client_cls.call_args
-        middleware = call_kwargs.kwargs["middleware"]
+        middleware = mock_client.middleware
         assert len(middleware) == 1
         from agent.vision_middleware import VisionImageMiddleware
         assert isinstance(middleware[0], VisionImageMiddleware)
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.get_bearer_token_provider")
-    @patch("agent.kb_agent.DefaultAzureCredential")
-    def test_uses_default_credential(
-        self,
-        mock_credential: MagicMock,
-        mock_token_provider: MagicMock,
-        mock_client_cls: MagicMock,
-        mock_agent_cls: MagicMock,
-    ) -> None:
-        """create_agent() uses credential with DefaultAzureCredential."""
-        create_agent()
-
-        mock_credential.assert_called_once()
-        mock_token_provider.assert_called_once_with(
-            mock_credential.return_value,
-            "https://cognitiveservices.azure.com/.default",
-        )
-        client_kwargs = mock_client_cls.call_args.kwargs
-        assert client_kwargs["credential"] is mock_token_provider.return_value
-
-    @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_agent_has_context_providers(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() configures InMemoryHistoryProvider + CompactionProvider."""
+        mock_create_chat_client.return_value = MagicMock()
         create_agent()
 
         call_kwargs = mock_agent_cls.call_args.kwargs
@@ -282,21 +337,6 @@ class TestCreateAgent:
         assert compaction.before_strategy.keep_last_groups == 3
         assert isinstance(compaction.after_strategy, ToolResultCompactionStrategy)
         assert compaction.after_strategy.keep_last_tool_call_groups == 1
-
-    @patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key-123"})
-    @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    def test_uses_api_key_when_provided(
-        self,
-        mock_client_cls: MagicMock,
-        mock_agent_cls: MagicMock,
-    ) -> None:
-        """create_agent() uses API key when AZURE_OPENAI_API_KEY is set."""
-        create_agent()
-
-        client_kwargs = mock_client_cls.call_args.kwargs
-        assert client_kwargs["api_key"] == "test-key-123"
-        assert "credential" not in client_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -334,65 +374,31 @@ class TestSDKUpgradeValidation:
         assert vision_middleware.Message is Message
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_agent_instantiated_with_client_kwarg(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() passes client= (not chat_client=) to Agent."""
+        mock_client = MagicMock()
+        mock_create_chat_client.return_value = mock_client
         create_agent()
 
         agent_kwargs = mock_agent_cls.call_args.kwargs
         assert "client" in agent_kwargs
         assert "chat_client" not in agent_kwargs
-        assert agent_kwargs["client"] is mock_client_cls.return_value
+        assert agent_kwargs["client"] is mock_client
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.get_bearer_token_provider")
-    @patch("agent.kb_agent.DefaultAzureCredential")
-    def test_credential_path_uses_credential_kwarg(
-        self,
-        mock_credential: MagicMock,
-        mock_token_provider: MagicMock,
-        mock_client_cls: MagicMock,
-        mock_agent_cls: MagicMock,
-    ) -> None:
-        """Credential path uses credential= (not ad_token_provider=) on the client."""
-        create_agent()
-
-        client_kwargs = mock_client_cls.call_args.kwargs
-        assert "credential" in client_kwargs
-        assert "ad_token_provider" not in client_kwargs
-
-    @patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "key-456"})
-    @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    def test_api_key_path_does_not_use_credential_kwarg(
-        self,
-        mock_client_cls: MagicMock,
-        mock_agent_cls: MagicMock,
-    ) -> None:
-        """API key path uses api_key=, not credential=."""
-        create_agent()
-
-        client_kwargs = mock_client_cls.call_args.kwargs
-        assert "api_key" in client_kwargs
-        assert client_kwargs["api_key"] == "key-456"
-
-    @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_agent_has_instructions(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """Agent receives instructions (system prompt)."""
+        mock_create_chat_client.return_value = MagicMock()
         create_agent()
 
         agent_kwargs = mock_agent_cls.call_args.kwargs
@@ -400,15 +406,14 @@ class TestSDKUpgradeValidation:
         assert agent_kwargs["instructions"] == _SYSTEM_PROMPT
 
     @patch("agent.kb_agent.Agent")
-    @patch("agent.kb_agent.AzureOpenAIChatClient")
-    @patch("agent.kb_agent.DefaultAzureCredential")
+    @patch("agent.kb_agent.create_chat_client")
     def test_agent_has_security_filter_middleware(
         self,
-        mock_credential: MagicMock,
-        mock_client_cls: MagicMock,
+        mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
         """create_agent() registers SecurityFilterMiddleware on the agent."""
+        mock_create_chat_client.return_value = MagicMock()
         create_agent()
 
         agent_kwargs = mock_agent_cls.call_args.kwargs
