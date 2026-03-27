@@ -19,7 +19,8 @@ set +a
 COSMOS_ENDPOINT=${COSMOS_ENDPOINT//cosmos-emulator/localhost}
 STAGING_BLOB_ENDPOINT=${STAGING_BLOB_ENDPOINT//azurite/localhost}
 SERVING_BLOB_ENDPOINT=${SERVING_BLOB_ENDPOINT//azurite/localhost}
-SEARCH_ENDPOINT=${SEARCH_ENDPOINT//search-simulator/localhost}
+# Search simulator maps container port 8443 to host port 7250.
+SEARCH_ENDPOINT=${SEARCH_ENDPOINT//search-simulator:8443/localhost:7250}
 
 AZURITE_ACCOUNT_KEY="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 AZURITE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=${AZURITE_ACCOUNT_KEY};BlobEndpoint=${STAGING_BLOB_ENDPOINT};QueueEndpoint=http://localhost:10001/devstoreaccount1;TableEndpoint=http://localhost:10002/devstoreaccount1;"
@@ -87,7 +88,7 @@ PY
 
 index)
     echo "Clearing AI Search index documents..."
-    cd "${ROOT_DIR}/src/web-app"
+    cd "${ROOT_DIR}/src/functions"
     uv run python - <<'PY'
 import os, urllib3
 urllib3.disable_warnings()
@@ -112,8 +113,11 @@ try:
         client.delete_documents(documents=[{"id": d["id"]} for d in docs])
     print(f"  Cleared {len(docs)} document(s) from '{index_name}'.")
 except Exception as exc:
-    if "404" in str(exc) or "not found" in str(exc).lower():
+    msg = str(exc).lower()
+    if "404" in msg or "not found" in msg:
         print(f"  Index '{index_name}' does not exist — nothing to clear.")
+    elif "connection refused" in msg or "connection error" in msg:
+        print(f"  Search endpoint not reachable ({endpoint}) — is local infra running?")
     else:
         raise
 PY

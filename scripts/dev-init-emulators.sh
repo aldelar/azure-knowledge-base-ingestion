@@ -58,16 +58,20 @@ wait_for_cosmos_api() {
 
     for ((i=1; i<=attempts; i++)); do
         if (cd "${ROOT_DIR}/src/web-app" && uv run python - <<'PY')
-import os
+import os, sys, urllib3
+urllib3.disable_warnings()
 
 from azure.cosmos import CosmosClient
 
-client = CosmosClient(
-    url=os.environ["COSMOS_ENDPOINT"],
-    credential=os.environ["COSMOS_KEY"],
-    connection_verify=False,
-)
-client.list_databases()
+try:
+    client = CosmosClient(
+        url=os.environ["COSMOS_ENDPOINT"],
+        credential=os.environ["COSMOS_KEY"],
+        connection_verify=False,
+    )
+    client.list_databases()
+except Exception:
+    sys.exit(1)
 print("Cosmos SDK connectivity ready")
 PY
         then
@@ -90,7 +94,8 @@ wait_for_cosmos_api
 echo "Initializing Cosmos DB databases and containers..."
 cd "${ROOT_DIR}/src/web-app"
 uv run python - <<'PY'
-import os
+import os, urllib3
+urllib3.disable_warnings()
 
 from azure.cosmos import CosmosClient, PartitionKey
 

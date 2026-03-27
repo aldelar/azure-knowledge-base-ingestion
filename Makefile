@@ -122,7 +122,7 @@ dev-services-up:
 
 .PHONY: dev-services-down
 dev-services-down:
-	@$(DEV_SERVICES_COMPOSE) stop fn-convert fn-index agent web-app
+	@$(DEV_SERVICES_COMPOSE) down
 
 .PHONY: dev-services-pipeline-up
 dev-services-pipeline-up:
@@ -163,11 +163,17 @@ dev-pipeline: dev-pipeline-convert dev-pipeline-index
 .PHONY: dev-pipeline-convert
 dev-pipeline-convert:
 	@$(MAKE) dev-seed-kb
-	@curl -fsS -X POST http://localhost:7071/api/convert-markitdown -H 'Content-Type: application/json' -d '{}'
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		curl -fsS -X POST http://localhost:7071/api/convert-markitdown -H 'Content-Type: application/json' -d '{}' && break; \
+		echo "  Waiting for fn-convert to be ready... ($$i/10)"; sleep 3; \
+	done
 
 .PHONY: dev-pipeline-index
 dev-pipeline-index:
-	@curl -fsS -X POST http://localhost:7072/api/index -H 'Content-Type: application/json' -d '{}'
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		curl -fsS -X POST http://localhost:7072/api/index -H 'Content-Type: application/json' -d '{}' && break; \
+		echo "  Waiting for fn-index to be ready... ($$i/10)"; sleep 3; \
+	done
 
 .PHONY: dev-clean
 dev-clean: dev-clean-storage dev-clean-cosmos dev-clean-index
