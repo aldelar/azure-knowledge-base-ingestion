@@ -30,7 +30,10 @@ from azure.ai.agentserver.agentframework import from_agent_framework
 # MeterProvider) with Azure Monitor exporters.  enable_instrumentation() then tells the
 # agent framework to emit spans for tool calls, model invocations, etc.
 _appinsights_conn = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
-if _appinsights_conn:
+_otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+_environment = os.environ.get("ENVIRONMENT", "prod").strip().lower() or "prod"
+_observability_enabled = False
+if _environment != "dev" and _appinsights_conn:
     from azure.monitor.opentelemetry import configure_azure_monitor
 
     configure_azure_monitor(
@@ -38,11 +41,15 @@ if _appinsights_conn:
         logger_name="agent",        # only export our loggers (agent.*), not agent_framework's
         logging_level=logging.INFO,  # export INFO+ to App Insights (default is WARNING)
     )
-else:
-    # Fall back to the standard configure_otel_providers which reads OTEL_EXPORTER_OTLP_ENDPOINT
+    _observability_enabled = True
+elif _environment != "dev" and _otlp_endpoint:
+    # Only enable generic OTLP instrumentation outside local dev. RC6 currently
+    # raises a ContextVar cleanup error on streamed responses when the fallback
+    # OTel path is active locally.
     from agent_framework.observability import configure_otel_providers
 
     configure_otel_providers()
+    _observability_enabled = True
 
 # Setup logging — force=True ensures a StreamHandler is added even when
 # configure_azure_monitor() already attached an OTel handler to the root logger.
@@ -62,6 +69,9 @@ logging.getLogger("agent_framework").setLevel(logging.WARNING)
 logging.getLogger("opentelemetry.context").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger(__name__)
+
+if not _observability_enabled:
+    logger.info("Agent framework observability disabled for local runtime")
 
 
 def _patch_agentserver_streaming_converter() -> None:

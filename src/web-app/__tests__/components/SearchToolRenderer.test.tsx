@@ -43,12 +43,39 @@ describe("SearchToolRenderer", () => {
       />,
     );
 
-    expect(screen.getByText("Ref #7")).toBeInTheDocument();
+    expect(screen.getByText("Ref #1")).toBeInTheDocument();
     expect(screen.getByText("Image grounding")).toBeInTheDocument();
     expect(screen.getByText("The service returns grounded results.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Grounding diagram" })).toHaveAttribute(
       "src",
       "/api/images/contoso/diagram.png",
+    );
+  });
+
+  it("rewrites indexed image refs and relative image urls into proxy-backed images", () => {
+    render(
+      <SearchToolRenderer
+        args={{ query: "architecture" }}
+        result={{
+          results: [
+            {
+              ref_number: 2,
+              article_id: "contoso-article",
+              title: "Architecture guide",
+              section_header: "Diagrams",
+              content: "See the overview. [Image: architecture](images/arch.png)",
+              image_urls: ["images/arch.png"],
+            },
+          ],
+        }}
+        status="complete"
+      />,
+    );
+
+    expect(screen.getByText("See the overview.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "architecture" })).toHaveAttribute(
+      "src",
+      "/api/images/contoso-article/images/arch.png",
     );
   });
 

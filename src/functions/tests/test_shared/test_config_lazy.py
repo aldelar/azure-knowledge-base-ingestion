@@ -79,6 +79,7 @@ class TestGetConfigDefaults:
         assert cfg.serving_blob_endpoint == ""
         assert cfg.environment == "prod"
         assert cfg.embedding_vector_dimensions == 1536
+        assert cfg.enable_chunk_summaries is True
 
     def test_default_index_name(self, monkeypatch):
         monkeypatch.delenv("SEARCH_INDEX_NAME", raising=False)
@@ -131,6 +132,18 @@ class TestGetConfigPicksUpEnvVars:
         assert cfg.environment == "dev"
         assert cfg.search_api_key == "query-key"
         assert cfg.embedding_vector_dimensions == 1024
+        assert cfg.enable_chunk_summaries is False
+
+    def test_can_override_chunk_summaries(self, monkeypatch):
+        monkeypatch.setenv("ENVIRONMENT", "dev")
+        monkeypatch.setenv("ENABLE_CHUNK_SUMMARIES", "true")
+
+        import shared.config as cfg_mod
+
+        cfg_mod._config = None
+        cfg = cfg_mod.get_config()
+
+        assert cfg.enable_chunk_summaries is True
 
     def test_is_azure_mode_when_blob_endpoints_set(self, monkeypatch):
         monkeypatch.setenv("STAGING_BLOB_ENDPOINT", "https://staging.blob.example.com")
@@ -181,6 +194,15 @@ class TestConfigProxy:
 
         cfg_mod._config = None
         assert cfg_mod.config.embedding_vector_dimensions == 1024
+
+    def test_dev_environment_disables_chunk_summaries(self, monkeypatch):
+        monkeypatch.setenv("ENVIRONMENT", "dev")
+        monkeypatch.delenv("ENABLE_CHUNK_SUMMARIES", raising=False)
+
+        import shared.config as cfg_mod
+
+        cfg_mod._config = None
+        assert cfg_mod.config.enable_chunk_summaries is False
 
     def test_proxy_raises_on_nonexistent_attr(self, monkeypatch):
         import shared.config as cfg_mod

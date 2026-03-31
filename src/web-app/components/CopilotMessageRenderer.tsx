@@ -1,8 +1,10 @@
 "use client";
 
+import type { Message } from "@copilotkit/shared";
 import { ReactNode } from "react";
 
 import { coerceMessageContent } from "../lib/messageContent";
+import { canonicalizeCitations, normalizeCitationRow, transformAssistantContent } from "./chatMessageTransforms";
 import { SearchToolRenderer } from "./SearchToolRenderer";
 
 type ToolCallLike = {
@@ -18,6 +20,8 @@ type AgUiMessageLike = {
   id: string;
   role: string;
   content?: unknown;
+  encryptedValue?: string;
+  name?: string;
   toolCalls?: ToolCallLike[];
   toolCallId?: string;
   toolName?: string;
@@ -65,6 +69,19 @@ function parseToolArgs(toolCall: ToolCallLike): Record<string, unknown> | undefi
 
 function findToolResultMessage(messages: AgUiMessageLike[], toolCallId: string): AgUiMessageLike | undefined {
   return messages.find((message) => message.role === "tool" && message.toolCallId === toolCallId);
+}
+
+function getAssistantSearchCitations(message: AgUiMessageLike, messages: AgUiMessageLike[]) {
+  const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+  return toolCalls.flatMap((toolCall) => {
+    if (toolCall.function?.name !== "search_knowledge_base") {
+      return [];
+    }
+
+    const toolResultMessage = findToolResultMessage(messages, toolCall.id);
+    const parsedResult = parseJsonPayload(toolResultMessage?.content) as { results?: unknown[] } | undefined;
+    return Array.isArray(parsedResult?.results) ? parsedResult.results.map((row) => normalizeCitationRow(row)) : [];
+  });
 }
 
 function formatToolResultPreview(result: unknown): string | null {
@@ -116,6 +133,23 @@ function renderToolCall(
   );
 }
 
+function renderReasoningMessage(message: AgUiMessageLike): ReactNode {
+  const content = coerceMessageContent(message.content);
+  if (!content) {
+    return null;
+  }
+
+  return (
+    <section className="reasoningCard" data-message-id={message.id}>
+      <div className="reasoningCardHeader">
+        <span className="reasoningCardEyebrow">Reasoning</span>
+        {message.encryptedValue ? <span className="reasoningCardMeta">Protected trace</span> : null}
+      </div>
+      <p className="reasoningCardContent">{content}</p>
+    </section>
+  );
+}
+
 export function CopilotMessageRenderer({
   message,
   messages,
@@ -142,17 +176,26 @@ export function CopilotMessageRenderer({
     ) : null;
   }
 
+  if (message.role === "reasoning") {
+    return renderReasoningMessage(message);
+  }
+
   if (message.role !== "assistant") {
     return null;
   }
 
-  const assistantContent = AssistantMessage ? (
+  const visibleContent = coerceMessageContent(message.content)?.trim();
+  const searchCitations = getAssistantSearchCitations(message, messages);
+  const transformedContent = visibleContent ? transformAssistantContent(visibleContent, searchCitations) : visibleContent;
+  const shouldRenderAssistantMessage = Boolean(visibleContent) || Boolean(message.generativeUI);
+
+  const assistantContent = shouldRenderAssistantMessage && AssistantMessage ? (
     <AssistantMessage
       key={index}
       subComponent={message.generativeUI?.()}
-      rawData={message}
-      message={message}
-      messages={messages}
+      rawData={{ ...message, content: transformedContent ?? message.content }}
+      message={{ ...message, content: transformedContent ?? message.content } as Message}
+      messages={messages as Message[]}
       isLoading={inProgress && isCurrentMessage && !message.content}
       isGenerating={inProgress && isCurrentMessage && !!message.content}
       isCurrentMessage={isCurrentMessage}

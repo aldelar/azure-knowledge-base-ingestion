@@ -41,6 +41,11 @@ make dev-up                         Full local bring-up (calls targets below)
     make dev-pipeline-index             Trigger local indexing
   make dev-ui                         Print the local UI URL
 
+make dev-ui-live                    Run the Next.js UI in the current terminal with hot reload
+make dev-ui-live-stop               Stop the host-run hot-reload UI
+make dev-ui-live-logs               Tail the saved host-run hot-reload UI logs
+make dev-ui-live-url                Print the host-run hot-reload UI URL
+
 make dev-test                       Run unit + integration tests
 make dev-test-ui                    Run browser UI tests
 make dev-otel-dashboard             Print the local Aspire dashboard URL
@@ -62,8 +67,11 @@ make dev-infra-down                 Stop local emulators without removing volume
 ### Dev notes
 
 - `dev-setup-gpu` is only needed if you use an NVIDIA GPU with a native Linux Docker engine or local-WSL Docker engine (not Docker Desktop). It installs and configures the NVIDIA container toolkit. Run it once with `sudo`.
-- `dev-setup` must be run as your normal user, not with `sudo`. It installs `uv`, Azure Functions Core Tools, Playwright Chromium, creates `.env.dev` from the template if it does not exist, and backfills any newly added template keys into an existing `.env.dev` without overwriting your current values.
+- `dev-setup` must be run as your normal user, not with `sudo`. It installs `uv`, Azure Functions Core Tools, syncs the service dependencies, installs Playwright Chromium for the Python Mistral converter, conditionally installs web-app Playwright browsers when browser UI tests are configured, creates `.env.dev` from the template if it does not exist, and backfills any newly added template keys into an existing `.env.dev` without overwriting your current values.
 - `.env.dev.template` uses Docker Compose service hostnames (`ollama`, `agent`, `azurite`, `cosmos-emulator`). If you call services from the host instead of inside Compose, use `localhost` equivalents.
+- `dev-ui-live` automatically remaps the Docker-style dev endpoints in `.env.dev` to host equivalents (`localhost:8088`, `localhost:7250`, `localhost:8081`, `localhost:10000`) before starting Next.js in the current terminal, so `Ctrl+C` stops it like a normal foreground dev server.
+- `dev-ui-live` also saves the same output to `.tmp/logs/dev-ui-live.log`, so `make dev-ui-live-logs` can tail it from another terminal.
+- If the hot-reload UI is already running, `dev-ui-live` prints its PID and terminal. Use `make dev-ui-live-stop` to stop that server cleanly.
 - `dev-test` runs all non-UI tests across agent, functions, and web-app. Integration tests expect local infra to be running.
 - `dev-test-ui` runs browser-based UI tests separately.
 - `dev-otel-dashboard` prints the URL for the local [Aspire Dashboard](https://learn.microsoft.com/dotnet/aspire/fundamentals/dashboard/overview) (OpenTelemetry traces, logs, metrics) at `http://localhost:18888`.

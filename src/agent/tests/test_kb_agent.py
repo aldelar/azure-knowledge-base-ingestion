@@ -325,15 +325,18 @@ class TestCreateAgent:
         mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
-        """create_agent() configures vision middleware on the client."""
+        """create_agent() configures vision and grounding middleware on the client."""
         mock_client = MagicMock()
         mock_create_chat_client.return_value = mock_client
         create_agent()
 
         middleware = mock_client.middleware
-        assert len(middleware) == 1
+        assert len(middleware) == 2
+        from agent.grounding_middleware import GroundingResponseMiddleware
         from agent.vision_middleware import VisionImageMiddleware
+
         assert isinstance(middleware[0], VisionImageMiddleware)
+        assert isinstance(middleware[1], GroundingResponseMiddleware)
 
     @patch("agent.kb_agent.Agent")
     @patch("agent.kb_agent.create_chat_client")

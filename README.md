@@ -34,6 +34,32 @@ make dev-up
 
 `dev-up` installs local dependencies, starts emulators, builds all services, runs the pipeline, and prints the local UI URL.
 
+For faster UI iteration, run the backends locally and start the Next.js app on the host with hot reload:
+
+```bash
+make dev-infra-up
+make dev-services-pipeline-up
+make dev-services-agents-up
+make dev-pipeline
+make dev-ui-live
+```
+
+That keeps the infra, functions, and agent in Docker, but serves the web app directly from `src/web-app` on `http://localhost:3001` so UI changes reload immediately.
+
+`make dev-ui-live` runs in the current terminal and can be stopped with `Ctrl+C`. It also writes a copy of its output to `.tmp/logs/dev-ui-live.log`, which you can tail from another terminal with `make dev-ui-live-logs`. If an existing hot-reload server is already running, stop it with `make dev-ui-live-stop`.
+
+If the backends are already up, use:
+
+```bash
+make dev-ui-live
+```
+
+To print the hot-reload URL only, use:
+
+```bash
+make dev-ui-live-url
+```
+
 ### Azure / Prod
 
 Set the project name, then bring everything up:

@@ -19,7 +19,35 @@ describe("ChatHistoryHydrator", () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          messages: [{ id: "assistant-1", role: "assistant", content: "Restored history" }],
+          messages: [
+            {
+              id: "assistant-1",
+              role: "assistant",
+              content: "Restored history",
+              toolCalls: [
+                {
+                  id: "tool-call-1",
+                  type: "function",
+                  function: {
+                    name: "search_knowledge_base",
+                    arguments: '{"query":"azure ai search"}',
+                  },
+                },
+              ],
+            },
+            {
+              id: "reasoning-1",
+              role: "reasoning",
+              content: "Gathering the most relevant sections.",
+            },
+            {
+              id: "tool-1",
+              role: "tool",
+              toolCallId: "tool-call-1",
+              toolName: "search_knowledge_base",
+              content: '{"results":[]}',
+            },
+          ],
         }),
       }),
     );
@@ -33,7 +61,33 @@ describe("ChatHistoryHydrator", () => {
         cache: "no-store",
       });
       expect(setMessages).toHaveBeenCalledWith([
-        { id: "assistant-1", role: "assistant", content: "Restored history" },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Restored history",
+          toolCalls: [
+            {
+              id: "tool-call-1",
+              type: "function",
+              function: {
+                name: "search_knowledge_base",
+                arguments: '{"query":"azure ai search"}',
+              },
+            },
+          ],
+        },
+        {
+          id: "reasoning-1",
+          role: "reasoning",
+          content: "Gathering the most relevant sections.",
+        },
+        {
+          id: "tool-1",
+          role: "tool",
+          toolCallId: "tool-call-1",
+          toolName: "search_knowledge_base",
+          content: '{"results":[]}',
+        },
       ]);
     });
   });

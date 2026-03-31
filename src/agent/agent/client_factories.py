@@ -100,7 +100,7 @@ def create_chat_client() -> OpenAIChatClient | AzureOpenAIChatClient:
     cfg = get_config()
     if cfg.is_dev:
         return OpenAIChatClient(
-            model_id=cfg.agent_model_deployment_name,
+            model=cfg.agent_model_deployment_name,
             api_key=cfg.ollama_api_key,
             base_url=cfg.ollama_endpoint,
         )

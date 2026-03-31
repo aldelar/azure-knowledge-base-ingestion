@@ -27,10 +27,11 @@ from agent_framework._compaction import (
 from agent_framework._sessions import InMemoryHistoryProvider
 
 from agent.client_factories import create_chat_client
-from agent.search_tool import SearchResult, search_kb
+from agent.grounding_middleware import GroundingResponseMiddleware
 from agent.image_service import get_image_url
-from agent.vision_middleware import VisionImageMiddleware
+from agent.search_tool import SearchResult, search_kb
 from agent.security_middleware import SecurityFilterMiddleware
+from agent.vision_middleware import VisionImageMiddleware
 from agent.config import config
 
 logger = logging.getLogger(__name__)
@@ -209,7 +210,7 @@ def create_agent() -> Agent:
     vision middleware.
     """
     client = create_chat_client()
-    client.middleware = [VisionImageMiddleware()]
+    client.middleware = [VisionImageMiddleware(), GroundingResponseMiddleware()]
 
     history = InMemoryHistoryProvider(skip_excluded=True)
     compaction = CompactionProvider(

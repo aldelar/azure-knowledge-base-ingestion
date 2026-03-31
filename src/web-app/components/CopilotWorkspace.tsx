@@ -53,6 +53,16 @@ async function updateConversation(threadId: string, title: string): Promise<void
   });
 }
 
+async function deleteConversation(threadId: string): Promise<void> {
+  const response = await fetch(`/api/conversations/${threadId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error("Failed to delete conversation");
+  }
+}
+
 export function CopilotWorkspace() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
@@ -96,6 +106,59 @@ export function CopilotWorkspace() {
     setActiveThreadId(created.id);
   }
 
+  async function handleRenameConversation(threadId: string): Promise<void> {
+    const currentConversation = conversations.find((conversation) => conversation.id === threadId);
+    if (!currentConversation) {
+      return;
+    }
+
+    const nextTitle = window.prompt("Rename conversation", currentConversation.name)?.trim();
+    if (!nextTitle || nextTitle === currentConversation.name) {
+      return;
+    }
+
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === threadId
+          ? {
+              ...conversation,
+              name: nextTitle,
+              updatedAt: new Date().toISOString(),
+            }
+          : conversation,
+      ),
+    );
+
+    await updateConversation(threadId, nextTitle);
+  }
+
+  async function handleDeleteConversation(threadId: string): Promise<void> {
+    const currentConversation = conversations.find((conversation) => conversation.id === threadId);
+    if (!currentConversation) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete \"${currentConversation.name}\"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await deleteConversation(threadId);
+
+    const remaining = conversations.filter((conversation) => conversation.id !== threadId);
+    if (remaining.length === 0) {
+      const created = await createConversation();
+      setConversations([created]);
+      setActiveThreadId(created.id);
+      return;
+    }
+
+    setConversations(remaining);
+    if (activeThreadId === threadId) {
+      setActiveThreadId(remaining[0].id);
+    }
+  }
+
   async function handleSubmitMessage(message: string): Promise<void> {
     if (!activeThreadId) {
       return;
@@ -123,7 +186,7 @@ export function CopilotWorkspace() {
     return (
       <main className="workspaceShell loadingState">
         <div className="loadingCard">
-          <p>Preparing the Copilot workspace…</p>
+          <p>Preparing the Azure AI knowledge workspace…</p>
         </div>
       </main>
     );
@@ -131,37 +194,24 @@ export function CopilotWorkspace() {
 
   return (
     <main className="workspaceShell">
-      <div className="workspaceBackdrop" />
-      <header className="workspaceTopbar">
-        <div className="workspaceBrand">
-          <div className="workspaceBrandMark">KB</div>
-          <div>
-            <p className="workspaceKicker">Contoso Robotics</p>
-            <h1>Knowledge Copilot</h1>
-            <p className="workspaceTopbarCopy">
-              Chat-first workspace with AG-UI traces, persistent session memory, and inline citations.
-            </p>
-          </div>
-        </div>
-        <div className="workspaceTopbarMeta" aria-label="Workspace status">
-          <div className="workspaceMetaCard accent">
-            <span className="workspaceMetaLabel">Transport</span>
-            <strong>AG-UI live</strong>
-          </div>
-          <div className="workspaceMetaCard">
-            <span className="workspaceMetaLabel">Active thread</span>
-            <strong>{activeConversation?.name ?? "New conversation"}</strong>
-          </div>
-        </div>
+      <header className="workspaceHeader">
+        <p className="workspaceEyebrow">Azure AI Knowledge</p>
+        <h1>Azure AI Knowledge Agent</h1>
+        <p className="workspaceDescription">
+          Ask questions about indexed Azure AI content, inspect tool activity as it happens, and resume saved
+          threads without losing citations or search context.
+        </p>
       </header>
       <section className="workspaceFrame">
         <ConversationSidebar
           activeThreadId={activeThreadId}
           conversations={conversations}
           onCreateConversation={handleCreateConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
           onSelectConversation={setActiveThreadId}
         />
-        <div className="chatSurface">
+        <section className="chatSurface">
           <CopilotKit
             agent="default"
             key={activeThreadId}
@@ -175,18 +225,18 @@ export function CopilotWorkspace() {
               className="copilotCanvas"
               instructions="Answer from the indexed knowledge base, keep citations intact, and preserve any inline /api/images markdown emitted by the agent."
               labels={{
-                title: activeConversation?.name ?? "Knowledge Copilot",
+                title: activeConversation?.name ?? "Azure AI Knowledge Agent",
                 initial: [
-                  "Ask about Azure AI Search, Content Understanding, or the Contoso Robotics knowledge base.",
+                  "Ask about Azure AI Search, Content Understanding, or other indexed Azure AI content.",
                 ],
-                placeholder: "Ask a question about the knowledge base…",
+                placeholder: "Ask a question about Azure AI knowledge…",
               }}
               onSubmitMessage={(message) => void handleSubmitMessage(message)}
               RenderMessage={CopilotMessageRenderer as any}
               suggestions={conversationStarters}
             />
           </CopilotKit>
-        </div>
+        </section>
       </section>
     </main>
   );

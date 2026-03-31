@@ -51,6 +51,53 @@ describe("CopilotMessageRenderer", () => {
     expect(screen.getByText("Completed")).toBeInTheDocument();
   });
 
+  it("renumbers assistant references to match deduplicated citation cards", () => {
+    const assistantMessage = {
+      id: "assistant-refs",
+      role: "assistant",
+      content: "See Ref #7 and Ref #11 for details.",
+      toolCalls: [
+        {
+          id: "tool-call-refs",
+          type: "function",
+          function: {
+            name: "search_knowledge_base",
+            arguments: JSON.stringify({ query: "architecture" }),
+          },
+        },
+      ],
+    };
+
+    const toolResultMessage = {
+      id: "tool-result-refs",
+      role: "tool",
+      toolCallId: "tool-call-refs",
+      content: JSON.stringify({
+        results: [
+          { ref_number: 4, title: "Overview", section_header: "Intro", content: "Same content" },
+          { ref_number: 7, title: "Overview", section_header: "Intro", content: "Same content" },
+          { ref_number: 11, title: "Details", section_header: "Body", content: "Different content" },
+        ],
+      }),
+    };
+
+    render(
+      <CopilotMessageRenderer
+        AssistantMessage={AssistantMessage}
+        UserMessage={UserMessage}
+        inProgress={false}
+        index={0}
+        isCurrentMessage={false}
+        message={assistantMessage as any}
+        messages={[assistantMessage, toolResultMessage] as any}
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-message")).toHaveTextContent(
+      "See [Ref #1](#citation-ref-1) and [Ref #2](#citation-ref-2) for details.",
+    );
+  });
+
   it("shows running tool activity before the tool result arrives", () => {
     const assistantMessage = {
       id: "assistant-2",
@@ -105,5 +152,22 @@ describe("CopilotMessageRenderer", () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders reasoning messages without dropping them from resumed threads", () => {
+    render(
+      <CopilotMessageRenderer
+        AssistantMessage={AssistantMessage}
+        UserMessage={UserMessage}
+        inProgress={false}
+        index={0}
+        isCurrentMessage={false}
+        message={{ id: "reasoning-1", role: "reasoning", content: "Comparing the best citation matches." } as any}
+        messages={[] as any}
+      />,
+    );
+
+    expect(screen.getByText("Reasoning")).toBeInTheDocument();
+    expect(screen.getByText("Comparing the best citation matches.")).toBeInTheDocument();
   });
 });

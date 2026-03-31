@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** Updated — March 12, 2026
+> **Status:** Updated — March 30, 2026
 
 ## Overview
 
@@ -117,20 +117,22 @@ The solution consists of two services: a standalone **KB Agent** deployed as an 
 
 ### Agent (Container App)
 
-The agent runs as a Starlette ASGI service on port 8088 (built with `from_agent_framework`), deployed as an Azure Container App with external HTTPS ingress and in-code JWT validation. It exposes three endpoints:
+The agent runs as a Starlette ASGI service on port 8088 (built with `from_agent_framework`), deployed as an Azure Container App with external HTTPS ingress and in-code JWT validation. It exposes four primary endpoints:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/health` | GET | Health check |
-| `/v1/entities` | GET | List available agents |
-| `/v1/responses` | POST | Process a user message (streaming + non-streaming) |
+| `/liveness` | GET | Container liveness probe |
+| `/readiness` | GET | Agent readiness probe |
+| `/responses` | POST | OpenAI-compatible Responses API (streaming + non-streaming) |
+| `/ag-ui` | POST | AG-UI event stream used by the CopilotKit runtime |
 
 #### Agent Components
 
-- **KB Agent** — An `Agent` (from `agent-framework-core` + `agent-framework-azure-ai`) with a single tool: `search_knowledge_base`. Context providers: `InMemoryHistoryProvider` (multi-turn history) and `CompactionProvider` (`SlidingWindowStrategy` + `ToolResultCompactionStrategy`) for bounded context windows. The agent uses `gpt-4.1` for reasoning and calls the tool to perform hybrid search (vector + keyword) against the index.
+- **KB Agent** — An `Agent` (from `agent-framework-core` + `agent-framework-azure-ai`) with a single tool: `search_knowledge_base`. Context providers: `InMemoryHistoryProvider` (multi-turn history) and `CompactionProvider` (`SlidingWindowStrategy` + `ToolResultCompactionStrategy`) for bounded context windows. In Azure the agent uses Foundry-hosted models; in local dev it runs against Ollama-backed chat/embedding models.
 - **Session Repository** — `CosmosAgentSessionRepository` (subclass of `SerializedAgentSessionRepository`) persists `AgentSession` to Cosmos DB `agent-sessions` container. Wired via `from_agent_framework(agent, session_repository=...)` which auto-loads/saves sessions per request.
 - **Search Tool** — Embeds the agent's query with `text-embedding-3-small`, performs hybrid search via `azure-search-documents`, and returns ranked chunks with image references.
 - **Vision Middleware** — A `ChatMiddleware` on the Azure OpenAI chat client that intercepts tool results, detects image URLs in the search response JSON, downloads the images from blob storage, and injects them into the LLM conversation as `Content.from_data()` (base64 image payloads). This enables GPT-4.1's vision capabilities — the LLM can **see** the actual images (diagrams, screenshots, architecture charts) and reason about their visual content when composing answers.
+- **Grounding Middleware** — A post-generation middleware that appends deterministic `Ref #N` citations and inline image fallbacks when grounded search results exist but the model omitted visible source or image markers.
 - **Image Service** — Downloads images from blob storage for the vision middleware. Uses `DefaultAzureCredential` for blob access.
 
 ### Web App (Next.js + CopilotKit)
@@ -139,11 +141,12 @@ The web app is a Next.js App Router application that uses CopilotKit for chat UI
 
 #### Web App Components
 
-- **CopilotKit Runtime Route** — Next.js API route at `/api/copilotkit` uses `@copilotkit/runtime` and an `HttpAgent` to stream AG-UI events to and from the agent. In deployed environments, the route acquires a managed-identity token for the APIM-backed agent endpoint.
+- **CopilotKit Runtime Route** — Next.js API route at `/api/copilotkit` uses `@copilotkit/runtime` and an `HttpAgent` to stream AG-UI events to and from the agent. In deployed environments, the route forwards Easy Auth identity headers and acquires a managed-identity token for the APIM-backed agent endpoint when no user bearer token is present.
 - **Conversation Metadata Store** — The web app stores only lightweight sidebar metadata in the `conversations` Cosmos container. The agent exclusively owns `agent-sessions`, which remains the source of truth for turn history.
 - **Image Proxy** — A Next.js route handler at `/api/images/...` downloads images from the serving blob account on demand and serves them from the same origin.
-- **Tool Renderers** — CopilotKit tool renderers surface `search_knowledge_base` progress and results inline while the agent is running.
-- **CopilotKit Chat UI** — Streaming chat interface with CopilotKit components, inline tool call rendering, conversation sidebar, and same-origin markdown image rendering.
+- **Transcript Hydration** — A history hydrator restores stored assistant, reasoning, and tool messages from `agent-sessions` so resumed threads render with the same structured transcript model as live chats.
+- **Message and Tool Renderers** — Custom renderers surface reasoning blocks, running/completed `search_knowledge_base` activity, normalized citations, and proxy-backed inline images inline in the CopilotKit chat flow.
+- **CopilotKit Chat UI** — Streaming chat interface with CopilotKit components, starter prompts, conversation sidebar, and same-origin markdown image rendering.
 
 ### Conversation Flow
 
@@ -177,7 +180,8 @@ sequenceDiagram
     participant Proxy as Image Proxy (Web App)
 
     User->>WebApp: Ask question
-    WebApp->>Agent: POST /v1/responses (stream=True)
+    WebApp->>Agent: POST /api/copilotkit
+    Note over WebApp,Agent: CopilotKit runtime forwards AG-UI events to /ag-ui
     Agent->>Search: search_knowledge_base(query)
     Search-->>Agent: chunks with image_urls[]
 
@@ -735,7 +739,7 @@ configure_otel_providers()
 
 ### What Is Traced
 
-- **Agent execution spans** — top-level span per `/v1/responses` request
+- **Agent execution spans** — top-level span per `/responses` request
 - **Tool call spans** — `search_knowledge_base` calls with query + result count
 - **Model call spans** — GPT-4.1 invocations with latency + token usage
 - **Vision middleware operations** — image download + base64 injection

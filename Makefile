@@ -7,6 +7,8 @@ PROD_PIPELINE_TRIGGER := bash scripts/prod-pipeline-request.sh
 PROD_DOWN_CLEANUP := bash scripts/prod-post-down-cleanup.sh
 DEV_INFRA_PROJECT := kb-agent-infra
 DEV_SERVICES_PROJECT := kb-agent-services
+WEB_APP_DEV_PORT ?= 3001
+WEB_APP_DEV_LOG ?= .tmp/logs/dev-ui-live.log
 DEV_INFRA_COMPOSE := docker compose -p $(DEV_INFRA_PROJECT) --project-directory . --env-file $(DEV_ENV_FILE) -f infra/docker/docker-compose.dev-infra.yml
 DEV_SERVICES_COMPOSE := docker compose -p $(DEV_SERVICES_PROJECT) --project-directory . --env-file $(DEV_ENV_FILE) -f infra/docker/docker-compose.dev-services.yml
 CONVERTER ?= $(shell $(AZD) env get-value CONVERTER 2>/dev/null || echo markitdown)
@@ -36,6 +38,10 @@ help:
 	@echo "        make dev-seed-kb                   Sync kb/staging into local Azurite"
 	@echo "      make dev-pipeline-index             Trigger local indexing"
 	@echo "    make dev-ui                         Print the local UI URL"
+	@echo "  make dev-ui-live                    Run the Next.js UI in the current terminal with hot reload"
+	@echo "  make dev-ui-live-stop               Stop the host-run hot-reload UI"
+	@echo "  make dev-ui-live-logs               Tail the saved host-run hot-reload UI logs"
+	@echo "  make dev-ui-live-url                Print the host-run hot-reload UI URL"
 	@echo ""
 	@echo "  make dev-test                       Run unit + integration tests"
 	@echo "  make dev-test-ui                    Run browser UI tests"
@@ -90,9 +96,19 @@ dev-setup:
 		exit 1; \
 	fi
 	@bash scripts/dev-setup.sh
-	@cd src/functions && uv sync --extra dev
-	@cd src/agent && uv sync --extra dev
+	@echo ""
+	@echo "  functions   syncing Python dependencies..."
+	@cd src/functions && env -u VIRTUAL_ENV uv sync --extra dev
+	@echo "  functions   installing Playwright Chromium for fn-convert-mistral..."
+	@cd src/functions && env -u VIRTUAL_ENV uv run playwright install chromium
+	@echo "  agent       syncing Python dependencies..."
+	@cd src/agent && env -u VIRTUAL_ENV uv sync --extra dev
+	@echo "  web-app     installing Node.js dependencies..."
 	@cd src/web-app && npm ci
+	@if [ -f src/web-app/playwright.config.ts ] || [ -f src/web-app/playwright.config.js ]; then \
+		echo "  web-app     installing Playwright Chromium for browser UI tests..."; \
+		cd src/web-app && npx playwright install chromium; \
+	fi
 	@test -f $(DEV_ENV_FILE) || (echo "Missing $(DEV_ENV_FILE) after dev-setup." >&2; exit 1)
 
 .PHONY: dev-setup-gpu
@@ -131,6 +147,18 @@ dev-infra-destroy:
 .PHONY: dev-services-up
 dev-services-up:
 	@test -f $(DEV_ENV_FILE) || (echo "Missing $(DEV_ENV_FILE). Copy .env.dev.template first." >&2; exit 1)
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx fn-convert; then \
+		bash scripts/dev-check-port-owner.sh 7071 fn-convert; \
+	fi
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx fn-index; then \
+		bash scripts/dev-check-port-owner.sh 7072 fn-index; \
+	fi
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx agent; then \
+		bash scripts/dev-check-port-owner.sh 8088 agent; \
+	fi
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx web-app; then \
+		bash scripts/dev-check-port-owner.sh 3000 web-app; \
+	fi
 	@$(DEV_SERVICES_COMPOSE) up -d --build
 
 .PHONY: dev-services-down
@@ -144,23 +172,35 @@ dev-services-destroy:
 .PHONY: dev-services-pipeline-up
 dev-services-pipeline-up:
 	@test -f $(DEV_ENV_FILE) || (echo "Missing $(DEV_ENV_FILE). Copy .env.dev.template first." >&2; exit 1)
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx fn-convert; then \
+		bash scripts/dev-check-port-owner.sh 7071 fn-convert; \
+	fi
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx fn-index; then \
+		bash scripts/dev-check-port-owner.sh 7072 fn-index; \
+	fi
 	@$(DEV_SERVICES_COMPOSE) up -d --build fn-convert fn-index
 
 .PHONY: dev-services-app-up
 dev-services-app-up:
 	@test -f $(DEV_ENV_FILE) || (echo "Missing $(DEV_ENV_FILE). Copy .env.dev.template first." >&2; exit 1)
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx web-app; then \
+		bash scripts/dev-check-port-owner.sh 3000 web-app; \
+	fi
 	@$(DEV_SERVICES_COMPOSE) up -d --build web-app
 
 .PHONY: dev-services-agents-up
 dev-services-agents-up:
 	@test -f $(DEV_ENV_FILE) || (echo "Missing $(DEV_ENV_FILE). Copy .env.dev.template first." >&2; exit 1)
+	@if ! $(DEV_SERVICES_COMPOSE) ps --services --status running | grep -qx agent; then \
+		bash scripts/dev-check-port-owner.sh 8088 agent; \
+	fi
 	@$(DEV_SERVICES_COMPOSE) up -d --build agent
 
 .PHONY: dev-test
 dev-test:
-	@cd src/functions && uv run pytest tests -o addopts= -m "not uitest"
-	@cd src/agent && uv run pytest tests -o addopts= -m "not uitest"
-	@cd src/web-app && uv run pytest tests -o addopts= -m "not uitest"
+	@cd src/functions && env -u VIRTUAL_ENV uv run pytest tests -o addopts= -m "not uitest"
+	@cd src/agent && env -u VIRTUAL_ENV uv run pytest tests -o addopts= -m "not uitest"
+	@cd src/web-app && npm test
 
 .PHONY: dev-seed-kb
 dev-seed-kb:
@@ -168,11 +208,33 @@ dev-seed-kb:
 
 .PHONY: dev-test-ui
 dev-test-ui:
-	@cd src/web-app && uv run pytest tests -o addopts= -m uitest
+	@if [ -f src/web-app/playwright.config.ts ] || [ -f src/web-app/playwright.config.js ]; then \
+		cd src/web-app && npx playwright test; \
+	else \
+		echo "No web-app browser UI tests configured."; \
+	fi
 
 .PHONY: dev-ui
 dev-ui:
 	@echo http://localhost:3000
+
+.PHONY: dev-ui-live
+dev-ui-live:
+	@test -f $(DEV_ENV_FILE) || (echo "Missing $(DEV_ENV_FILE). Copy .env.dev.template first." >&2; exit 1)
+	@bash scripts/dev-web-live.sh $(WEB_APP_DEV_PORT) $(WEB_APP_DEV_LOG)
+
+.PHONY: dev-ui-live-stop
+dev-ui-live-stop:
+	@bash scripts/dev-web-live-control.sh stop $(WEB_APP_DEV_PORT)
+
+.PHONY: dev-ui-live-logs
+dev-ui-live-logs:
+	@test -f $(WEB_APP_DEV_LOG) || (echo "No saved live UI log found at $(WEB_APP_DEV_LOG). Start make dev-ui-live first." >&2; exit 1)
+	@tail -n 100 -f $(WEB_APP_DEV_LOG)
+
+.PHONY: dev-ui-live-url
+dev-ui-live-url:
+	@echo http://localhost:$(WEB_APP_DEV_PORT)
 
 .PHONY: dev-otel-dashboard
 dev-otel-dashboard:
@@ -191,9 +253,18 @@ dev-pipeline-convert:
 
 .PHONY: dev-pipeline-index
 dev-pipeline-index:
-	@for i in 1 2 3 4 5 6 7 8 9 10; do \
-		curl -fsS -X POST http://localhost:7072/api/index -H 'Content-Type: application/json' -d '{}' && break; \
-		echo "  Waiting for fn-index to be ready... ($$i/10)"; sleep 3; \
+	@article_ids="$$(find kb/staging -mindepth 2 -maxdepth 2 -type d -printf '%f\n' | sort)"; \
+	if [ -z "$$article_ids" ]; then \
+		echo "No staged articles found under kb/staging." >&2; \
+		exit 1; \
+	fi; \
+	for article_id in $$article_ids; do \
+		payload="$$(printf '{"article_id":"%s"}' "$$article_id")"; \
+		for i in 1 2 3 4 5 6 7 8 9 10; do \
+			curl -fsS -X POST http://localhost:7072/api/index -H 'Content-Type: application/json' -d "$$payload" && break; \
+			echo "  Waiting for fn-index to be ready for $$article_id... ($$i/10)"; sleep 3; \
+			test $$i -lt 10 || exit 1; \
+		done; \
 	done
 
 .PHONY: dev-clean

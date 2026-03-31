@@ -1,7 +1,12 @@
 "use client";
 
 import { coerceMessageContent } from "../lib/messageContent";
-import { SearchCitationImage, SearchCitationResult } from "../lib/types";
+import {
+  canonicalizeCitations,
+  extractInlineCitationImages,
+  getCitationImages,
+  normalizeCitationRow,
+} from "./chatMessageTransforms";
 
 type SearchToolRendererProps = {
   status?: string;
@@ -13,103 +18,9 @@ type SearchToolRendererProps = {
   } | null;
 };
 
-const markdownImagePattern = /!\[([^\]]*)\]\((\/api\/images\/[^)]+)\)/g;
-
-function normalizeCitationImage(value: unknown): SearchCitationImage | null {
-  if (typeof value === "string") {
-    return value ? { url: value } : null;
-  }
-
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const url = coerceMessageContent(record.url);
-  if (!url) {
-    return null;
-  }
-
-  const alt = coerceMessageContent(record.alt) ?? undefined;
-  return { alt, url };
-}
-
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((entry) => coerceMessageContent(entry))
-    .filter((entry): entry is string => Boolean(entry));
-}
-
-function normalizeCitationRow(value: unknown): SearchCitationResult {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const record = value as Record<string, unknown>;
-  const refNumber =
-    typeof record.ref_number === "number"
-      ? record.ref_number
-      : typeof record.ref_number === "string" && Number.isFinite(Number(record.ref_number))
-        ? Number(record.ref_number)
-        : undefined;
-
-  return {
-    ref_number: refNumber,
-    title: coerceMessageContent(record.title) ?? undefined,
-    section_header: coerceMessageContent(record.section_header) ?? undefined,
-    content: coerceMessageContent(record.content) ?? undefined,
-    image_urls: normalizeStringArray(record.image_urls),
-    images: Array.isArray(record.images)
-      ? record.images
-          .map((image) => normalizeCitationImage(image))
-          .filter((image): image is SearchCitationImage => image !== null)
-      : undefined,
-  };
-}
-
-function extractInlineCitationImages(content: string): {
-  content: string;
-  images: SearchCitationImage[];
-} {
-  const images: SearchCitationImage[] = [];
-  const normalizedContent = content.replace(markdownImagePattern, (_match, alt, url) => {
-    images.push({ alt, url });
-    return "";
-  });
-
-  return {
-    content: normalizedContent.replace(/\n{3,}/g, "\n\n").trim(),
-    images,
-  };
-}
-
-function getCitationImages(row: SearchCitationResult, inlineImages: SearchCitationImage[]): SearchCitationImage[] {
-  const deduped = new Map<string, SearchCitationImage>();
-  for (const image of row.images ?? []) {
-    if (image.url) {
-      deduped.set(image.url, image);
-    }
-  }
-
-  for (const imageUrl of row.image_urls ?? []) {
-    if (imageUrl) {
-      deduped.set(imageUrl, { url: imageUrl });
-    }
-  }
-
-  for (const image of inlineImages) {
-    deduped.set(image.url, image);
-  }
-
-  return [...deduped.values()];
-}
-
 export function SearchToolRenderer({ status, args, result }: SearchToolRendererProps) {
-  const rows = Array.isArray(result?.results) ? result.results.map((row) => normalizeCitationRow(row)) : [];
+  const rawRows = Array.isArray(result?.results) ? result.results.map((row) => normalizeCitationRow(row)) : [];
+  const { citations: rows } = canonicalizeCitations(rawRows);
   const isWorking = status === "inProgress" || status === "executing" || status === "running";
   const query = coerceMessageContent(args?.query) ?? "Preparing search request";
 
@@ -125,8 +36,10 @@ export function SearchToolRenderer({ status, args, result }: SearchToolRendererP
       {rows.length > 0 ? (
         <div className="citationDeck">
           {rows.map((row, index) => {
-            const { content, images: inlineImages } = extractInlineCitationImages(row.content ?? "");
-            const citationImages = getCitationImages(row, inlineImages);
+            const { content, images: inlineImages } = extractInlineCitationImages(row.content ?? "", row, rows);
+            const citationImages = getCitationImages(row, rows).concat(
+              inlineImages.filter((image) => !getCitationImages(row, rows).some((entry) => entry.url === image.url)),
+            );
             const refLabel = row.ref_number ? `Ref #${row.ref_number}` : `Result ${index + 1}`;
 
             return (
