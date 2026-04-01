@@ -106,14 +106,14 @@ export function CopilotWorkspace() {
     setActiveThreadId(created.id);
   }
 
-  async function handleRenameConversation(threadId: string): Promise<void> {
+  async function handleRenameConversation(threadId: string, nextTitle: string): Promise<void> {
     const currentConversation = conversations.find((conversation) => conversation.id === threadId);
     if (!currentConversation) {
       return;
     }
 
-    const nextTitle = window.prompt("Rename conversation", currentConversation.name)?.trim();
-    if (!nextTitle || nextTitle === currentConversation.name) {
+    const normalizedTitle = nextTitle.trim();
+    if (!normalizedTitle || normalizedTitle === currentConversation.name) {
       return;
     }
 
@@ -122,24 +122,19 @@ export function CopilotWorkspace() {
         conversation.id === threadId
           ? {
               ...conversation,
-              name: nextTitle,
+              name: normalizedTitle,
               updatedAt: new Date().toISOString(),
             }
           : conversation,
       ),
     );
 
-    await updateConversation(threadId, nextTitle);
+    await updateConversation(threadId, normalizedTitle);
   }
 
   async function handleDeleteConversation(threadId: string): Promise<void> {
     const currentConversation = conversations.find((conversation) => conversation.id === threadId);
     if (!currentConversation) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Delete \"${currentConversation.name}\"?`);
-    if (!confirmed) {
       return;
     }
 
@@ -198,8 +193,7 @@ export function CopilotWorkspace() {
         <p className="workspaceEyebrow">Azure AI Knowledge</p>
         <h1>Azure AI Knowledge Agent</h1>
         <p className="workspaceDescription">
-          Ask questions about indexed Azure AI content, inspect tool activity as it happens, and resume saved
-          threads without losing citations or search context.
+          Context-Aware Vision Grounded Knowledge Based Agent
         </p>
       </header>
       <section className="workspaceFrame">

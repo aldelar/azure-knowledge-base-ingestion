@@ -18,8 +18,12 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from azure.ai.agentserver.agentframework import from_agent_framework
+from azure.ai.agentserver.agentframework.persistence import AgentSessionRepository
+from agent_framework import AgentSession
 
 # Setup observability — two paths:
 #   1. APPLICATIONINSIGHTS_CONNECTION_STRING set → use Azure Monitor (traces + logs + metrics)
@@ -194,7 +198,49 @@ from fastapi import Depends, FastAPI
 from middleware.jwt_auth import JWTAuthMiddleware, require_jwt_auth
 
 
-def _create_ag_ui_app(agent) -> FastAPI:
+class _PersistedSessionAgent:
+    """Wrap AG-UI requests with the same session repository used by Responses."""
+
+    def __init__(self, agent: Any, session_repository: AgentSessionRepository) -> None:
+        self._agent = agent
+        self._session_repository = session_repository
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._agent, name)
+
+    async def run(self, messages: list[dict[str, Any]], **kwargs: Any) -> AsyncGenerator[Any, None]:
+        session = kwargs.get("session")
+        conversation_id = getattr(session, "service_session_id", None)
+        active_session = session
+
+        if conversation_id:
+            stored_session = await self._session_repository.get(conversation_id)
+            if stored_session is not None:
+                active_session = stored_session
+                incoming_metadata = dict(getattr(session, "metadata", {}) or {})
+                if incoming_metadata:
+                    stored_metadata = dict(getattr(active_session, "metadata", {}) or {})
+                    stored_metadata.update(incoming_metadata)
+                    active_session.metadata = stored_metadata
+            elif active_session is None:
+                active_session = AgentSession(service_session_id=conversation_id)
+
+            if active_session is not None:
+                active_session.service_session_id = conversation_id
+            kwargs["session"] = active_session
+
+        async for update in self._agent.run(messages, **kwargs):
+            yield update
+
+        if conversation_id and active_session is not None:
+            active_session.service_session_id = conversation_id
+            await self._session_repository.set(conversation_id, active_session)
+
+
+def _create_ag_ui_app(
+    agent,
+    session_repository: AgentSessionRepository | None = None,
+) -> FastAPI:
     """Build the AG-UI FastAPI app mounted onto the Starlette agent server."""
     ag_ui_app = FastAPI(
         title="KB Agent AG-UI",
@@ -203,7 +249,11 @@ def _create_ag_ui_app(agent) -> FastAPI:
         openapi_url=None,
         redirect_slashes=False,
     )
-    ag_ui_agent = AgentFrameworkAgent(agent=agent, use_service_session=True)
+    wrapped_agent = agent
+    if session_repository is not None:
+        wrapped_agent = _PersistedSessionAgent(agent, session_repository)
+
+    ag_ui_agent = AgentFrameworkAgent(agent=wrapped_agent, use_service_session=True)
     add_agent_framework_fastapi_endpoint(
         ag_ui_app,
         ag_ui_agent,
@@ -238,7 +288,7 @@ def main() -> None:
 
     server = from_agent_framework(agent, session_repository=session_repo)
     server.app.add_middleware(JWTAuthMiddleware)
-    server.app.mount("/ag-ui", _create_ag_ui_app(agent))
+    server.app.mount("/ag-ui", _create_ag_ui_app(agent, session_repo))
     server.run()
 
 

@@ -112,27 +112,6 @@ textarea {
   margin: 0;
   text-transform: uppercase;
 }
-
-.conversationRailTitle {
-  font-size: 1.2rem;
-  line-height: 1.2;
-  margin: 4px 0 0;
-}
-
-.conversationRailIntro {
-  background: white;
-  border: 1px solid var(--workspace-border);
-  border-radius: 16px;
-  display: grid;
-  gap: 4px;
-  padding: 14px;
-}
-
-.conversationRailIntro strong {
-  font-size: 1.4rem;
-}
-
-.conversationRailIntro span,
 .conversationRailFooter p {
   color: var(--workspace-muted);
   line-height: 1.5;
@@ -140,8 +119,9 @@ textarea {
 }
 
 .conversationCreateButton,
-.conversationItemAction,
-.conversationItemSelect {
+.conversationItemSelect,
+.conversationTitleInput,
+.conversationDialogButton {
   border: 1px solid var(--workspace-border);
   border-radius: 12px;
   cursor: pointer;
@@ -156,7 +136,9 @@ textarea {
   border-color: var(--workspace-accent);
   color: white;
   font-weight: 700;
-  padding: 10px 12px;
+  min-width: 132px;
+  padding: 10px 18px;
+  white-space: nowrap;
 }
 
 .conversationCreateButton:hover {
@@ -173,11 +155,12 @@ textarea {
   border: 1px solid var(--workspace-border);
   border-radius: 16px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 12px;
 }
 
 .conversationItem.active {
+  background: var(--workspace-accent-soft);
   border-color: var(--workspace-border-strong);
   box-shadow: inset 0 0 0 1px rgba(11, 92, 171, 0.08);
 }
@@ -193,45 +176,121 @@ textarea {
 .conversationItemTitle {
   display: block;
   font-weight: 700;
-  margin-bottom: 6px;
+  line-height: 1.35;
 }
 
-.conversationItemMeta {
+.conversationTitleInput {
+  background: white;
+  color: var(--workspace-text);
+  cursor: text;
+  font-weight: 700;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.conversationItemMetaRow {
   align-items: center;
   color: var(--workspace-muted);
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
+  justify-content: space-between;
 }
 
-.conversationItemMeta em {
-  background: var(--workspace-accent-soft);
-  border-radius: 999px;
+.conversationItem.active .conversationItemMetaRow {
   color: var(--workspace-accent);
-  font-size: 0.75rem;
-  font-style: normal;
-  font-weight: 700;
-  padding: 2px 8px;
 }
 
-.conversationItemActions {
-  display: flex;
-  gap: 8px;
-}
-
-.conversationItemAction {
-  background: white;
-  color: var(--workspace-text);
-  padding: 6px 10px;
-}
-
-.conversationItemAction:hover,
 .conversationItemSelect:hover {
   background: rgba(11, 92, 171, 0.04);
 }
 
-.conversationItemAction.danger {
+.conversationDeleteButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
   color: var(--workspace-danger);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 4px;
+}
+
+.conversationDeleteButton:hover {
+  background: rgba(180, 35, 24, 0.08);
+  border-radius: 999px;
+}
+
+.conversationDeleteButton svg {
+  display: block;
+}
+
+.conversationDialogOverlay {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.32);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 20;
+}
+
+.conversationDialog {
+  background: white;
+  border: 1px solid var(--workspace-border);
+  border-radius: 20px;
+  box-shadow: var(--workspace-shadow);
+  max-width: 420px;
+  padding: 20px;
+  width: min(100%, 420px);
+}
+
+.conversationDialogEyebrow {
+  color: var(--workspace-danger);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.conversationDialog h2 {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.conversationDialogDescription {
+  color: var(--workspace-muted);
+  line-height: 1.6;
+  margin: 12px 0 0;
+}
+
+.conversationDialogActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.conversationDialogButton {
+  background: white;
+  color: var(--workspace-text);
+  padding: 8px 14px;
+}
+
+.conversationDialogButton.secondary:hover {
+  background: rgba(11, 92, 171, 0.04);
+}
+
+.conversationDialogButton.danger {
+  background: #fef3f2;
+  border-color: rgba(180, 35, 24, 0.16);
+  color: var(--workspace-danger);
+}
+
+.conversationDialogButton.danger:hover {
+  background: #fee4e2;
 }
 
 .chatSurface {

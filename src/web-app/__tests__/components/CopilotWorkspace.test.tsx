@@ -50,7 +50,9 @@ describe("CopilotWorkspace", () => {
     await waitFor(() => {
       expect(screen.getByText("Azure AI Knowledge")).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "Azure AI Knowledge Agent" })).toBeInTheDocument();
-      expect(screen.getByText(/indexed Azure AI content/i)).toBeInTheDocument();
+      expect(
+        screen.getByText("Context-Aware Vision Grounded Knowledge Based Agent"),
+      ).toBeInTheDocument();
       expect(screen.queryByText("Contoso Robotics")).not.toBeInTheDocument();
       expect(copilotChatSpy).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -2,7 +2,7 @@
 
 > **Status:** In Progress
 > **Created:** March 27, 2026
-> **Updated:** March 30, 2026
+> **Updated:** March 31, 2026
 
 ## Objective
 
@@ -49,7 +49,7 @@ After this epic:
 - [x] `make dev-test` passes cleanly on the repaired local stack
 - [x] Functions tests: `190 passed, 23 skipped`
 - [x] Agent tests: `188 passed` including AG-UI, streaming, grounding, and integration coverage
-- [x] Web-app tests: `42 passed` including auth helpers, conversation routes, image proxy route, config loading, citation/image transforms, and transcript hydration
+- [x] Web-app tests: `49 passed` including auth helpers, conversation routes, image proxy route, config loading, citation/image transforms, transcript hydration, and sidebar CRUD interactions
 - [ ] Full manual browser E2E validation from the local dev stack is still pending
 
 ### Validation Criteria
@@ -167,6 +167,7 @@ Add the `agent-framework-ag-ui` package to the agent and register an AG-UI endpo
 
 - The `from_agent_framework` adapter creates a Starlette app. The AG-UI adapter uses FastAPI. These need to be composed (mount FastAPI as a sub-app on the Starlette app, or switch the whole server to FastAPI with the existing routes mounted).
 - The session repository, vision middleware, and security filter middleware must all work through the AG-UI path — verify that `add_agent_framework_fastapi_endpoint` passes the agent with all middleware intact.
+- Regression repair (2026-03-31): the mounted `/ag-ui` app now wraps the shared agent with the same session repository used by `from_agent_framework`. The earlier mount only enabled Cosmos persistence on the Responses adapter, which left AG-UI traffic unable to read or write `agent-sessions` for sidebar thread UUIDs during local resume flows.
 - JWT authentication on the AG-UI endpoint must be maintained — use FastAPI `dependencies` parameter.
 - **Critical: thread/session mapping** — The Responses API passes `conversation_id` via `extra_body.conversation.id`. The AG-UI protocol uses `threadId` in its run request. Verify that the `agent-framework-ag-ui` adapter maps `threadId` → the session repository's `conversation_id` parameter. If it doesn't, this is a blocker — a custom wrapper or adapter configuration will be needed. Spike this before proceeding to Story 2.
 
@@ -311,6 +312,8 @@ Implement lightweight conversation persistence so users can see and resume previ
 - The agent already owns session state and history. The web app only needs to store sidebar metadata (title, timestamp, userId) — not individual messages.
 - CopilotKit Premium offers a "threads" feature, but for self-hosted deployments, a simple Cosmos-backed API is more appropriate and consistent with the existing architecture.
 - **Conversation resume mechanism**: When a user selects a previous conversation from the sidebar, the web app reads the `agent-sessions` document for that `conversation_id` (the agent stores the full message history in `session.state["messages"]`). These messages are then passed to CopilotKit as the initial message state when mounting the chat for that thread. This is the same pattern the current Chainlit app uses in `on_chat_resume()`. A new Next.js API route (`/api/conversations/[id]/messages`) reads from the `agent-sessions` Cosmos container (read-only — the agent owns writes).
+- Regression repair (2026-03-31): AG-UI-persisted transcripts can land in `session.state.in_memory.messages`, and the underlying agent may overwrite `service_session_id` with a provider response ID during the turn. Resume hydration now accepts the `in_memory.messages` shape, and the mounted AG-UI path restores the requested conversation ID before saving so sidebar thread UUIDs remain the stable key for both writes and reads.
+- Sidebar actions now use inline rename on title double-click and a custom confirmation dialog for deletes instead of browser prompt/confirm dialogs.
 
 #### Definition of Done
 
