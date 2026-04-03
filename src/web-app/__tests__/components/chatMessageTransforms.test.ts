@@ -40,7 +40,7 @@ describe("canonicalizeCitations", () => {
 });
 
 describe("transformAssistantContent", () => {
-  it("renumbers refs and appends discoverable tokens when some refs are omitted", () => {
+  it("renumbers refs and links them but does not insert refs the LLM omitted", () => {
     const content = "See ref#7 for the overview.";
     const transformed = transformAssistantContent(content, [
       { ref_number: 4, title: "Overview", section_header: "Intro", content: "Same content" },
@@ -48,8 +48,9 @@ describe("transformAssistantContent", () => {
       { ref_number: 11, title: "Details", section_header: "Body", content: "Different content" },
     ]);
 
-    expect(transformed).toContain("[Ref #1](#citation-ref-1)");
-    expect(transformed).toContain("Sources: [Ref #2](#citation-ref-2)");
+    expect(transformed).toContain("See [Ref #1](#citation-ref-1) for the overview.");
+    expect(transformed).not.toContain("Ref #2");
+    expect(transformed).not.toContain("Sources:");
   });
 
   it("normalizes malformed image urls and indexed image refs", () => {
@@ -71,7 +72,7 @@ describe("transformAssistantContent", () => {
     expect(transformed).toContain("![architecture](/api/images/contoso-article/images/arch.png)");
   });
 
-  it("injects fallback images when cited images exist but assistant text omitted them", () => {
+  it("does not inject fallback images the LLM did not embed", () => {
     const transformed = transformAssistantContent(
       "See [Ref #3] for the diagram.",
       [
@@ -86,7 +87,26 @@ describe("transformAssistantContent", () => {
       ],
     );
 
-    expect(transformed).toContain("![Ref #1 image](/api/images/contoso-article/images/arch.png)");
+    expect(transformed).toContain("See [Ref #1](#citation-ref-1) for the diagram.");
+    expect(transformed).not.toContain("![Ref #1 image]");
+    expect(transformed).not.toContain("Sources:");
+  });
+
+  it("does not insert missing refs the LLM did not mention", () => {
+    const transformed = transformAssistantContent(
+      "## Agentic Retrieval Workflow\n\nAgentic retrieval improves recall for complex questions.",
+      [
+        {
+          ref_number: 9,
+          title: "Agentic retrieval in Azure AI Search",
+          section_header: "Overview",
+          content: "Agentic retrieval improves recall for complex questions.",
+        },
+      ],
+    );
+
+    expect(transformed).not.toContain("Ref #1");
+    expect(transformed).toContain("Agentic retrieval improves recall for complex questions.");
   });
 });
 

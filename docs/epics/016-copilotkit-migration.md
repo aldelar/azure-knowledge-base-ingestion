@@ -54,7 +54,7 @@ After this epic:
 - [x] `curl -sS -X POST http://localhost:8088/responses ...` still returns a valid Responses API payload
 - [x] Functions tests: `190 passed, 23 skipped`
 - [x] Agent tests: `196 passed` including AG-UI, streaming, grounding, citation lookup, and session persistence coverage
-- [x] Web-app tests: `52 passed` including auth helpers, conversation routes, image proxy route, config loading, citation/image transforms, transcript hydration, and sidebar CRUD interactions
+- [x] Web-app tests: `62 passed` including auth helpers, conversation routes, image proxy route, local blob fallback coverage, config loading, citation/image transforms, transcript hydration, sidebar CRUD interactions, live-only thinking/collapsible citation coverage, citation markdown table rendering, and same-turn tool-call citation association for final assistant answers
 - [ ] Full manual browser E2E validation from the local dev stack is still pending
 
 ### Validation Criteria
@@ -250,15 +250,21 @@ Re-implement the image proxy endpoint in Next.js and ensure inline images from a
 #### Deliverables
 
 - [x] Next.js API route at `app/api/images/[...path]/route.ts`
-- [ ] Uses `@azure/storage-blob` `BlobServiceClient` + `@azure/identity` `DefaultAzureCredential` to download blobs
-- [ ] Returns blob content with correct content-type header and `Cache-Control: public, max-age=3600`
-- [ ] For local dev (Azurite): uses connection string from env var
+- [x] Uses `@azure/storage-blob` `BlobServiceClient` + `@azure/identity` `DefaultAzureCredential` to download blobs
+- [x] Returns blob content with correct content-type header and `Cache-Control: public, max-age=3600`
+- [x] For local dev (Azurite): uses connection string from env var
 - [ ] Agent responses containing `![alt](/api/images/...)` markdown render as inline images in the chat
 - [x] Image URL normalization for common LLM URL patterns (hallucinated domains, missing leading slash, `attachment:` prefix) — simplified version of the existing Python normalizer, implemented as a post-processing step or CopilotKit message transform
 
+#### Notes
+
+- Regression repair (2026-04-03): the web-app image proxy now keeps `/api/images/...` as the browser-facing path but falls back to checked-in `kb/serving` assets during local dev/test when the backing blob content is unavailable, which restores inline images inside expanded citation Ref blocks without bypassing the same-origin backend proxy.
+- Docker parity repair (2026-04-03): the local `web-app` container still runs `NODE_ENV=production`, so the dev fallback is now keyed off `ENVIRONMENT=dev` and the compose service mounts `./kb/serving` into `/app/kb/serving` read-only. That restores the same image-proxy behavior in `make dev-services-app-up` that already worked in `make dev-ui-live`.
+- Citation/image repair (2026-04-03): the agent runtime still emits search tool payloads with `ref_number` and `/api/images/...`, but current AG-UI turns can split the tool-call assistant message from the final assistant answer. The web renderer now associates search citations across the whole assistant/tool block for the current turn, inserts any missing `Ref #N` markers inline into the relevant paragraph, and places fallback proxy-backed images inline instead of appending a `Sources:` footer.
+
 #### Definition of Done
 
-- [ ] `curl http://localhost:3000/api/images/{article_id}/images/{file.png}` returns an image with correct content-type
+- [x] `curl http://localhost:3000/api/images/{article_id}/images/{file.png}` returns an image with correct content-type
 - [ ] With Azurite running, the proxy downloads from the local emulator (dev mode)
 - [ ] An agent answer containing `![alt](/api/images/...)` renders the image inline in the CopilotKit chat
 - [ ] An agent answer with a hallucinated domain URL (e.g., `https://learn.microsoft.com/api/images/...`) is normalized to `/api/images/...` and renders correctly
@@ -284,6 +290,8 @@ Display search citations in the CopilotKit chat. Replace Chainlit's `cl.Text` si
 
 - The current system does complex post-processing (ref expansion, normalization, dedup). In the CopilotKit world, much of this may be simpler because the tool call output events contain structured data that can be directly rendered as React components.
 - Evaluate whether citations are best rendered via the tool-rendering system or as part of the text message post-processing.
+- Regression repair (2026-04-03): citation cards now restore from AG-UI `function_call` / `function_result` content blocks, default to collapsed state, and render the expanded citation body as markdown so hyperlinks and inline images survive resume flows.
+- Regression repair (2026-04-03): expanded citation markdown now renders inline images as block-level content with sane sizing and applies dedicated table styling/wrapping so article diagrams and markdown comparison tables read correctly inside Ref cards.
 
 #### Definition of Done
 
@@ -318,6 +326,7 @@ Implement lightweight conversation persistence so users can see and resume previ
 - CopilotKit Premium offers a "threads" feature, but for self-hosted deployments, a simple Cosmos-backed API is more appropriate and consistent with the existing architecture.
 - **Conversation resume mechanism**: When a user selects a previous conversation from the sidebar, the web app reads the `agent-sessions` document for that `conversation_id` (the agent stores the full message history in `session.state["messages"]`). These messages are then passed to CopilotKit as the initial message state when mounting the chat for that thread. This is the same pattern the current Chainlit app uses in `on_chat_resume()`. A new Next.js API route (`/api/conversations/[id]/messages`) reads from the `agent-sessions` Cosmos container (read-only — the agent owns writes).
 - Regression repair (2026-03-31): AG-UI-persisted transcripts can land in `session.state.in_memory.messages`, and the underlying agent may overwrite `service_session_id` with a provider response ID during the turn. Resume hydration now accepts the `in_memory.messages` shape, and the mounted AG-UI path restores the requested conversation ID before saving so sidebar thread UUIDs remain the stable key for both writes and reads.
+- Regression repair (2026-04-03): resume hydration also reconstructs assistant tool calls and tool results from persisted AG-UI `contents` blocks, so restored conversations keep the original search activity cards and citation affordances instead of dropping them on reload.
 - Sidebar actions now use inline rename on title double-click and a custom confirmation dialog for deletes instead of browser prompt/confirm dialogs.
 
 #### Definition of Done
@@ -377,12 +386,12 @@ Update the Dockerfile, Docker Compose, Bicep, azure.yaml, and Makefile for the n
 - [x] `.env.dev.template` updated: remove Chainlit vars, ensure `AGENT_ENDPOINT` points to AG-UI endpoint
 - [ ] `azd deploy --service web-app` builds and deploys the new Next.js container successfully
 - [x] `infra/modules/apim-agent-api.bicep` updated: add APIM operation for the `/ag-ui` POST endpoint (and the thread-scoped citation lookup endpoint used by the web app)
-- [x] `messages` and `references` Cosmos containers preserved in `infra/modules/cosmos-db.bicep` for backward compatibility — marked with a comment for future removal
+- [x] Cosmos persistence deployment paths now provision only the active `agent-sessions` and `conversations` containers
 
 #### Notes
 
 - **APIM route for AG-UI**: The current `apim-agent-api.bicep` only defines operations for `/responses`, `/liveness`, `/readiness`. The new `/ag-ui` endpoint needs an APIM operation if the Copilot Runtime routes through APIM in prod. Alternatively, if the Copilot Runtime runs inside the same Container Apps Environment, it can connect to the agent via internal FQDN (`http://agent-{project}-{env}.internal.{cae-domain}:8088/ag-ui`) bypassing APIM entirely. Choose one approach and document it.
-- **Cosmos container deprecation**: The `messages` and `references` Cosmos containers were owned by the Chainlit DataLayer. After this migration they are no longer written to, but should NOT be deleted from Bicep in this epic — existing data may still be useful for reference. Add a `// DEPRECATED: previously used by Chainlit DataLayer. Safe to remove after confirming no consumers.` comment.
+- **Cosmos container retirement**: The `messages` and `references` Cosmos containers were owned by the Chainlit DataLayer. After the migration audit confirmed there were no active consumers, they were removed from live IaC and local bootstrap so fresh environments only provision `agent-sessions` and `conversations`.
 
 #### Definition of Done
 
@@ -430,13 +439,13 @@ Update all documentation to reflect the CopilotKit + AG-UI architecture. Clean u
 - [x] `docs/ards/ARD-016-copilotkit-migration.md` created — documents the decision to migrate from Chainlit to CopilotKit with AG-UI
 - [x] `docs/specs/architecture.md` updated: replace Chainlit references with CopilotKit + AG-UI, update conversation flow diagram, update image flow diagram, update key design decisions table
 - [x] `docs/specs/infrastructure.md` updated: web app container port and tech stack
-- [x] `docs/specs/agent-sessions.md` created as the authoritative spec for canonical agent-owned transcript persistence
+- [x] `docs/specs/agent-session.md` created as the authoritative spec for canonical agent-owned transcript persistence
 - [x] Legacy broad memory spec retired; live docs now point to the session and conversation ownership specs
 - [x] `docs/setup-and-makefile.md` updated: new setup instructions (Node.js prereqs, npm install)
 - [x] `src/web-app/.env.sample` rewritten for Node.js environment
 - [x] `README.md` updated if it references Chainlit
 - [ ] Remove any orphaned Chainlit references in other epics/docs (informational, not rewriting history)
-- [x] `messages` and `references` Cosmos containers marked as deprecated in `infra/modules/cosmos-db.bicep` with comments (containers preserved, not deleted)
+- [x] Legacy `messages` and `references` Cosmos containers retired from live IaC, local bootstrap, and current setup docs
 - [x] Epic 016 doc updated with completion status
 
 #### Definition of Done
@@ -444,7 +453,7 @@ Update all documentation to reflect the CopilotKit + AG-UI architecture. Clean u
 - [x] ARD-016 exists and documents: decision, alternatives considered, rationale, consequences
 - [x] `docs/specs/architecture.md` no longer references Chainlit in current-state sections; diagrams show CopilotKit + AG-UI flow
 - [x] `docs/specs/infrastructure.md` shows web app as Node.js/Next.js on port 3000
-- [x] Current live docs use `agent-sessions.md` as the authoritative session persistence spec and `conversations-state-model.md` as the ownership-boundary spec
+- [x] Current live docs use `agent-session.md` as the authoritative session persistence spec and `conversation-state-model.md` as the ownership-boundary spec
 - [x] `grep -r "chainlit" docs/` returns zero hits in specs and setup docs (epics are historical — ok to keep)
 - [ ] Epic 016 status updated to `Done` with a Validation Snapshot section
 
@@ -704,6 +713,10 @@ Make resumed conversations behave like uninterrupted ones.
 - [ ] Reloading and resuming a thread preserves prior context and UI artifacts
 - [ ] A follow-up question in a resumed thread behaves the same as if the thread had never been closed
 
+#### Notes
+
+- Regression repair (2026-04-03): resume hydration now accepts persisted AG-UI tool messages whose `function_result` payload lives in `contents[].result` instead of `contents[].output`, so restored `search_knowledge_base` cards replay as completed with their stored chunk summaries instead of falling back to a stale `Searching` placeholder.
+
 ---
 
 ### Story 22 — Close Diagnostics, Tests, and Final Validation
@@ -742,15 +755,15 @@ These follow-on stories capture the cleanup needed after the migration landed so
 > **Status:** Completed
 > **Depends on:** Story 10
 
-Finish the documentation split so `agent-sessions.md` is the source of truth for agent-owned transcript persistence and `conversations-state-model.md` is the source of truth for ownership boundaries across the UI, AG-UI, workflows, and specialists.
+Finish the documentation split so `agent-session.md` is the source of truth for agent-owned transcript persistence and `conversation-state-model.md` is the source of truth for ownership boundaries across the UI, AG-UI, workflows, and specialists.
 
 #### Deliverables
 
 - [x] Remove any remaining live-doc claims that the retired broad memory spec is the authoritative implementation spec
-- [x] Ensure live docs point to `agent-sessions.md` for canonical transcript persistence details
-- [x] Ensure live docs point to `conversations-state-model.md` for ownership boundaries and workflow semantics
+- [x] Ensure live docs point to `agent-session.md` for canonical transcript persistence details
+- [x] Ensure live docs point to `conversation-state-model.md` for ownership boundaries and workflow semantics
 - [x] Leave historical epics and scratchpads intact unless they claim present-day authority
-- [x] Make the deprecated `messages` and `references` containers clearly read as infrastructure-only compatibility artifacts in current docs
+- [x] Make the retired `messages` and `references` containers clearly read as non-runtime artifacts in current docs
 
 #### Definition of Done
 
@@ -808,14 +821,18 @@ Close the loop on the old `messages` and `references` model so the runtime and d
 #### Deliverables
 
 - [x] Audit active code, scripts, and runtime paths for reads or writes to `messages` and `references`
-- [x] If no active consumers remain, document them strictly as migration-era compatibility artifacts
-- [x] Record the chosen retention strategy: keep provisioned in IaC plus local init/clean scripts until an explicit export/delete cutoff is scheduled
+- [x] If no active consumers remain, document the retirement gap and identify every path still recreating those containers
+- [x] Record the follow-up implementation scope needed to remove them from IaC, local bootstrap, and current docs
 - [x] Ensure tests and docs reflect no active runtime dependency on those containers
 
 #### Definition of Done
 
 - [x] Active runtime paths do not depend on `messages` or `references`
-- [x] The repo has one documented retention/deprecation plan for the legacy containers
+- [x] The repo has one documented retirement plan for the legacy containers
+
+#### Notes
+
+- Follow-up implementation landed in Story 28 after the live local Cosmos audit showed that the retired containers were still being recreated by Bicep and emulator bootstrap code.
 
 ### Story 27 — Compact Stored Search Results and Lazy Citation Enrichment
 
@@ -838,3 +855,47 @@ Keep resumed conversations lightweight without losing the ability to inspect cit
 - [x] Resumed threads no longer require full raw chunk content in stored tool results to render citations
 - [x] The browser never sends arbitrary chunk handles directly to a search-backed endpoint
 - [x] `make dev-test` passes after the compact-result and lazy-enrichment rework
+
+#### Notes
+
+- Regression repair (2026-04-03): compact-result persistence and transcript-scoped citation lookup now also understand tool messages serialized via AG-UI `contents[].function_result.result`, which keeps lazy source enrichment compatible with older or less-normalized stored transcript shapes. Restored compact citations now auto-load the full chunk on first expand, and they only fall back to the stored summary when the backing chunk can no longer be found.
+
+### Story 28 — Retire Legacy Cosmos Containers From IaC and Bootstrap
+
+> **Status:** Completed
+> **Depends on:** Stories 8, 10, and 26
+
+Remove the unused Chainlit-era `messages` and `references` containers from every current deployment and bootstrap path so new local and Azure environments provision only the active conversation stores.
+
+#### Deliverables
+
+- [x] Remove `messages` and `references` from `infra/azure/infra/modules/cosmos-db.bicep`
+- [x] Regenerate the compiled Azure template so `infra/azure/infra/main.json` no longer declares those containers
+- [x] Remove the legacy container names from `.env.dev`, `.env.dev.template`, emulator bootstrap, and clean targets
+- [x] Update infrastructure and environment docs to describe only `agent-sessions` and `conversations` as current resources
+- [x] Document the Azure cleanup requirement for already-provisioned environments: full teardown/recreate or explicit manual delete, because incremental deployments do not remove orphaned child resources
+
+#### Definition of Done
+
+- [x] Fresh local bootstrap provisions only `agent-sessions` and `conversations` plus their `-test` variants
+- [x] `az bicep build --file infra/azure/infra/main.bicep` succeeds and the generated template no longer contains `messages` or `references`
+- [x] Current live docs no longer imply the retired containers will be redeployed automatically
+
+### Story 29 — Repair README Agent Memory Documentation
+
+> **Status:** Completed
+> **Depends on:** Stories 23 and 28
+
+Repair the README's agent-memory section so it accurately describes the current ownership model, renders without Mermaid parser errors, and points readers at the dedicated memory specs.
+
+#### Deliverables
+
+- [x] Replace the broken README mermaid diagram with a valid diagram showing only the active stores
+- [x] Update the section narrative to state that `agent-sessions` is canonical and `conversations` is metadata-only
+- [x] Point the section to `docs/specs/agent-session.md` and `docs/specs/conversation-state-model.md`
+- [x] Update the README documentation index to include both memory specs under their current filenames
+
+#### Definition of Done
+
+- [x] The README agent-memory section renders without the prior Mermaid parse error
+- [x] README readers land on the dedicated memory specs instead of stale or misleading container descriptions

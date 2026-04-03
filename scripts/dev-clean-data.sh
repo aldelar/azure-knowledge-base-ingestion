@@ -72,8 +72,6 @@ database = client.get_database_client(db_name)
 containers = {
     os.environ.get("COSMOS_SESSIONS_CONTAINER", "agent-sessions"): "/id",
     os.environ.get("COSMOS_CONVERSATIONS_CONTAINER", "conversations"): "/userId",
-    os.environ.get("COSMOS_MESSAGES_CONTAINER", "messages"): "/conversationId",
-    os.environ.get("COSMOS_REFERENCES_CONTAINER", "references"): "/conversationId",
 }
 
 for container_name, pk_path in containers.items():

@@ -98,6 +98,75 @@ describe("CopilotMessageRenderer", () => {
     );
   });
 
+  it("uses same-turn tool citations for the final assistant answer", () => {
+    const userMessage = {
+      id: "user-turn-1",
+      role: "user",
+      content: "Explain agentic retrieval.",
+    };
+
+    const toolCallAssistantMessage = {
+      id: "assistant-tool-call-1",
+      role: "assistant",
+      toolCalls: [
+        {
+          id: "tool-call-turn-1",
+          type: "function",
+          function: {
+            name: "search_knowledge_base",
+            arguments: JSON.stringify({ query: "agentic retrieval" }),
+          },
+        },
+      ],
+    };
+
+    const toolResultMessage = {
+      id: "tool-result-turn-1",
+      role: "tool",
+      toolCallId: "tool-call-turn-1",
+      content: JSON.stringify({
+        results: [
+          {
+            ref_number: 3,
+            article_id: "agentic-retrieval-overview-html_en-us",
+            title: "Agentic retrieval in Azure AI Search",
+            section_header: "Why use agentic retrieval",
+            content: "Agentic retrieval decomposes complex questions into subqueries.",
+            image_urls: ["images/agentric-retrieval-example.png"],
+            images: [
+              {
+                name: "agentric-retrieval-example.png",
+                url: "/api/images/agentic-retrieval-overview-html_en-us/images/agentric-retrieval-example.png",
+              },
+            ],
+          },
+        ],
+      }),
+    };
+
+    const finalAssistantMessage = {
+      id: "assistant-final-1",
+      role: "assistant",
+      content: "Agentic retrieval improves recall for complex questions.",
+    };
+
+    render(
+      <CopilotMessageRenderer
+        AssistantMessage={AssistantMessage}
+        UserMessage={UserMessage}
+        inProgress={false}
+        index={3}
+        isCurrentMessage={false}
+        message={finalAssistantMessage as any}
+        messages={[userMessage, toolCallAssistantMessage, toolResultMessage, finalAssistantMessage] as any}
+      />,
+    );
+
+    expect(screen.getByTestId("assistant-message")).toHaveTextContent(
+      "Agentic retrieval improves recall for complex questions.",
+    );
+  });
+
   it("shows running tool activity before the tool result arrives", () => {
     const assistantMessage = {
       id: "assistant-2",
@@ -154,8 +223,25 @@ describe("CopilotMessageRenderer", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders reasoning messages without dropping them from resumed threads", () => {
+  it("renders reasoning messages while the run is in progress", () => {
     render(
+      <CopilotMessageRenderer
+        AssistantMessage={AssistantMessage}
+        UserMessage={UserMessage}
+        inProgress={true}
+        index={0}
+        isCurrentMessage={true}
+        message={{ id: "reasoning-1", role: "reasoning", content: "Comparing the best citation matches." } as any}
+        messages={[] as any}
+      />,
+    );
+
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Comparing the best citation matches.")).toBeInTheDocument();
+  });
+
+  it("hides reasoning messages once the run is finished", () => {
+    const { container } = render(
       <CopilotMessageRenderer
         AssistantMessage={AssistantMessage}
         UserMessage={UserMessage}
@@ -167,7 +253,24 @@ describe("CopilotMessageRenderer", () => {
       />,
     );
 
-    expect(screen.getByText("Reasoning")).toBeInTheDocument();
-    expect(screen.getByText("Comparing the best citation matches.")).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows a transient thinking card while waiting for the assistant reply", () => {
+    render(
+      <CopilotMessageRenderer
+        AssistantMessage={AssistantMessage}
+        UserMessage={UserMessage}
+        inProgress={true}
+        index={0}
+        isCurrentMessage={true}
+        message={{ id: "user-1", role: "user", content: "Tell me about Azure AI Search." } as any}
+        messages={[] as any}
+      />,
+    );
+
+    expect(screen.getByTestId("user-message")).toHaveTextContent("Tell me about Azure AI Search.");
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Working on a response…")).toBeInTheDocument();
   });
 });

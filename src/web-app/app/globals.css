@@ -401,14 +401,61 @@ textarea {
   background: #f8fafc;
   border: 1px solid var(--workspace-border);
   border-radius: 14px;
-  padding: 14px;
+  overflow: hidden;
   scroll-margin-top: 120px;
 }
 
+.citationCardToggle {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  padding: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.citationCardToggle:hover {
+  background: rgba(11, 92, 171, 0.04);
+}
+
 .citationCardHeader {
+  align-items: center;
   display: grid;
   gap: 8px;
   grid-template-columns: auto 1fr;
+}
+
+.citationCardLine {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.citationCardTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citationCardSeparator {
+  color: var(--workspace-muted);
+  flex: 0 0 auto;
+}
+
+.citationCardPreview {
+  color: var(--workspace-muted);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .citationBadge {
@@ -423,9 +470,89 @@ textarea {
   text-transform: uppercase;
 }
 
-.citationPreview {
-  margin: 12px 0 0;
-  white-space: pre-wrap;
+.citationCardBody {
+  border-top: 1px solid var(--workspace-border);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.citationMarkdown {
+  color: var(--workspace-text);
+  line-height: 1.6;
+}
+
+.citationMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.citationMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.citationMarkdown p,
+.citationMarkdown ul,
+.citationMarkdown ol,
+.citationMarkdown blockquote {
+  margin: 0 0 12px;
+}
+
+.citationMarkdown h1,
+.citationMarkdown h2,
+.citationMarkdown h3,
+.citationMarkdown h4,
+.citationMarkdown h5,
+.citationMarkdown h6,
+.citationSummaryHeading {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+
+.citationMarkdownSummary .citationSummaryHeading {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.citationMarkdown a {
+  color: var(--workspace-accent);
+}
+
+.citationTableWrapper {
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  margin: 0 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.citationTable {
+  border-collapse: collapse;
+  min-width: 100%;
+  width: 100%;
+}
+
+.citationTable th,
+.citationTable td {
+  border-bottom: 1px solid var(--workspace-border);
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.citationTable th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.citationTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.citationStatus {
+  color: var(--workspace-muted);
+  margin: 0;
 }
 
 .citationImageStrip {
@@ -436,10 +563,21 @@ textarea {
 }
 
 .citationImage {
+  background: #fff;
   border: 1px solid var(--workspace-border);
   border-radius: 12px;
   height: auto;
-  max-width: min(220px, 100%);
+  max-width: 100%;
+}
+
+.citationMarkdownImage {
+  display: block;
+  margin: 0 0 12px;
+  max-width: min(100%, 720px);
+}
+
+.reasoningCardTransient {
+  border-style: dashed;
 }
 
 .loadingState {

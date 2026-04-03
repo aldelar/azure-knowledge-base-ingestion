@@ -113,7 +113,7 @@ flowchart LR
 
 ## Context Aware & Vision Grounded KB Agent
 
-The solution consists of two services: a standalone **KB Agent** deployed as an **Azure Container App** (with Foundry integration for tracing and registration) and a **Next.js + CopilotKit** web app that calls the agent via the **AG-UI protocol** through an APIM AI Gateway. The agent owns conversation history — it persists and loads `AgentSession` state via Cosmos DB using the Agent Framework's session persistence model (see [Agent Sessions](agent-sessions.md)).
+The solution consists of two services: a standalone **KB Agent** deployed as an **Azure Container App** (with Foundry integration for tracing and registration) and a **Next.js + CopilotKit** web app that calls the agent via the **AG-UI protocol** through an APIM AI Gateway. The agent owns conversation history — it persists and loads `AgentSession` state via Cosmos DB using the Agent Framework's session persistence model (see [Agent Session](agent-session.md)).
 
 ### Agent (Container App)
 
@@ -242,7 +242,7 @@ Despite explicit system prompt instructions, LLMs generate image URLs in many cr
 | 2 | Microsoft Agent Framework | Provides `Agent` with built-in tool calling, conversation threading, and Azure OpenAI integration — avoids manual Responses API loop management. |
 | 3 | AG-UI integration | Web app calls agent via a Next.js CopilotKit runtime route backed by AG-UI `HttpAgent`. Standard thread-based protocol, local dev uses plain HTTP, deployed uses APIM proxy with Entra bearer token. |
 | 4 | Vision middleware for image injection | `ChatMiddleware` intercepts tool results and injects images as `Content.from_data()`. The framework auto-converts to OpenAI's vision format. The LLM can reason about visual content (diagrams, architecture charts) not just text descriptions — producing higher-fidelity answers. |
-| 5 | Agent-owned conversation persistence | Agent persists `AgentSession` to Cosmos DB `agent-sessions` container (partition key `/id`) via `CosmosAgentSessionRepository`. Stored search tool results are compacted to stable chunk handles plus summaries, and the web app reloads fuller source detail only through an agent-owned citation lookup path. See [Agent Sessions](agent-sessions.md). |
+| 5 | Agent-owned conversation persistence | Agent persists `AgentSession` to Cosmos DB `agent-sessions` container (partition key `/id`) via `CosmosAgentSessionRepository`. Stored search tool results are compacted to stable chunk handles plus summaries, and the web app reloads fuller source detail only through an agent-owned citation lookup path. See [Agent Session](agent-session.md). |
 | 6 | Same-origin image proxy | Avoids SAS URL complexity (token expiry, CORS). CopilotKit renders markdown image links through the browser, which fetches from the same-origin proxy route. |
 | 7 | Agent-owned turns, web-owned sidebar metadata | The agent persists full turn history in `agent-sessions`. The web app persists only thread metadata in `conversations`, which keeps the BFF thin and avoids duplicating message storage. |
 | 8 | Hybrid search | Best relevance — combines vector similarity and keyword matching. |

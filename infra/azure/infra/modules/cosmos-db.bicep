@@ -120,68 +120,6 @@ resource conversationsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDataba
 }
 
 // ---------------------------------------------------------------------------
-// Container: messages (partition key: /conversationId)
-// DEPRECATED: previously used by the Chainlit DataLayer for per-message storage.
-// The active runtime no longer reads or writes this container. Retained only as a
-// migration-era compatibility artifact until legacy data can be exported and removed.
-// ---------------------------------------------------------------------------
-resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  parent: database
-  name: 'messages'
-  properties: {
-    resource: {
-      id: 'messages'
-      partitionKey: {
-        paths: ['/conversationId']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        includedPaths: [
-          { path: '/*' }
-        ]
-        excludedPaths: [
-          { path: '/content/*' }
-          { path: '/"_etag"/?' }
-        ]
-      }
-      defaultTtl: -1
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Container: references (partition key: /conversationId)
-// DEPRECATED: previously used by the Chainlit DataLayer for citation/reference storage.
-// The active runtime no longer reads or writes this container. Retained only as a
-// migration-era compatibility artifact until legacy data can be exported and removed.
-// ---------------------------------------------------------------------------
-resource referencesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  parent: database
-  name: 'references'
-  properties: {
-    resource: {
-      id: 'references'
-      partitionKey: {
-        paths: ['/conversationId']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        includedPaths: [
-          { path: '/*' }
-        ]
-        excludedPaths: [
-          { path: '/content/*' }
-          { path: '/"_etag"/?' }
-        ]
-      }
-      defaultTtl: -1
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
 output cosmosAccountId string = cosmosAccount.id

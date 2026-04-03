@@ -50,8 +50,6 @@ All resources follow the pattern `{prefix}-{projectName}-{env}` (e.g., `func-{pr
 | → Database | `cosmos-db.bicep` | `kb-agent` | — |
 | → Container | `cosmos-db.bicep` | `agent-sessions` | Partition key `/id` |
 | → Container | `cosmos-db.bicep` | `conversations` | Partition key `/userId` |
-| → Container | `cosmos-db.bicep` | `messages` | Partition key `/conversationId` |
-| → Container | `cosmos-db.bicep` | `references` | Partition key `/conversationId` |
 | Entra App Registration | Pre-provision hook | `webapp-{project}-{env}` | — |
 
 > `{project}` is the `PROJECT_NAME` (default `{project}`). `{env}` is the `AZURE_ENV_NAME` (e.g., `dev`, `staging`, `prod`).
@@ -74,7 +72,7 @@ infra/
 │           ├── ai-services.bicep           # AI Services account + model deployments + RBAC
 │           ├── search.bicep                # AI Search service + RBAC
 │           ├── foundry-project.bicep       # Foundry project (tracing + registration only — no ACR connection or capability host)
-│           ├── cosmos-db.bicep             # Cosmos DB NoSQL (serverless) — database + 4 containers
+│           ├── cosmos-db.bicep             # Cosmos DB NoSQL (serverless) — database + 2 containers
 │           ├── cosmos-db-role.bicep        # Cosmos DB Built-in Data Contributor role assignment
 │           ├── function-app.bicep          # Reusable Functions Container App module (called 4×, one per function)
 │           ├── container-registry.bicep    # Azure Container Registry (Basic) + AcrPull RBAC
@@ -262,7 +260,7 @@ The project also has an APIM connection resource (`apim-connection`) linking it 
 
 ### Cosmos DB (`cosmos-db.bicep`)
 
-Serverless NoSQL database for conversation persistence. The active runtime uses an agent-owned `agent-sessions` container for full turn history and a web-app-owned `conversations` container for sidebar metadata. The `messages` and `references` containers remain provisioned only as deprecated compatibility artifacts. They are retained in IaC plus local init/clean scripts for migration-era data safety, but no live app runtime path reads from or writes to them. See [Agent Sessions](agent-sessions.md) for canonical transcript persistence and [Conversation State Model](conversations-state-model.md) for ownership boundaries.
+Serverless NoSQL database for conversation persistence. The active runtime uses an agent-owned `agent-sessions` container for full turn history and a web-app-owned `conversations` container for sidebar metadata. The retired Chainlit-era `messages` and `references` containers are no longer provisioned by current IaC or local bootstrap scripts. Existing Azure environments created before this retirement must be recreated or cleaned up explicitly to remove those legacy containers, because incremental Bicep deployments do not delete child resources that are no longer declared. See [Agent Session](agent-session.md) for canonical transcript persistence and [Conversation State Model](conversation-state-model.md) for ownership boundaries.
 
 | Setting | Value |
 |---------|-------|
@@ -270,7 +268,7 @@ Serverless NoSQL database for conversation persistence. The active runtime uses 
 | Capability | `EnableServerless` |
 | Consistency | Session |
 | Database | `kb-agent` |
-| Containers | Active: `agent-sessions` (PK `/id`), `conversations` (PK `/userId`); Deprecated: `messages` (PK `/conversationId`), `references` (PK `/conversationId`) |
+| Containers | `agent-sessions` (PK `/id`), `conversations` (PK `/userId`) |
 | Public Network | Enabled |
 
 The `cosmos-db-role.bicep` module assigns the **Cosmos DB Built-in Data Contributor** role (role ID `00000000-0000-0000-0000-000000000002`) to a specified principal. Called twice: once for the web app Container App identity and once for the agent Container App identity.

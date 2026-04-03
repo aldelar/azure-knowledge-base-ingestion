@@ -310,6 +310,61 @@ async def test_write_compacts_search_tool_results_for_storage(repo_with_containe
 
 
 @pytest.mark.asyncio
+async def test_write_compacts_function_result_content_blocks_for_storage(repo_with_container, mock_container):
+    session_data = {
+        "state": {
+            "messages": [
+                {
+                    "id": "tool-1",
+                    "role": "tool",
+                    "toolCallId": "tool-call-1",
+                    "contents": [
+                        {
+                            "type": "function_result",
+                            "call_id": "tool-call-1",
+                            "name": "search_knowledge_base",
+                            "result": {
+                                "results": [
+                                    {
+                                        "ref_number": 1,
+                                        "chunk_id": "article-1_0",
+                                        "article_id": "article-1",
+                                        "chunk_index": 0,
+                                        "indexed_at": "2026-04-01T00:00:00Z",
+                                        "title": "Overview",
+                                        "section_header": "Intro",
+                                        "summary": "Compact summary",
+                                        "content": "Full chunk content that should not remain in storage.",
+                                    },
+                                ],
+                                "summary": "1 result covering: Overview",
+                            },
+                        },
+                    ],
+                },
+            ],
+        },
+    }
+
+    await repo_with_container.write_to_storage("conv-compact-contents", session_data)
+
+    upserted = mock_container.upsert_item.call_args[0][0]
+    stored_row = upserted["session"]["state"]["messages"][0]["contents"][0]["result"]["results"][0]
+    assert stored_row == {
+        "ref_number": 1,
+        "content_source": "summary",
+        "chunk_id": "article-1_0",
+        "article_id": "article-1",
+        "chunk_index": 0,
+        "indexed_at": "2026-04-01T00:00:00Z",
+        "title": "Overview",
+        "section_header": "Intro",
+        "summary": "Compact summary",
+        "content": "Compact summary",
+    }
+
+
+@pytest.mark.asyncio
 async def test_write_leaves_non_search_tool_payloads_unchanged(repo_with_container, mock_container):
     session_data = {
         "state": {

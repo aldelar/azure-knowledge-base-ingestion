@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "2383625443107167338"
+      "templateHash": "10522478867275924873"
     }
   },
   "parameters": {
@@ -3866,7 +3866,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "9927663241581559672"
+              "templateHash": "6368076191302805363"
             }
           },
           "parameters": {
@@ -4002,78 +4002,6 @@
                       }
                     ],
                     "excludedPaths": [
-                      {
-                        "path": "/\"_etag\"/?"
-                      }
-                    ]
-                  },
-                  "defaultTtl": -1
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('cosmos-{0}', parameters('baseName')), parameters('databaseName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
-              "apiVersion": "2024-05-15",
-              "name": "[format('{0}/{1}/{2}', format('cosmos-{0}', parameters('baseName')), parameters('databaseName'), 'messages')]",
-              "properties": {
-                "resource": {
-                  "id": "messages",
-                  "partitionKey": {
-                    "paths": [
-                      "/conversationId"
-                    ],
-                    "kind": "Hash"
-                  },
-                  "indexingPolicy": {
-                    "indexingMode": "consistent",
-                    "includedPaths": [
-                      {
-                        "path": "/*"
-                      }
-                    ],
-                    "excludedPaths": [
-                      {
-                        "path": "/content/*"
-                      },
-                      {
-                        "path": "/\"_etag\"/?"
-                      }
-                    ]
-                  },
-                  "defaultTtl": -1
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('cosmos-{0}', parameters('baseName')), parameters('databaseName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
-              "apiVersion": "2024-05-15",
-              "name": "[format('{0}/{1}/{2}', format('cosmos-{0}', parameters('baseName')), parameters('databaseName'), 'references')]",
-              "properties": {
-                "resource": {
-                  "id": "references",
-                  "partitionKey": {
-                    "paths": [
-                      "/conversationId"
-                    ],
-                    "kind": "Hash"
-                  },
-                  "indexingPolicy": {
-                    "indexingMode": "consistent",
-                    "includedPaths": [
-                      {
-                        "path": "/*"
-                      }
-                    ],
-                    "excludedPaths": [
-                      {
-                        "path": "/content/*"
-                      },
                       {
                         "path": "/\"_etag\"/?"
                       }

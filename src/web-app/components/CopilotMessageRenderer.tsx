@@ -71,8 +71,27 @@ function findToolResultMessage(messages: AgUiMessageLike[], toolCallId: string):
   return messages.find((message) => message.role === "tool" && message.toolCallId === toolCallId);
 }
 
-function getAssistantSearchCitations(message: AgUiMessageLike, messages: AgUiMessageLike[]) {
-  const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+function getTurnBounds(messages: AgUiMessageLike[], index: number): { start: number; end: number } {
+  let start = index;
+  while (start > 0 && messages[start - 1]?.role !== "user") {
+    start -= 1;
+  }
+
+  let end = index;
+  while (end + 1 < messages.length && messages[end + 1]?.role !== "user") {
+    end += 1;
+  }
+
+  return { start, end };
+}
+
+function getAssistantSearchCitations(message: AgUiMessageLike, messages: AgUiMessageLike[], index: number) {
+  const { start, end } = getTurnBounds(messages, index);
+  const toolCalls = messages
+    .slice(start, end + 1)
+    .filter((candidate) => candidate.role === "assistant")
+    .flatMap((candidate) => Array.isArray(candidate.toolCalls) ? candidate.toolCalls : []);
+
   return toolCalls.flatMap((toolCall) => {
     if (toolCall.function?.name !== "search_knowledge_base") {
       return [];
@@ -99,6 +118,43 @@ function formatToolResultPreview(result: unknown): string | null {
   }
 
   return null;
+}
+
+function renderReasoningCard({
+  content,
+  id,
+  label,
+  meta,
+  transient = false,
+}: {
+  content: string;
+  id: string;
+  label: string;
+  meta?: string;
+  transient?: boolean;
+}): ReactNode {
+  return (
+    <section
+      className={transient ? "reasoningCard reasoningCardTransient" : "reasoningCard"}
+      data-message-id={id}
+    >
+      <div className="reasoningCardHeader">
+        <span className="reasoningCardEyebrow">{label}</span>
+        {meta ? <span className="reasoningCardMeta">{meta}</span> : null}
+      </div>
+      <p className="reasoningCardContent">{content}</p>
+    </section>
+  );
+}
+
+function renderTransientThinkingMessage(id: string): ReactNode {
+  return renderReasoningCard({
+    content: "Working on a response…",
+    id,
+    label: "Thinking",
+    meta: "Live",
+    transient: true,
+  });
 }
 
 function renderToolCall(
@@ -133,21 +189,22 @@ function renderToolCall(
   );
 }
 
-function renderReasoningMessage(message: AgUiMessageLike): ReactNode {
+function renderReasoningMessage(message: AgUiMessageLike, inProgress: boolean): ReactNode {
+  if (!inProgress) {
+    return null;
+  }
+
   const content = coerceMessageContent(message.content);
   if (!content) {
     return null;
   }
 
-  return (
-    <section className="reasoningCard" data-message-id={message.id}>
-      <div className="reasoningCardHeader">
-        <span className="reasoningCardEyebrow">Reasoning</span>
-        {message.encryptedValue ? <span className="reasoningCardMeta">Protected trace</span> : null}
-      </div>
-      <p className="reasoningCardContent">{content}</p>
-    </section>
-  );
+  return renderReasoningCard({
+    content,
+    id: message.id,
+    label: "Thinking",
+    meta: message.encryptedValue ? "Protected trace" : undefined,
+  });
 }
 
 export function CopilotMessageRenderer({
@@ -171,13 +228,20 @@ export function CopilotMessageRenderer({
   }
 
   if (message.role === "user") {
-    return UserMessage ? (
+    const userMessage = UserMessage ? (
       <UserMessage key={index} rawData={message} message={message} ImageRenderer={ImageRenderer} />
     ) : null;
+
+    return inProgress && isCurrentMessage ? (
+      <>
+        {userMessage}
+        {renderTransientThinkingMessage(`${message.id}-thinking`)}
+      </>
+    ) : userMessage;
   }
 
   if (message.role === "reasoning") {
-    return renderReasoningMessage(message);
+    return renderReasoningMessage(message, inProgress);
   }
 
   if (message.role !== "assistant") {
@@ -185,7 +249,7 @@ export function CopilotMessageRenderer({
   }
 
   const visibleContent = coerceMessageContent(message.content)?.trim();
-  const searchCitations = getAssistantSearchCitations(message, messages);
+  const searchCitations = getAssistantSearchCitations(message, messages, index);
   const transformedContent = visibleContent ? transformAssistantContent(visibleContent, searchCitations) : visibleContent;
   const shouldRenderAssistantMessage = Boolean(visibleContent) || Boolean(message.generativeUI);
 
@@ -210,8 +274,16 @@ export function CopilotMessageRenderer({
   ) : null;
 
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+  const shouldRenderThinkingFallback =
+    inProgress && isCurrentMessage && !shouldRenderAssistantMessage && toolCalls.length === 0;
+
   if (toolCalls.length === 0) {
-    return assistantContent;
+    return (
+      <>
+        {assistantContent}
+        {shouldRenderThinkingFallback ? renderTransientThinkingMessage(`${message.id}-thinking`) : null}
+      </>
+    );
   }
 
   return (

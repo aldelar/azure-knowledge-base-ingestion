@@ -66,6 +66,8 @@ services:
       - ./.env.dev
     environment:
       OTEL_SERVICE_NAME: kb-web-app
+    volumes:
+      - ./kb/serving:/app/kb/serving:ro
     ports:
       - "3000:3000"
     healthcheck:

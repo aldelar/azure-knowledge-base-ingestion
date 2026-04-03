@@ -1,8 +1,8 @@
-# Agent Sessions — Canonical Conversation Persistence
+# Agent Session Persistence — Canonical Conversation Persistence
 
 > **Status:** Current implementation reflects Epic 016.
 > **Purpose:** Define the agent-owned persistence model for `agent-sessions`, the canonical transcript store for user-visible conversations.
-> **Companion specs:** `docs/specs/conversations-state-model.md` defines ownership boundaries across the web app, AG-UI, workflows, and specialists. `docs/specs/infrastructure.md` defines the Cosmos DB provisioning.
+> **Companion specs:** `docs/specs/conversation-state-model.md` defines ownership boundaries across the web app, AG-UI, workflows, and specialists. `docs/specs/infrastructure.md` defines the Cosmos DB provisioning.
 
 ## 1. Scope
 
@@ -19,7 +19,7 @@ This spec does not cover:
 
 - the full UI metadata model for `conversations`
 - workflow checkpoint schemas
-- deprecated legacy containers beyond noting that they are not part of the active runtime path
+- retired legacy containers beyond noting that they are no longer provisioned by current IaC or local bootstrap
 
 ## 2. Current Model
 
@@ -94,7 +94,13 @@ Before `CosmosAgentSessionRepository` upserts a serialized session, search tool 
 - proxy-safe image metadata
 - `content_source: "summary"`
 
-The stored `content` field in that compact form is a summary-sized preview, not the original full chunk body.
+#### Why `content` and `summary` hold the same value
+
+The stored `content` field is intentionally set to the same summary-sized preview as `summary`. It is **not** the original full chunk body. The `content_source: "summary"` marker signals this.
+
+`content` is kept (rather than omitted or set to `""`) as a **schema compatibility shim**: any code path that generically reads `content` from a search result row — session deserialization, transcript replay, or future consumers — gets a meaningful value instead of a missing key or empty string. The summary preview is good enough for those scenarios.
+
+When the web app needs the full chunk body (e.g., for the citation detail panel), the **citation lookup endpoint** re-fetches the current chunk directly from AI Search by `chunk_id` and overwrites `content` with the live full text, setting `content_source: "full"`. The stored summary is never served as the final citation content.
 
 Example compact stored row:
 
@@ -113,7 +119,7 @@ Example compact stored row:
 }
 ```
 
-This keeps the canonical transcript resumable without forcing large raw search payloads to remain in long-term session storage.
+This keeps the canonical transcript resumable without forcing large raw search payloads into long-term session storage, while ensuring every row remains structurally complete for any downstream reader.
 
 ### 3.2 `conversations` (related but non-canonical)
 
@@ -125,6 +131,30 @@ This keeps the canonical transcript resumable without forcing large raw search p
 | Canonical for resume | No |
 
 `conversations` stores sidebar metadata only. It is intentionally not a second transcript store.
+
+The `id` field of each document is the **`threadId`** — the same identifier the web app passes to the AG-UI runtime and that the agent uses as the `agent-sessions` partition key. This shared `threadId` is the join key between the two containers: the web app reads sidebar metadata from `conversations` and resolves transcript/citation data by proxying to the agent's `agent-sessions` through read-only API routes.
+
+Schema of a `conversations` document:
+
+```json
+{
+  "id": "<threadId>",
+  "userId": "<entra-oid>",
+  "userIdentifier": "<display-name-or-email>",
+  "name": "How do I configure AI Search?",
+  "createdAt": "2026-04-01T10:00:00.000Z",
+  "updatedAt": "2026-04-01T10:05:00.000Z"
+}
+```
+
+| Field | Purpose |
+|-------|---------|
+| `id` | The `threadId` shared with `agent-sessions` — the join key across both containers |
+| `userId` | Partition key; Entra OID of the authenticated user |
+| `userIdentifier` | Display name or email, used for UI rendering |
+| `name` | Conversation title shown in the sidebar |
+| `createdAt` | Timestamp when the conversation was created |
+| `updatedAt` | Timestamp of the last title update or activity |
 
 ## 4. Ownership Rules
 
@@ -216,7 +246,7 @@ This spec stays focused on `agent-sessions`, but the ownership rule remains impo
 - specialist agents may keep optional local state or internal sessions if needed
 - those specialist-local stores remain internal and non-canonical
 
-For the full cross-surface model, see `docs/specs/conversations-state-model.md`.
+For the full cross-surface model, see `docs/specs/conversation-state-model.md`.
 
 ## 8. Graceful Degradation
 
@@ -239,4 +269,4 @@ Effects:
 | Stored search tool payload | Compact handles + summaries, not full chunk bodies |
 | Full chunk inspection after resume | Agent-owned citation lookup via read-only proxy |
 | Specialist-local state | Allowed internally, never canonical |
-| Deprecated `messages` / `references` containers | Not part of the active runtime path |
+| Retired `messages` / `references` containers | Not provisioned by the current deployment model |

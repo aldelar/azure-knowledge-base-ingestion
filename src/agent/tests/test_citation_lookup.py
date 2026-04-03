@@ -226,3 +226,63 @@ class TestCitationLookupEndpoint:
 
         assert response.status_code == 200
         assert response.json() == {"status": "missing"}
+
+    def test_returns_ready_for_function_result_content_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("REQUIRE_AUTH", "false")
+
+        serialized_session = {
+            "state": {
+                "messages": [
+                    {
+                        "id": "tool-1",
+                        "role": "tool",
+                        "contents": [
+                            {
+                                "type": "function_result",
+                                "call_id": "tool-call-1",
+                                "name": "search_knowledge_base",
+                                "result": {
+                                    "results": [
+                                        {
+                                            "ref_number": 1,
+                                            "chunk_id": "article-1_0",
+                                            "article_id": "article-1",
+                                            "chunk_index": 0,
+                                            "indexed_at": "2026-04-01T00:00:00Z",
+                                            "title": "Overview",
+                                            "section_header": "Intro",
+                                            "summary": "Stored summary",
+                                            "content": "Stored summary",
+                                            "content_source": "summary",
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        }
+
+        app = Starlette()
+        app.mount("/citations", _create_citation_lookup_app(_FakeSessionRepository(serialized_session)))
+
+        class _Chunk:
+            id = "article-1_0"
+            article_id = "article-1"
+            chunk_index = 0
+            content = "Full chunk content loaded on demand."
+            title = "Overview"
+            section_header = "Intro"
+            summary = "Fresh summary"
+            indexed_at = "2026-04-01T00:00:00Z"
+            image_urls = []
+
+        client = TestClient(app, raise_server_exceptions=False)
+        with pytest.MonkeyPatch.context() as route_patch:
+            route_patch.setattr("main.get_chunk_by_id", lambda document_id, security_filter=None: _Chunk())
+            response = client.get("/citations/thread-123/tool-call-1/1")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+        assert response.json()["citation"]["content"] == "Full chunk content loaded on demand."

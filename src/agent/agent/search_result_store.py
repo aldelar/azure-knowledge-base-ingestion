@@ -51,7 +51,14 @@ def find_citation_reference(
                 continue
             if message.get("role") != "tool":
                 continue
-            if str(message.get("toolCallId") or "") != tool_call_id:
+
+            function_result_content = _get_function_result_content(message)
+            stored_tool_call_id = str(
+                message.get("toolCallId")
+                or (function_result_content.get("call_id") if function_result_content else "")
+                or ""
+            )
+            if stored_tool_call_id != tool_call_id:
                 continue
 
             payload = _parse_message_payload(message)
@@ -96,8 +103,8 @@ def _compact_search_tool_message(message: Any) -> None:
     if not isinstance(message, dict) or message.get("role") != "tool":
         return
 
-    target_field, original_value = _get_message_payload_field(message)
-    if target_field is None:
+    payload_target, target_field, original_value = _get_message_payload_target(message)
+    if target_field is None or payload_target is None:
         return
 
     payload = _coerce_payload(original_value)
@@ -109,11 +116,9 @@ def _compact_search_tool_message(message: Any) -> None:
         return
 
     if isinstance(original_value, str):
-        message[target_field] = json.dumps(compacted_payload, ensure_ascii=False)
+        payload_target[target_field] = json.dumps(compacted_payload, ensure_ascii=False)
     else:
-        message[target_field] = compacted_payload
-
-    message.setdefault("toolName", SEARCH_TOOL_NAME)
+        payload_target[target_field] = compacted_payload
 
 
 def _get_message_payload_field(message: dict[str, Any]) -> tuple[str | None, Any]:
@@ -123,8 +128,45 @@ def _get_message_payload_field(message: dict[str, Any]) -> tuple[str | None, Any
     return None, None
 
 
+def _get_function_result_content(message: dict[str, Any]) -> dict[str, Any] | None:
+    contents = message.get("contents")
+    if not isinstance(contents, list):
+        return None
+
+    for item in contents:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") in {"function_result", "function_call_output"}:
+            return item
+
+    return None
+
+
+def _get_content_payload_field(content: dict[str, Any]) -> tuple[str | None, Any]:
+    for field in ("result", "output", "content"):
+        if field in content:
+            return field, content.get(field)
+    return None, None
+
+
+def _get_message_payload_target(message: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None, Any]:
+    field, value = _get_message_payload_field(message)
+    if field is not None:
+        return message, field, value
+
+    content = _get_function_result_content(message)
+    if content is None:
+        return None, None, None
+
+    field, value = _get_content_payload_field(content)
+    if field is None:
+        return None, None, None
+
+    return content, field, value
+
+
 def _parse_message_payload(message: dict[str, Any]) -> dict[str, Any] | None:
-    _field, value = _get_message_payload_field(message)
+    _target, _field, value = _get_message_payload_target(message)
     return _coerce_payload(value)
 
 
@@ -144,7 +186,11 @@ def _coerce_payload(value: Any) -> dict[str, Any] | None:
 
 
 def _is_search_tool_message(message: dict[str, Any], payload: dict[str, Any] | None) -> bool:
-    tool_name = message.get("toolName") or message.get("name")
+    tool_name = message.get("name")
+    if not tool_name:
+        function_result_content = _get_function_result_content(message)
+        if function_result_content:
+            tool_name = function_result_content.get("name")
     if tool_name == SEARCH_TOOL_NAME:
         return True
 

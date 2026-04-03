@@ -176,20 +176,6 @@ function getCitationDedupKey(citation: SearchCitationResult): string {
     .join("||");
 }
 
-function extractMentionedRefNumbers(content: string): Set<number> {
-  const mentions = new Set<number>();
-
-  for (const match of content.matchAll(/Ref\s*#\s*(\d+)/gi)) {
-    mentions.add(Number(match[1]));
-  }
-
-  for (const match of content.matchAll(/#citation-ref-(\d+)/gi)) {
-    mentions.add(Number(match[1]));
-  }
-
-  return mentions;
-}
-
 function canonicalizeRefSequence(sequence: string): string {
   const numbers = [...sequence.matchAll(/#\s*(\d+)/g)].map((match) => match[1]);
   const separators = [...sequence.matchAll(/#\s*\d+(\s*(?:,|\/|and|or)\s*)?/gi)].map((match) => match[1] ?? "");
@@ -254,61 +240,6 @@ function normalizeInlineImages(
 
     return `![${alt}](${proxyUrl})`;
   });
-}
-
-function appendMissingReferenceTokens(content: string, citations: SearchCitationResult[]): string {
-  const mentionedRefs = extractMentionedRefNumbers(content);
-  const missingRefs = citations
-    .map((citation) => citation.ref_number)
-    .filter((refNumber): refNumber is number => typeof refNumber === "number" && !mentionedRefs.has(refNumber))
-    .map((refNumber) => `[Ref #${refNumber}](#citation-ref-${refNumber})`);
-
-  if (missingRefs.length === 0) {
-    return content;
-  }
-
-  const trimmedContent = content.trim();
-  const suffix = `Sources: ${missingRefs.join(" ")}`;
-  return trimmedContent ? `${trimmedContent}\n\n${suffix}` : suffix;
-}
-
-function appendInlineImageFallbacks(content: string, citations: SearchCitationResult[]): string {
-  if (content.match(anyMarkdownImagePattern)) {
-    return content;
-  }
-
-  const mentionedRefs = extractMentionedRefNumbers(content);
-  const sourceCitations = mentionedRefs.size
-    ? citations.filter((citation) => citation.ref_number && mentionedRefs.has(citation.ref_number))
-    : citations;
-
-  const fallbackImages = sourceCitations.flatMap((citation) => {
-    const images = getCitationImages(citation, citations);
-    if (images.length === 0) {
-      return [];
-    }
-
-    return [
-      {
-        image: images[0],
-        refNumber: citation.ref_number,
-      },
-    ];
-  });
-
-  if (fallbackImages.length === 0) {
-    return content;
-  }
-
-  const fallbackMarkdown = fallbackImages
-    .map(({ image, refNumber }, index) => {
-      const alt = image.alt || (refNumber ? `Ref #${refNumber} image` : `Citation image ${index + 1}`);
-      return `![${alt}](${image.url})`;
-    })
-    .join("\n\n");
-
-  const trimmedContent = content.trim();
-  return trimmedContent ? `${trimmedContent}\n\n${fallbackMarkdown}` : fallbackMarkdown;
 }
 
 export function normalizeCitationRow(value: unknown): SearchCitationResult {
@@ -463,6 +394,42 @@ export function extractInlineCitationImages(
   };
 }
 
+export function getCitationMarkdownContent(
+  content: string,
+  citation: SearchCitationResult,
+  citations: SearchCitationResult[],
+): string {
+  const normalizedContent = normalizeInlineImages(
+    rewriteIndexedImageRefs(content, citations, citation.article_id),
+    citations,
+    citation.article_id,
+  ).trim();
+
+  const embeddedImageUrls = new Set(
+    [...normalizedContent.matchAll(anyMarkdownImagePattern)]
+      .map((match) => match[2]?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  const fallbackImages = getCitationImages(citation, citations).filter(
+    (image) => !embeddedImageUrls.has(image.url),
+  );
+  if (fallbackImages.length === 0) {
+    return normalizedContent;
+  }
+
+  const fallbackMarkdown = fallbackImages
+    .map((image, index) => {
+      const alt = image.alt || (citation.ref_number
+        ? `Ref #${citation.ref_number} image`
+        : `Citation image ${index + 1}`);
+      return `![${alt}](${image.url})`;
+    })
+    .join("\n\n");
+
+  return normalizedContent ? `${normalizedContent}\n\n${fallbackMarkdown}` : fallbackMarkdown;
+}
+
 export function linkCitationMarkers(content: string): string {
   const linkedBracketedMarkers = content.replace(citationMarkerPattern, "[$1](#citation-ref-$2)");
   return linkedBracketedMarkers.replace(/\bRef #(\d+)\b/g, (match, refNumber, offset, value) => {
@@ -486,7 +453,5 @@ export function transformAssistantContent(content: string, rawCitations: SearchC
     citations,
   );
   transformedContent = linkCitationMarkers(transformedContent);
-  transformedContent = appendMissingReferenceTokens(transformedContent, citations);
-  transformedContent = appendInlineImageFallbacks(transformedContent, citations);
   return transformedContent;
 }

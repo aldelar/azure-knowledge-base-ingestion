@@ -120,14 +120,10 @@ container_sets = {
     os.environ.get("COSMOS_DATABASE_NAME", "kb-agent"): {
         os.environ.get("COSMOS_SESSIONS_CONTAINER", "agent-sessions"): "/id",
         os.environ.get("COSMOS_CONVERSATIONS_CONTAINER", "conversations"): "/userId",
-        os.environ.get("COSMOS_MESSAGES_CONTAINER", "messages"): "/conversationId",
-        os.environ.get("COSMOS_REFERENCES_CONTAINER", "references"): "/conversationId",
     },
     os.environ.get("COSMOS_TEST_DATABASE_NAME", "kb-agent-test"): {
         os.environ.get("COSMOS_SESSIONS_TEST_CONTAINER", "agent-sessions-test"): "/id",
         os.environ.get("COSMOS_CONVERSATIONS_TEST_CONTAINER", "conversations-test"): "/userId",
-        os.environ.get("COSMOS_MESSAGES_TEST_CONTAINER", "messages-test"): "/conversationId",
-        os.environ.get("COSMOS_REFERENCES_TEST_CONTAINER", "references-test"): "/conversationId",
     },
 }
 

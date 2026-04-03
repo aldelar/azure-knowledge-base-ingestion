@@ -6,6 +6,95 @@ Enterprise knowledge bases store thousands of technical articles as HTML pages b
 
 ![Context Aware & Vision Grounded KB Agent — using an image from a search chunk to support its answer](docs/assets/app.png)
 
+## Deployment Layout
+
+The project runs in two modes. **Local dev** uses Docker Compose with emulators and local models for rapid, self-contained iteration with zero Azure dependency. **Azure prod** deploys the same application services to Azure Container Apps backed by managed Azure platform services. The code is the same — only the infrastructure underneath changes.
+
+```mermaid
+block-beta
+  columns 5
+
+  block:DEV_INFRA:2
+    columns 1
+    DI_TITLE["🐳 Infra · Local Docker"]
+    DI1["Cosmos DB Emulator"]
+    DI2["Azurite · Storage Emulator"]
+    DI3["AI Search Simulator"]
+    DI4["Ollama · Local LLMs<br/><i>qwen2.5 · moondream · mxbai-embed</i>"]
+    DI5["Aspire Dashboard<br/><i>OpenTelemetry</i>"]
+  end
+
+  space
+
+  block:PROD_INFRA:2
+    columns 1
+    PI_TITLE["☁️ Infra · Azure Services"]
+    PI1["Azure Cosmos DB"]
+    PI2["Azure Storage Account"]
+    PI3["Azure AI Search"]
+    PI4["Microsoft Foundry<br/><i>gpt-(5-mini/4.1) · text-embedding-3-small</i>"]
+    PI5["Azure Monitor · App Insights<br/><i>OpenTelemetry</i>"]
+    PI6["API Management · AI Gateway"]
+    PI7["Azure Container Registry"]
+  end
+
+  block:DEV_SVC:2
+    columns 1
+    DS_TITLE["🐳 Services · Local Docker"]
+    DS1["fn-convert"]
+    DS2["fn-index"]
+    DS3["agent<br/><i>Microsoft Agent Framework</i>"]
+    DS4["web-app<br/><i>CopilotKit · AG-UI protocol</i>"]
+  end
+
+  space
+
+  block:PROD_SVC:2
+    columns 1
+    PF_TITLE["☁️ Services · Azure Functions"]
+    PF1["fn-convert"]
+    PF2["fn-index"]
+    PS_TITLE["☁️ Services · Azure Container Apps"]
+    PS3["agent<br/><i>Microsoft Agent Framework</i>"]
+    PS4["web-app<br/><i>CopilotKit · AG-UI protocol</i>"]
+  end
+
+  style DI_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
+  style DS_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
+  style PI_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+  style PF_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+  style PS_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+
+  style DEV_INFRA fill:#263238,stroke:#37474f,color:#cfd8dc
+  style DEV_SVC fill:#263238,stroke:#37474f,color:#cfd8dc
+  style PROD_INFRA fill:#3e2723,stroke:#4e342e,color:#d7ccc8
+  style PROD_SVC fill:#3e2723,stroke:#4e342e,color:#d7ccc8
+
+  style DI1 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI2 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI3 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI4 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI5 fill:#37474f,stroke:#455a64,color:#eceff1
+
+  style PI1 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI2 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI3 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI4 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI5 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI6 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI7 fill:#4e342e,stroke:#5d4037,color:#efebe9
+
+  style DS1 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DS2 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DS3 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DS4 fill:#37474f,stroke:#455a64,color:#eceff1
+
+  style PF1 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PF2 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PS3 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PS4 fill:#4e342e,stroke:#5d4037,color:#efebe9
+```
+
 ## Getting Started
 
 ### Shared
@@ -199,37 +288,15 @@ sequenceDiagram
 
 **Problem:** When the web app owns conversation history, the UI layer must build, serialize, trim, and pass the full conversation context on every request. That couples the frontend to the agent's context-management strategy and makes resume fidelity harder to preserve.
 
-**Pattern:** The agent owns canonical conversation state using the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/)'s session persistence and compaction. A custom `CosmosAgentSessionRepository` persists `AgentSession` state to an `agent-sessions` container. The web app owns only lightweight `conversations` metadata for sidebar CRUD and thread selection. The `messages` and `references` containers remain provisioned only as deprecated compatibility artifacts and are no longer part of the active runtime path.
+**Pattern:** The agent owns canonical conversation state using the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/)'s session persistence and compaction. Both the agent and the web app use Cosmos DB as their persistence backend. A custom `CosmosAgentSessionRepository` persists `AgentSession` state to the `agent-sessions` container. The web app owns only lightweight `conversations` metadata for sidebar CRUD and thread selection.
 
-Persisted `search_knowledge_base` tool results are compacted before storage to stable chunk handles plus summary-sized previews, and the web app reloads fuller citation excerpts only through an agent-owned, thread-scoped lookup path.
+The detailed contracts now live in the dedicated specs: [Agent Session](docs/specs/agent-session.md) defines canonical session persistence and transcript hydration, and [Conversation State Model](docs/specs/conversation-state-model.md) defines ownership boundaries across the web app, AG-UI, and future workflows.
 
 ```mermaid
 flowchart LR
-    subgraph WebApp["Web App (thin client)"]
-        UI["Next.js + CopilotKit UI"]
-    end
-
-    subgraph Agent["KB Agent (Microsoft Agent Framework)"]
-        direction LR
-        AG["Agent<br/><small><i>CosmosAgentSessionRepository</i></small>"]
-        CP["CompactionProvider<br/><small><i>SlidingWindowStrategy</i></small><br/><small><i>ToolResultCompactionStrategy</i></small>"]
-        AG --- CP
-    end
-
-    Sessions[(("agent-sessions"))]
-    Conv[(("conversations"))]
-    Legacy[(("messages / references\ncompat only"))]
-
-    UI -->|"threadId via AG-UI"| AG
-    AG -->|"Read/write canonical transcript"| Sessions
-    UI -->|"Sidebar metadata"| Conv
-    Legacy -. historical only .-> UI
-
-    style WebApp fill:#455a64,stroke:#546e7a,color:#ffffff
-    style Agent fill:#3949ab,stroke:#5c6bc0,color:#ffffff
-    style Sessions fill:#616161,stroke:#757575,color:#ffffff
-    style Conv fill:#616161,stroke:#757575,color:#ffffff
-    style Legacy fill:#616161,stroke:#757575,color:#ffffff
+    UI["Web App<br/>Next.js + CopilotKit"] -->|"threadId via AG-UI"| Agent["KB Agent<br/>CosmosAgentSessionRepository"]
+    Agent -->|"canonical transcript"| Sessions[("agent-sessions")]
+    UI -->|"sidebar metadata"| Conversations[("conversations")]
 ```
 
 ---
@@ -437,7 +504,8 @@ flowchart LR
 |----------|-------------|
 | [Architecture](docs/specs/architecture.md) | Pipeline design, converter backends, index schema, agent components, image flow |
 | [Infrastructure](docs/specs/infrastructure.md) | Bicep modules, resource inventory, model deployments, RBAC, networking |
-| [Agent Sessions](docs/specs/agent-sessions.md) | Canonical agent-session persistence, transcript hydration, and ownership boundaries |
+| [Agent Session](docs/specs/agent-session.md) | Canonical agent-session persistence, transcript hydration, and resume behavior |
+| [Conversation State Model](docs/specs/conversation-state-model.md) | Ownership boundaries across the web app, AG-UI, workflows, and specialists |
 | [Setup & Makefile Guide](docs/setup-and-makefile.md) | Full Makefile reference, local/Azure workflows, resource naming |
 | [Architecture Decision Records](docs/ards/) | Key design decisions with rationale and alternatives considered |
 

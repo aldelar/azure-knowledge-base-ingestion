@@ -2,7 +2,7 @@
 
 > **Status:** Proposed
 > **Purpose:** Define the ownership and persistence model for user-visible conversations across the web app, AG-UI, and Microsoft Agent Framework agents and workflows.
-> **Companion spec:** This document complements `docs/specs/agent-sessions.md` and preserves the current decision that the agent owns canonical turn history.
+> **Companion spec:** This document complements `docs/specs/agent-session.md` and preserves the current decision that the agent owns canonical turn history.
 
 ## 1. Decision Summary
 

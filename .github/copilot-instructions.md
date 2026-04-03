@@ -89,8 +89,5 @@ Composable rules auto-applied by file pattern:
 ### Prompts (`.github/prompts/`)
 
 Reusable workflows for common development tasks:
-- `deliver-epic` / `deliver-story` — End-to-end story and epic delivery via handoff workflow
-- `write-epic` / `write-story` — Collaborative epic/story authoring
-- `test-e2e-local` / `test-e2e-azure` — Full end-to-end validation (local and Azure)
 - `pr` — Create a pull request from the current branch to main
 - `merge-pr` — Merge the open PR for the current branch, switch to main, and pull

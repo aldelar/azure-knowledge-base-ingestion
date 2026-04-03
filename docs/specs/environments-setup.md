@@ -155,8 +155,6 @@ Switching is driven by `ENVIRONMENT` env var (`dev` | `prod`). Code uses factory
 | **Cosmos DB** | Database | `kb-agent` | `kb-agent-test` |
 | **Cosmos DB** | Container | `agent-sessions` | `agent-sessions-test` |
 | **Cosmos DB** | Container | `conversations` | `conversations-test` |
-| **Cosmos DB** | Container (deprecated compatibility) | `messages` | `messages-test` |
-| **Cosmos DB** | Container (deprecated compatibility) | `references` | `references-test` |
 | **Blob Storage** | Blob container | `staging` | `staging-test` |
 | **Blob Storage** | Blob container | `serving` | `serving-test` |
 | **AI Search** | Index | `kb-articles` | `kb-articles-test` |
@@ -164,6 +162,8 @@ Switching is driven by `ENVIRONMENT` env var (`dev` | `prod`). Code uses factory
 > Test resources use `-test` suffix (hyphens, not underscores) where the target resource type allows it. For Azure Blob container names, `staging-test` and `serving-test` are valid; Azure storage account names are a separate rule set and remain lowercase alphanumeric only.
 
 > In prod, Azure uses two separate storage accounts (`st{project}staging{env}` and `st{project}serving{env}`). In dev, Azurite is a single account (`devstoreaccount1`) with both blob containers.
+
+> The Dockerized `web-app` local service runs a production Next.js build (`NODE_ENV=production`) with `ENVIRONMENT=dev`. To keep `/api/images/...` behavior aligned with `make dev-ui-live`, Docker Compose mounts `./kb/serving` into `/app/kb/serving` read-only and the image proxy can fall back to those checked-in files when Azurite does not yet contain the requested serving blob.
 
 ### Prod (Azure)
 
@@ -197,8 +197,6 @@ COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnq
 COSMOS_DATABASE_NAME=kb-agent
 COSMOS_SESSIONS_CONTAINER=agent-sessions
 COSMOS_CONVERSATIONS_CONTAINER=conversations
-COSMOS_MESSAGES_CONTAINER=messages  # deprecated compatibility only
-COSMOS_REFERENCES_CONTAINER=references  # deprecated compatibility only
 STAGING_BLOB_ENDPOINT=http://localhost:10000/devstoreaccount1
 SERVING_BLOB_ENDPOINT=http://localhost:10000/devstoreaccount1
 STAGING_CONTAINER_NAME=staging
@@ -228,7 +226,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:18889
 OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 ```
 
-Only `agent-sessions` and `conversations` are part of the active runtime model. `messages` and `references` remain provisioned for compatibility with legacy tooling and data only.
+Only `agent-sessions` and `conversations` are part of the current deployment model. Existing Azure environments that were provisioned before the legacy-container retirement must be torn down and recreated, or have the retired containers deleted explicitly, because incremental deployments will not remove them automatically.
 
 ## Makefile Targets
 

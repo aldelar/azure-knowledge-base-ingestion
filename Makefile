@@ -445,8 +445,6 @@ db = client.get_database_client(os.environ.get('COSMOS_DATABASE_NAME', 'kb-agent
 containers = { \
     os.environ.get('COSMOS_SESSIONS_CONTAINER', 'agent-sessions'): '/id', \
     os.environ.get('COSMOS_CONVERSATIONS_CONTAINER', 'conversations'): '/userId', \
-    os.environ.get('COSMOS_MESSAGES_CONTAINER', 'messages'): '/conversationId', \
-    os.environ.get('COSMOS_REFERENCES_CONTAINER', 'references'): '/conversationId', \
 }; \
 [( \
     c := db.get_container_client(name), \
