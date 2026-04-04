@@ -56,7 +56,7 @@ main() {
 
     echo "  Resource Group: $RESOURCE_GROUP"
 
-    set_target_port WEBAPP_NAME 8080
+    set_target_port WEBAPP_NAME 3000
     set_target_port AGENT_APP_NAME 8088
 
     echo "=== Done ==="

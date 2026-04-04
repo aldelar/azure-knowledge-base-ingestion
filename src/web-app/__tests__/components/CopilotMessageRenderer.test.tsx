@@ -200,6 +200,48 @@ describe("CopilotMessageRenderer", () => {
     expect(screen.getByText("The agent is collecting article matches and ranking the best sections.")).toBeInTheDocument();
   });
 
+  it("shows a synthesis indicator after tool results return but before the assistant answer arrives", () => {
+    const assistantMessage = {
+      id: "assistant-2b",
+      role: "assistant",
+      toolCalls: [
+        {
+          id: "tool-call-2b",
+          type: "function",
+          function: {
+            name: "search_knowledge_base",
+            arguments: JSON.stringify({ query: "content understanding" }),
+          },
+        },
+      ],
+    };
+
+    const toolResultMessage = {
+      id: "tool-result-2b",
+      role: "tool",
+      toolCallId: "tool-call-2b",
+      content: JSON.stringify({
+        results: [{ title: "Content Understanding overview", section_header: "Overview" }],
+      }),
+    };
+
+    render(
+      <CopilotMessageRenderer
+        AssistantMessage={AssistantMessage}
+        UserMessage={UserMessage}
+        inProgress={true}
+        index={0}
+        isCurrentMessage={true}
+        message={assistantMessage as any}
+        messages={[assistantMessage, toolResultMessage] as any}
+      />,
+    );
+
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Synthesizing an answer from the retrieved sources…")).toBeInTheDocument();
+  });
+
   it("does not render standalone tool result messages separately", () => {
     const toolResultMessage = {
       id: "tool-result-2",

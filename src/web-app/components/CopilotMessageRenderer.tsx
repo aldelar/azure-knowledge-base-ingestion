@@ -147,9 +147,9 @@ function renderReasoningCard({
   );
 }
 
-function renderTransientThinkingMessage(id: string): ReactNode {
+function renderTransientThinkingMessage(id: string, content = "Working on a response…"): ReactNode {
   return renderReasoningCard({
-    content: "Working on a response…",
+    content,
     id,
     label: "Thinking",
     meta: "Live",
@@ -276,6 +276,8 @@ export function CopilotMessageRenderer({
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
   const shouldRenderThinkingFallback =
     inProgress && isCurrentMessage && !shouldRenderAssistantMessage && toolCalls.length === 0;
+  const shouldRenderPostToolThinkingFallback =
+    inProgress && isCurrentMessage && !shouldRenderAssistantMessage && toolCalls.length > 0;
 
   if (toolCalls.length === 0) {
     return (
@@ -296,6 +298,12 @@ export function CopilotMessageRenderer({
           </div>
         ))}
       </div>
+      {shouldRenderPostToolThinkingFallback
+        ? renderTransientThinkingMessage(
+            `${message.id}-post-tool-thinking`,
+            "Synthesizing an answer from the retrieved sources…",
+          )
+        : null}
     </>
   );
 }
