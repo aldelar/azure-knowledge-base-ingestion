@@ -320,23 +320,24 @@ class TestCreateAgent:
 
     @patch("agent.kb_agent.Agent")
     @patch("agent.kb_agent.create_chat_client")
-    def test_client_uses_vision_middleware(
+    def test_agent_uses_security_and_vision_middleware(
         self,
         mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
-        """create_agent() configures vision and grounding middleware on the client."""
+        """create_agent() configures security and vision middleware on the agent."""
         mock_client = MagicMock()
         mock_create_chat_client.return_value = mock_client
         create_agent()
 
-        middleware = mock_client.middleware
-        assert len(middleware) == 2
-        from agent.grounding_middleware import GroundingResponseMiddleware
+        _, kwargs = mock_agent_cls.call_args
+        middleware = kwargs["middleware"]
+        from agent.security_middleware import SecurityFilterMiddleware
         from agent.vision_middleware import VisionImageMiddleware
 
-        assert isinstance(middleware[0], VisionImageMiddleware)
-        assert isinstance(middleware[1], GroundingResponseMiddleware)
+        assert len(middleware) == 2
+        assert isinstance(middleware[0], SecurityFilterMiddleware)
+        assert isinstance(middleware[1], VisionImageMiddleware)
 
     @patch("agent.kb_agent.Agent")
     @patch("agent.kb_agent.create_chat_client")

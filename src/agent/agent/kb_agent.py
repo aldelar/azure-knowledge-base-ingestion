@@ -27,7 +27,6 @@ from agent_framework._compaction import (
 from agent_framework._sessions import InMemoryHistoryProvider
 
 from agent.client_factories import create_chat_client
-from agent.grounding_middleware import GroundingResponseMiddleware
 from agent.image_service import get_image_url
 from agent.search_tool import SearchResult, build_security_filter, search_kb
 from agent.security_middleware import SecurityFilterMiddleware
@@ -209,7 +208,6 @@ def create_agent() -> Agent:
     vision middleware.
     """
     client = create_chat_client()
-    client.middleware = [VisionImageMiddleware(), GroundingResponseMiddleware()]
 
     history = InMemoryHistoryProvider(skip_excluded=True)
     compaction = CompactionProvider(
@@ -223,7 +221,7 @@ def create_agent() -> Agent:
         name="KBSearchAgent",
         instructions=_SYSTEM_PROMPT,
         tools=[search_knowledge_base],
-        middleware=[SecurityFilterMiddleware()],
+        middleware=[SecurityFilterMiddleware(), VisionImageMiddleware()],
         context_providers=[history, compaction],
     )
     logger.info(

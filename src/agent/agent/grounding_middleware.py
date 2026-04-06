@@ -19,7 +19,7 @@ from agent_framework._middleware import ChatContext, ChatMiddleware
 
 from agent.image_service import get_image_url
 
-_CITATION_PATTERN = re.compile(r"\[Ref\s*#\d+\]|\bRef\s*#\d+\b|\bsources?\b", re.IGNORECASE)
+_CITATION_PATTERN = re.compile(r"\[Ref\s*#\d+\]|\bRef\s*#\d+\b", re.IGNORECASE)
 _IMAGE_PATTERN = re.compile(r"!\[[^\]]*\]\([^)]+\)|/api/images/|\.(?:png|jpe?g|svg|gif)\b", re.IGNORECASE)
 
 

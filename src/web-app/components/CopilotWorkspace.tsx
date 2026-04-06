@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 import { ConversationRecord } from "../lib/types";
 import { CitationAwareAssistantMessage } from "./CitationAwareAssistantMessage";
+import { CitationDialog } from "./CitationDialog";
+import { CitationDialogProvider } from "./CitationDialogContext";
 import { ChatHistoryHydrator } from "./ChatHistoryHydrator";
 import { CopilotMessageRenderer } from "./CopilotMessageRenderer";
 import { ConversationThreadProvider } from "./ConversationThreadContext";
@@ -208,6 +210,7 @@ export function CopilotWorkspace() {
         />
         <section className="chatSurface">
           <ConversationThreadProvider threadId={activeThreadId}>
+            <CitationDialogProvider>
             <CopilotKit
               agent="default"
               key={activeThreadId}
@@ -232,6 +235,8 @@ export function CopilotWorkspace() {
                 suggestions={conversationStarters}
               />
             </CopilotKit>
+            <CitationDialog />
+            </CitationDialogProvider>
           </ConversationThreadProvider>
         </section>
       </section>

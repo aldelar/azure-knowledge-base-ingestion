@@ -47,7 +47,7 @@ describe("CopilotMessageRenderer", () => {
     expect(screen.getByTestId("assistant-message")).toHaveTextContent("I searched the knowledge base.");
     expect(screen.getByText("Knowledge Search")).toBeInTheDocument();
     expect(screen.getByText("azure ai search")).toBeInTheDocument();
-    expect(screen.getByText("Azure AI Search overview")).toBeInTheDocument();
+    expect(screen.getByText("Overview")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
   });
 

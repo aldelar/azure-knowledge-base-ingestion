@@ -39,4 +39,20 @@ describe("CitationAwareAssistantMessage", () => {
       }),
     );
   });
+
+  it("passes markdownTagRenderers with custom a renderer to CopilotKit", () => {
+    render(
+      <CitationAwareAssistantMessage
+        message={{
+          id: "assistant-2",
+          role: "assistant",
+          content: "Check Ref #1 for details.",
+        } as any}
+      />,
+    );
+
+    const passedProps = assistantMessageSpy.mock.calls[0][0];
+    expect(passedProps.markdownTagRenderers).toBeDefined();
+    expect(typeof passedProps.markdownTagRenderers.a).toBe("function");
+  });
 });
