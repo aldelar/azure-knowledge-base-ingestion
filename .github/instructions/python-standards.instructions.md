@@ -14,7 +14,7 @@ applyTo: "src/**/*.py"
 - Each service is an independent package with its own `pyproject.toml`:
   - `src/agent/` — KB Agent (FastAPI + Agent Framework)
   - `src/functions/` — Azure Functions (convert + index pipeline)
-  - `src/web-app/` — Chainlit thin client
+  - `src/web-app/` — Next.js + CopilotKit web app (see `web-app.instructions.md`)
 - Spike code lives under `src/spikes/` — each spike has its own `pyproject.toml`
 
 ## Dependencies
