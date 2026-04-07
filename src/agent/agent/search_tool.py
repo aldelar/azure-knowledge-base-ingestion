@@ -187,41 +187,54 @@ def get_chunk_by_id(document_id: str, *, security_filter: str | None = None) -> 
     if not normalized_id:
         return None
 
-    security_filter = _normalize_security_filter_for_local_search(security_filter)
-    filter_expression = f"id eq '{_escape_odata_string(normalized_id)}'"
-    if security_filter:
-        filter_expression = f"({filter_expression}) and ({security_filter})"
+    select_fields = ["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls", "department", "summary", "indexed_at"]
 
     with tracer.start_as_current_span("get_chunk_by_id") as span:
         span.set_attribute("search.document_id", normalized_id)
+
+        try:
+            result = _get_search_client().get_document(key=normalized_id, selected_fields=select_fields)
+        except Exception:
+            span.set_attribute("search.result_count", 0)
+            logger.info("Chunk lookup for '%s' returned no results", normalized_id)
+            return None
+
+        if not result:
+            span.set_attribute("search.result_count", 0)
+            return None
+
         if security_filter:
-            span.set_attribute("search.filter", security_filter)
+            security_filter = _normalize_security_filter_for_local_search(security_filter)
+            doc_department = result.get("department", "")
+            if security_filter and doc_department:
+                from agent.security_middleware import resolve_departments
+                allowed = _check_department_access(doc_department, security_filter)
+                if not allowed:
+                    span.set_attribute("search.result_count", 0)
+                    logger.info("Chunk '%s' blocked by security filter", normalized_id)
+                    return None
 
-        results = _get_search_client().search(
-            search_text="*",
-            select=["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls", "department", "summary", "indexed_at"],
-            top=1,
-            filter=filter_expression,
+        search_result = SearchResult(
+            id=result["id"],
+            article_id=result["article_id"],
+            chunk_index=result.get("chunk_index", 0),
+            content=result["content"],
+            title=result.get("title", ""),
+            section_header=result.get("section_header", ""),
+            department=result.get("department", ""),
+            summary=result.get("summary", ""),
+            indexed_at=result.get("indexed_at", ""),
+            image_urls=result.get("image_urls") or [],
+            score=0.0,
         )
+        span.set_attribute("search.result_count", 1)
+        return search_result
 
-        for result in results:
-            search_result = SearchResult(
-                id=result["id"],
-                article_id=result["article_id"],
-                chunk_index=result.get("chunk_index", 0),
-                content=result["content"],
-                title=result.get("title", ""),
-                section_header=result.get("section_header", ""),
-                department=result.get("department", ""),
-                summary=result.get("summary", ""),
-                indexed_at=result.get("indexed_at", ""),
-                image_urls=result.get("image_urls") or [],
-                score=result.get("@search.score", 0.0),
-            )
-            span.set_attribute("search.result_count", 1)
-            return search_result
 
-        span.set_attribute("search.result_count", 0)
-
-    logger.info("Chunk lookup for '%s' returned no results", normalized_id)
-    return None
+def _check_department_access(doc_department: str, security_filter: str) -> bool:
+    """Check if a document's department is allowed by the security filter."""
+    if not security_filter:
+        return True
+    if not doc_department:
+        return True
+    return doc_department.lower() in security_filter.lower()

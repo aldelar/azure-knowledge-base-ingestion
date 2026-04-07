@@ -134,10 +134,10 @@ textarea {
   background: var(--workspace-accent);
   border-color: var(--workspace-accent);
   color: white;
-  font-weight: 700;
-  min-width: 132px;
-  padding: 10px 18px;
-  white-space: nowrap;
+  font-weight: 600;
+  padding: 8px 18px;
+  text-align: center;
+  width: 100%;
 }
 
 .conversationCreateButton:hover {

@@ -193,7 +193,7 @@ export function CopilotWorkspace() {
   return (
     <main className="workspaceShell">
       <header className="workspaceHeader">
-        <p className="workspaceEyebrow">Azure AI Knowledge</p>
+        <p className="workspaceEyebrow">Reference Implementation</p>
         <h1>Azure AI Knowledge Agent</h1>
         <p className="workspaceDescription">
           Context-Aware Vision Grounded Knowledge Based Agent / built with Azure AI Search, Microsoft Foundry and the Microsoft Agent Framework with the AG-UI protocol

@@ -975,7 +975,12 @@ def _create_citation_lookup_app(session_repository) -> FastAPI:
         if ref_number < 1:
             return {"status": "missing"}
 
-        serialized_session = await session_repository.read_from_storage(thread_id)
+        try:
+            serialized_session = await session_repository.read_from_storage(thread_id)
+        except Exception:
+            logger.exception("Failed to read session for citation lookup (thread=%s)", thread_id)
+            return {"status": "missing"}
+
         if not serialized_session:
             return {"status": "missing"}
 
@@ -995,8 +1000,11 @@ def _create_citation_lookup_app(session_repository) -> FastAPI:
         groups = claims.get("groups", []) if isinstance(claims, dict) else []
         departments = resolve_departments(groups) if groups else []
         security_filter = build_security_filter(departments)
-        current_chunk = get_chunk_by_id(chunk_id, security_filter=security_filter)
-        if current_chunk is None:
+
+        try:
+            current_chunk = get_chunk_by_id(chunk_id, security_filter=security_filter)
+        except Exception:
+            logger.exception("Failed to fetch chunk '%s' for citation lookup", chunk_id)
             return {"status": "missing"}
 
         citation = {

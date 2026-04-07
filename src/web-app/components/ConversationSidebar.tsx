@@ -78,12 +78,9 @@ export function ConversationSidebar({
   return (
     <>
       <aside className="conversationRail">
-        <div className="conversationRailHeader">
-          <p className="conversationRailLabel">Conversations</p>
-          <button className="conversationCreateButton" onClick={() => void onCreateConversation()} type="button">
-            New chat
-          </button>
-        </div>
+        <button className="conversationCreateButton" onClick={() => void onCreateConversation()} type="button">
+          New chat
+        </button>
         <div className="conversationList" role="list">
           {conversations.map((conversation) => {
             const isActive = conversation.id === activeThreadId;
@@ -147,7 +144,7 @@ export function ConversationSidebar({
           })}
         </div>
         <div className="conversationRailFooter">
-          <p>Tool activity, search citations, and resumed turns stay attached to the selected thread.</p>
+          <p>Powered by the AG‑UI protocol which defines a shared, resumable interaction contract for streaming events and state between agents and UIs.</p>
         </div>
       </aside>
       {pendingDeleteConversation ? (

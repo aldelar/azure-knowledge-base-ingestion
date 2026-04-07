@@ -914,28 +914,42 @@ The project currently pins:
 | Package | Current | Target |
 |---|---|---|
 | `agent-framework-core` | `>=1.0.0rc6` | `>=1.0.0` (GA, released 2026-04-02) |
-| `agent-framework-azure-ai` | `>=1.0.0rc6` | Latest available (GA or RC) |
-| `agent-framework-ag-ui` | `>=1.0.0b260330` | Latest pre-release available on PyPI |
+| `agent-framework-openai` | (transitive via core) | Explicit dep — extracted from core in RC6 ([#4818](https://github.com/microsoft/agent-framework/pull/4818)) |
+| `agent-framework-azure-ai` | `>=1.0.0rc6` | Stays at RC6 — no GA release yet |
+| `agent-framework-ag-ui` | `>=1.0.0b260330` | `>=1.0.0b260402` (bumped alongside 1.0 GA in [#5062](https://github.com/microsoft/agent-framework/pull/5062)) |
 | `azure-ai-agentserver-agentframework` | `>=1.0.0b17` | Latest compatible pre-release |
 | `@ag-ui/client` (npm) | `^0.0.48` | Latest available |
 
-The `[tool.uv]` section contains `override-dependencies` that forced RC6 past `azure-ai-agentserver-agentframework`'s upper-bound pin (`<=rc3`). These overrides should be revisited — the 1.0 GA release may be compatible natively, or the overrides need updating to target `>=1.0.0`.
+The `[tool.uv]` section contains `override-dependencies` that forced RC6 past `azure-ai-agentserver-agentframework`'s upper-bound pin (`<=rc3`). These overrides should be revisited — the 1.0 GA release may be compatible natively, or the overrides need updating to target `>=1.0.0`. Note: 1.0 GA dependency floors now require `>=1.0.0,<2` for promoted packages, which may conflict with the current override approach.
+
+A [migration guide](https://learn.microsoft.com/en-us/agent-framework/support/upgrade/python-2026-significant-changes) is published — read it before starting code changes.
 
 #### Risks
 
 - **Private API breakage** — the agent code imports from internal modules (`agent_framework._middleware`, `agent_framework._compaction`, `agent_framework._sessions`). The 1.0 GA release may have promoted these to public API, renamed them, or removed them. Each import site must be checked and migrated.
+- **`Message(text=...)` removal** — 1.0 GA removes the deprecated `text` parameter from the `Message` constructor ([#5062](https://github.com/microsoft/agent-framework/pull/5062)). All `Message()` construction sites must use `Message(contents=[...])` instead.
+- **`BaseContextProvider` / `BaseHistoryProvider` alias removal** — 1.0 GA removes these deprecated aliases. If `InMemoryHistoryProvider` or any agent code references them, the migration may be more involved.
+- **Package split: `agent-framework-openai`** — RC6 extracted `agent-framework-openai` as a separate package from core ([#4818](https://github.com/microsoft/agent-framework/pull/4818)). `from agent_framework.azure import AzureOpenAIChatClient` and `from agent_framework.openai import OpenAIChatClient` in `client_factories.py` may require this as an explicit dependency. Import paths may also have changed (e.g., `agent_framework.azure` → `agent_framework.foundry`).
 - **AG-UI adapter API changes** — `AgentFrameworkAgent` and `add_agent_framework_fastapi_endpoint` signatures may have changed between betas.
 - **`azure-ai-agentserver-agentframework` compatibility** — the `from_agent_framework` adapter may need a newer beta to work with core 1.0 without overrides.
+- **Agentserver monkeypatch fragility** — `main.py` patches deep internals of `AgentFrameworkOutputStreamingConverter` (null text delta workaround). A newer `azure-ai-agentserver-agentframework` version may have fixed the underlying bug or renamed these internals.
 - **npm `@ag-ui/client` protocol changes** — a major bump on the JS side could affect the web-app Copilot Runtime wiring.
 
 #### Deliverables
 
+- [ ] Read the official [MAF 1.0 migration guide](https://learn.microsoft.com/en-us/agent-framework/support/upgrade/python-2026-significant-changes) before starting code changes
 - [ ] Bump `agent-framework-core` to `>=1.0.0` in `pyproject.toml`
 - [ ] Bump `agent-framework-azure-ai` to the latest available version in `pyproject.toml`
-- [ ] Bump `agent-framework-ag-ui` to the latest pre-release in `pyproject.toml`
+- [ ] Bump `agent-framework-ag-ui` to `>=1.0.0b260402` (or newer) in `pyproject.toml`
 - [ ] Bump `azure-ai-agentserver-agentframework` to the latest compatible version in `pyproject.toml`
+- [ ] Add `agent-framework-openai` (or `agent-framework-foundry`) as explicit dependency if import paths require it after the RC6 package split
 - [ ] Revisit and update (or remove) `[tool.uv] override-dependencies` — they should no longer be needed if upstream pins are compatible with 1.0
 - [ ] Migrate any private API imports (`_middleware`, `_compaction`, `_sessions`) to their 1.0 public equivalents
+- [ ] Audit all `Message()` construction sites for removed `text=` parameter — use `Message(contents=[...])` pattern
+- [ ] Verify no code depends on removed `BaseContextProvider` / `BaseHistoryProvider` aliases
+- [ ] Verify `from agent_framework.azure import AzureOpenAIChatClient` and `from agent_framework.openai import OpenAIChatClient` still resolve after the package split — update import paths if needed
+- [ ] Review `_patch_agentserver_streaming_converter()` monkeypatch in `main.py` — check if the null-text-delta bug is fixed upstream and remove the patch if so
+- [ ] Test whether the OTel ContextVar cleanup workaround (dev-mode `configure_otel_providers()` skip) can be removed on 1.0
 - [ ] Bump `@ag-ui/client` in `src/web-app/package.json` to the latest version
 - [ ] Regenerate lockfiles (`uv lock` for agent, `npm install` for web-app)
 - [ ] Run the full agent test suite and fix any regressions from API changes
@@ -950,5 +964,8 @@ The `[tool.uv]` section contains `override-dependencies` that forced RC6 past `a
 - [ ] `make dev-test` passes cleanly
 - [ ] `curl` against `/ag-ui` and `/responses` returns valid event streams
 - [ ] No `agent_framework._*` private module imports remain in agent code
+- [ ] No `Message(text=...)` calls remain in agent code
+- [ ] `_patch_agentserver_streaming_converter()` is either removed (bug fixed upstream) or verified still compatible with the new `azure-ai-agentserver-agentframework` version
+- [ ] `from_agent_framework()` adapter works with core 1.0 — `/responses` endpoint returns valid streamed responses
 - [ ] `uv.lock` resolves without override hacks (or overrides are documented as still necessary with rationale)
 - [ ] `package-lock.json` resolves with the latest `@ag-ui/client`

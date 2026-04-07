@@ -1,10 +1,22 @@
 # Context Aware & Vision Grounded KB Agent
 
-An Azure accelerator that transforms HTML knowledge base articles into an AI-searchable, image-aware index — and reasons over them with a vision-grounded conversational agent.
+A reference implementation that transforms HTML knowledge base articles into an AI-searchable, image-aware index — and reasons over them with a vision-grounded conversational agent.
 
-Enterprise knowledge bases store thousands of technical articles as HTML pages bundled with screenshots, diagrams, and UI captures. These articles are rich in information but invisible to AI search: traditional keyword search misses context, token-based chunking breaks documents at arbitrary boundaries, and the images — which often carry critical information — are completely lost. This accelerator solves all three problems with a two-stage ingestion pipeline and an agent that can *see*.
+Enterprise knowledge bases store thousands of technical articles as HTML pages bundled with screenshots, diagrams, and UI captures. These articles are rich in information but invisible to AI search:
+
+- **Traditional keyword search misses context** — queries fail to surface relevant articles when the terminology doesn't match exactly.
+- **Token-based chunking breaks documents at arbitrary boundaries** — splitting on token count ignores the semantic structure of articles, producing chunks that lose coherence.
+- **Images are completely lost** — screenshots, diagrams, and UI captures that often carry critical information are stripped out and never indexed.
+
+This reference implementation solves all three problems with a two-stage ingestion pipeline and an agent that can *see*.
+
+The agent is able to leverage images to support its answers, not just answer as text. When a search result contains images, the agent can view them and reason about their visual content — providing richer, more complete answers that draw on the full fidelity of the original articles.
 
 ![Context Aware & Vision Grounded KB Agent — using an image from a search chunk to support its answer](docs/assets/app.png)
+
+The agent has access to well formed chunks broken down based on the understanding of the original context, by paragraphs, tables, and images together, not just arbitrary token splits. This structure-aware chunking preserves the coherence of the original content and leads to higher quality retrieval and more accurate answers.
+
+![Context Aware & Vision Grounded KB Agent — a chunk is a complete paragraph and has the fidelity of the original (including images)](docs/assets/app2.png)
 
 ## Deployment Layout
 
@@ -166,7 +178,7 @@ See [docs/setup-and-makefile.md](docs/setup-and-makefile.md) for the full target
 
 ## Core Patterns
 
-This solution demonstrates eight architectural patterns for building production-quality AI agents over enterprise content. Each solves a real problem encountered when moving from prototype to production.
+This solution demonstrates nine architectural patterns for building production-quality AI agents over enterprise content. Each solves a real problem encountered when moving from prototype to production.
 
 ### 1. Pluggable Document Normalization
 
@@ -428,6 +440,72 @@ flowchart LR
 ```
 
 > See [docs/specs/contextual-tool-filtering.md](docs/specs/contextual-tool-filtering.md) for the full architecture comparison and implementation details.
+
+---
+
+### 9. AG-UI Protocol
+
+**Problem:** Traditional chat UIs treat agents as opaque text generators — the user sends a message, waits, and eventually receives a completed response. There is no visibility into what the agent is doing (calling tools, reasoning, waiting on backends), no way for the UI to render tool interactions richly, and no standard contract for resuming interrupted conversations across sessions.
+
+**Pattern:** The [AG-UI protocol](https://docs.ag-ui.com) provides a **streaming event contract** between the agent backend and the UI frontend. Instead of a single response blob, the agent emits a typed event stream (`RUN_STARTED`, `TEXT_MESSAGE_*`, `TOOL_CALL_*`, `REASONING_*`, `STATE_*`, `RUN_FINISHED`) over SSE. The UI consumes these events in real time and renders each interaction phase with purpose-built components.
+
+Core benefits of the AG-UI protocol:
+
+| Benefit | Description |
+|---------|-------------|
+| **Streaming event contract** | Typed SSE events replace opaque request/response — the UI knows exactly what the agent is doing at every moment |
+| **Rich tool rendering** | Tool calls and results are first-class events, enabling the UI to render custom cards (search results, citation pills, progress indicators) instead of raw JSON |
+| **Resumable interactions** | `threadId`-based session continuity lets conversations resume across page reloads and browser sessions — the agent replays from persisted state |
+| **Framework-agnostic** | The protocol is an open standard — any agent framework that emits AG-UI events works with any AG-UI-compatible frontend |
+| **Transparent reasoning** | `REASONING_*` events surface the agent's chain-of-thought as collapsible "Thinking" cards, giving users visibility into the decision process |
+| **State synchronization** | `STATE_SNAPSHOT` and `STATE_DELTA` events allow the agent to push structured state to the UI without embedding it in the text stream |
+
+> **Current scope:** This reference implementation showcases **tool calls and tool results** as the primary AG-UI rich integration. The `search_knowledge_base` tool emits `TOOL_CALL_START/ARGS/END` and `TOOL_CALL_RESULT` events, rendered in the UI as a custom search card with live status, query display, and interactive citation pills. Other AG-UI capabilities (state sync, custom UI widgets) are supported by the protocol but not yet exercised in the UI.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as CopilotKit UI
+    participant RT as CopilotRuntime<br/>(Next.js API route)
+    participant GW as APIM Gateway
+    participant Agent as KB Agent<br/>(AG-UI endpoint)
+    participant LLM as LLM
+    participant Tool as search_knowledge_base
+
+    User->>UI: Send message
+    UI->>RT: GraphQL mutation
+    RT->>GW: POST /ag-ui/ (SSE)
+    GW->>Agent: Forward request
+
+    Agent-->>RT: RUN_STARTED
+    Agent->>LLM: Prompt + history
+
+    Note over Agent: LLM decides to call a tool
+
+    Agent-->>RT: TOOL_CALL_START
+    Agent-->>RT: TOOL_CALL_ARGS (query, filters)
+    RT-->>UI: Stream events
+    Note over UI: Renders search card<br/>with "Searching..." status
+
+    Agent->>Tool: Execute search
+    Tool-->>Agent: Search results
+    Agent-->>RT: TOOL_CALL_END
+    Agent-->>RT: TOOL_CALL_RESULT (citations)
+    RT-->>UI: Stream events
+    Note over UI: Updates card with<br/>citation pills
+
+    Agent->>LLM: Results + conversation
+    Agent-->>RT: TEXT_MESSAGE_START
+    Agent-->>RT: TEXT_MESSAGE_CONTENT (chunks)
+    RT-->>UI: Stream text
+    Note over UI: Renders streaming<br/>markdown response
+    Agent-->>RT: TEXT_MESSAGE_END
+    Agent-->>RT: RUN_FINISHED
+```
+
+On the **agent side**, the Microsoft Agent Framework's AG-UI adapter (`AgentFrameworkAgent` + `add_agent_framework_fastapi_endpoint`) translates agent framework events into AG-UI SSE events automatically. A `_PersistedSessionAgent` wrapper maps AG-UI `threadId` values to Cosmos DB sessions, enabling seamless conversation resume.
+
+On the **UI side**, CopilotKit's `useRenderToolCall` hook lets the app register custom renderers per tool name. The `SearchToolRenderer` component receives tool call arguments and results as structured data and renders them as interactive cards — no string parsing or JSON extraction required.
 
 ---
 
