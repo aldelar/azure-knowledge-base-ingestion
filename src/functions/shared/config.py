@@ -38,6 +38,10 @@ def _default_vector_dimensions(environment: str) -> int:
     return 1024 if environment == "dev" else 1536
 
 
+def _default_enable_chunk_summaries(environment: str) -> bool:
+    return environment != "dev"
+
+
 def _find_env_file() -> Path | None:
     """Search for .env file starting from this file's directory, then up."""
     current = Path(__file__).resolve().parent.parent  # src/functions/
@@ -70,6 +74,7 @@ class Config:
     vision_deployment_name: str = "gpt-4.1"
     agent_model_deployment_name: str = "gpt-4.1"
     embedding_vector_dimensions: int = 1536
+    enable_chunk_summaries: bool = True
 
     # Mistral Document AI deployment name
     mistral_deployment_name: str = "mistral-document-ai-2512"
@@ -149,6 +154,10 @@ def get_config() -> Config:
         embedding_vector_dimensions=_get_int(
             "EMBEDDING_VECTOR_DIMENSIONS",
             _default_vector_dimensions(environment),
+        ),
+        enable_chunk_summaries=_get_bool(
+            "ENABLE_CHUNK_SUMMARIES",
+            _default_enable_chunk_summaries(environment),
         ),
         mistral_deployment_name=os.environ.get("MISTRAL_DEPLOYMENT_NAME", "mistral-document-ai-2512"),
         search_endpoint=os.environ.get("SEARCH_ENDPOINT", ""),

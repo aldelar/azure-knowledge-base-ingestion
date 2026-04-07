@@ -102,7 +102,7 @@ class TestSystemPrompt:
         assert "Do NOT say things like \"let's search\"" in _SYSTEM_PROMPT
 
     def test_prompt_requires_inline_citations(self) -> None:
-        assert "Every factual sentence or bullet must include at least one inline citation" in _SYSTEM_PROMPT
+        assert "Cite sources inline using [Ref #N] markers" in _SYSTEM_PROMPT
 
     def test_prompt_forbids_external_docs_links(self) -> None:
         assert "Do NOT output bare external documentation links" in _SYSTEM_PROMPT
@@ -142,7 +142,7 @@ class TestSystemPrompt:
             "![Agentic retrieval architecture](/api/images/agentic-retrieval-overview-html_en-us/images/agentic-retrieval-architecture.png)"
             in _SYSTEM_PROMPT
         )
-        assert "This diagram is helpful because it shows the request flow" in _SYSTEM_PROMPT
+        assert "This diagram shows the request flow" in _SYSTEM_PROMPT
 
     def test_prod_prompt_restores_compact_instructions(self) -> None:
         prod_prompt = _load_system_prompt("prod")
@@ -320,20 +320,24 @@ class TestCreateAgent:
 
     @patch("agent.kb_agent.Agent")
     @patch("agent.kb_agent.create_chat_client")
-    def test_client_uses_vision_middleware(
+    def test_agent_uses_security_and_vision_middleware(
         self,
         mock_create_chat_client: MagicMock,
         mock_agent_cls: MagicMock,
     ) -> None:
-        """create_agent() configures vision middleware on the client."""
+        """create_agent() configures security and vision middleware on the agent."""
         mock_client = MagicMock()
         mock_create_chat_client.return_value = mock_client
         create_agent()
 
-        middleware = mock_client.middleware
-        assert len(middleware) == 1
+        _, kwargs = mock_agent_cls.call_args
+        middleware = kwargs["middleware"]
+        from agent.security_middleware import SecurityFilterMiddleware
         from agent.vision_middleware import VisionImageMiddleware
-        assert isinstance(middleware[0], VisionImageMiddleware)
+
+        assert len(middleware) == 2
+        assert isinstance(middleware[0], SecurityFilterMiddleware)
+        assert isinstance(middleware[1], VisionImageMiddleware)
 
     @patch("agent.kb_agent.Agent")
     @patch("agent.kb_agent.create_chat_client")

@@ -19,7 +19,7 @@ def test_chat_factory_uses_ollama_chat_client_in_dev(monkeypatch):
     with patch("agent.client_factories.OpenAIChatClient") as mock_client:
         create_chat_client()
         kwargs = mock_client.call_args.kwargs
-        assert kwargs["model_id"] == "phi4-mini"
+        assert kwargs["model"] == "phi4-mini"
         assert kwargs["base_url"] == "http://localhost:11434/v1"
 
 

@@ -28,7 +28,7 @@ export STAGING_CONTAINER_NAME=${STAGING_CONTAINER_NAME:-staging}
 
 echo "Syncing ${LOCAL_KB_ROOT} to Azurite container ${STAGING_CONTAINER_NAME}..."
 cd "${ROOT_DIR}/src/functions"
-uv run python - <<'PY'
+env -u VIRTUAL_ENV uv run python - <<'PY'
 import os
 from pathlib import Path
 

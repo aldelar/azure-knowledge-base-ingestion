@@ -1,0 +1,795 @@
+:root {
+  color-scheme: light;
+  --workspace-bg-top: #f5f8fc;
+  --workspace-bg-bottom: #e8eef5;
+  --workspace-surface: rgba(255, 255, 255, 0.92);
+  --workspace-sidebar: rgba(248, 250, 252, 0.96);
+  --workspace-border: rgba(15, 23, 42, 0.12);
+  --workspace-border-strong: rgba(11, 92, 171, 0.22);
+  --workspace-text: #0f172a;
+  --workspace-muted: #5b6778;
+  --workspace-accent: #0b5cab;
+  --workspace-accent-soft: #e8f1ff;
+  --workspace-danger: #b42318;
+  --workspace-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(11, 92, 171, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 20%),
+    linear-gradient(180deg, var(--workspace-bg-top) 0%, var(--workspace-bg-bottom) 100%);
+  color: var(--workspace-text);
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.workspaceShell {
+  margin: 0 auto;
+  max-width: 1480px;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.workspaceHeader {
+  margin-bottom: 16px;
+}
+
+.workspaceEyebrow {
+  color: var(--workspace-accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.workspaceHeader h1 {
+  font-size: clamp(1.75rem, 2vw, 2.4rem);
+  line-height: 1.1;
+  margin: 0;
+}
+
+.workspaceDescription {
+  color: var(--workspace-muted);
+  line-height: 1.6;
+  margin: 10px 0 0;
+}
+
+.workspaceFrame {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+}
+
+.conversationRail,
+.chatSurface,
+.loadingCard {
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-border);
+  border-radius: 20px;
+  box-shadow: var(--workspace-shadow);
+}
+
+.conversationRail {
+  background: var(--workspace-sidebar);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  position: sticky;
+  top: 24px;
+}
+
+.conversationRailHeader {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.conversationRailLabel {
+  color: var(--workspace-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.conversationRailFooter p {
+  color: var(--workspace-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.conversationCreateButton,
+.conversationItemSelect,
+.conversationTitleInput,
+.conversationDialogButton {
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.conversationCreateButton {
+  background: var(--workspace-accent);
+  border-color: var(--workspace-accent);
+  color: white;
+  font-weight: 600;
+  padding: 8px 18px;
+  text-align: center;
+  width: 100%;
+}
+
+.conversationCreateButton:hover {
+  background: #084b8c;
+}
+
+.conversationList {
+  display: grid;
+  gap: 10px;
+}
+
+.conversationItem {
+  background: white;
+  border: 1px solid var(--workspace-border);
+  border-radius: 16px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.conversationItem.active {
+  background: var(--workspace-accent-soft);
+  border-color: var(--workspace-border-strong);
+  box-shadow: inset 0 0 0 1px rgba(11, 92, 171, 0.08);
+}
+
+.conversationItemSelect {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.conversationItemTitle {
+  display: block;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.conversationTitleInput {
+  background: white;
+  color: var(--workspace-text);
+  cursor: text;
+  font-weight: 700;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.conversationItemMetaRow {
+  align-items: center;
+  color: var(--workspace-muted);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.conversationItem.active .conversationItemMetaRow {
+  color: var(--workspace-accent);
+}
+
+.conversationItemSelect:hover {
+  background: rgba(11, 92, 171, 0.04);
+}
+
+.conversationDeleteButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--workspace-danger);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 4px;
+}
+
+.conversationDeleteButton:hover {
+  background: rgba(180, 35, 24, 0.08);
+  border-radius: 999px;
+}
+
+.conversationDeleteButton svg {
+  display: block;
+}
+
+.conversationDialogOverlay {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.32);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 20;
+}
+
+.conversationDialog {
+  background: white;
+  border: 1px solid var(--workspace-border);
+  border-radius: 20px;
+  box-shadow: var(--workspace-shadow);
+  max-width: 420px;
+  padding: 20px;
+  width: min(100%, 420px);
+}
+
+.conversationDialogEyebrow {
+  color: var(--workspace-danger);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.conversationDialog h2 {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.conversationDialogDescription {
+  color: var(--workspace-muted);
+  line-height: 1.6;
+  margin: 12px 0 0;
+}
+
+.conversationDialogActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.conversationDialogButton {
+  background: white;
+  color: var(--workspace-text);
+  padding: 8px 14px;
+}
+
+.conversationDialogButton.secondary:hover {
+  background: rgba(11, 92, 171, 0.04);
+}
+
+.conversationDialogButton.danger {
+  background: #fef3f2;
+  border-color: rgba(180, 35, 24, 0.16);
+  color: var(--workspace-danger);
+}
+
+.conversationDialogButton.danger:hover {
+  background: #fee4e2;
+}
+
+.chatSurface {
+  min-height: 72vh;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.copilotCanvas {
+  min-height: calc(72vh - 24px);
+}
+
+.copilotCanvas .copilotKitMessages {
+  min-height: 0;
+  padding: 0 6px;
+}
+
+.copilotCanvas .copilotKitMessagesContainer {
+  padding: 12px 0 16px;
+}
+
+.copilotCanvas .copilotKitMessage {
+  max-width: min(880px, 100%);
+}
+
+.copilotCanvas .suggestions {
+  padding: 0 0 12px;
+}
+
+.copilotCanvas .copilotKitInputContainer {
+  padding-top: 8px;
+}
+
+.toolCallStack {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.toolCard,
+.reasoningCard {
+  background: white;
+  border: 1px solid var(--workspace-border);
+  border-radius: 16px;
+  margin: 12px 0;
+  padding: 14px;
+}
+
+.toolCardHeader,
+.reasoningCardHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.toolCardEyebrow,
+.reasoningCardEyebrow {
+  color: var(--workspace-accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toolCardStatus,
+.reasoningCardMeta {
+  color: var(--workspace-muted);
+  font-size: 0.85rem;
+}
+
+.toolCardStatus.working {
+  color: var(--workspace-accent);
+}
+
+.toolCardQuery,
+.toolCardHint,
+.reasoningCardContent {
+  line-height: 1.55;
+  margin: 12px 0 0;
+}
+
+.toolCardHint,
+.reasoningCardMeta,
+.citationPreview,
+.citationCardHeader span {
+  color: var(--workspace-muted);
+}
+
+.toolCardPayload {
+  background: #f8fafc;
+  border-radius: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86rem;
+  margin: 12px 0 0;
+  overflow-x: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.citationDeck {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.citationPillDeck {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.citationPill {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--workspace-border);
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  max-width: 240px;
+  padding: 3px 10px 3px 3px;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.citationPill:hover {
+  background: var(--workspace-accent-soft);
+  border-color: var(--workspace-border-strong);
+}
+
+.citationPillTitle {
+  font-size: 0.78rem;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citationCard {
+  background: #f8fafc;
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  overflow: hidden;
+  scroll-margin-top: 120px;
+}
+
+.citationCardToggle {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  padding: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.citationCardToggle:hover {
+  background: rgba(11, 92, 171, 0.04);
+}
+
+.citationCardHeader {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto 1fr;
+}
+
+.citationCardLine {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.citationCardTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citationCardSeparator {
+  color: var(--workspace-muted);
+  flex: 0 0 auto;
+}
+
+.citationCardPreview {
+  color: var(--workspace-muted);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citationBadge {
+  background: var(--workspace-accent-soft);
+  border-radius: 999px;
+  color: var(--workspace-accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.citationCardBody {
+  border-top: 1px solid var(--workspace-border);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+/* Citation dialog overlay */
+
+.citationDialogOverlay {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 1000;
+}
+
+.citationDialogPanel {
+  background: white;
+  border: 1px solid var(--workspace-border);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+  max-width: 780px;
+  width: 92vw;
+}
+
+.citationDialogHeader {
+  align-items: center;
+  border-bottom: 1px solid var(--workspace-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 16px 20px;
+}
+
+.citationDialogHeaderLeft {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.citationDialogTitle {
+  font-size: 1.05rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citationDialogSection {
+  color: var(--workspace-muted);
+  font-size: 0.88rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citationDialogClose {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--workspace-border);
+  border-radius: 10px;
+  color: var(--workspace-muted);
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  height: 34px;
+  justify-content: center;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+  width: 34px;
+}
+
+.citationDialogClose:hover {
+  background: rgba(11, 92, 171, 0.06);
+  color: var(--workspace-text);
+}
+
+.citationDialogBody {
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* Inline citation ref badges in assistant messages */
+
+.citationInlineRef {
+  align-items: center;
+  background: var(--workspace-accent-soft);
+  border: 1px solid rgba(11, 92, 171, 0.18);
+  border-radius: 999px;
+  color: var(--workspace-accent);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 0 1px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+  vertical-align: baseline;
+}
+
+.citationInlineRef:hover {
+  background: rgba(11, 92, 171, 0.14);
+  border-color: var(--workspace-accent);
+}
+
+.citationMarkdown {
+  color: var(--workspace-text);
+  line-height: 1.6;
+}
+
+.citationMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.citationMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.citationMarkdown p,
+.citationMarkdown ul,
+.citationMarkdown ol,
+.citationMarkdown blockquote {
+  margin: 0 0 12px;
+}
+
+.citationMarkdown h1,
+.citationMarkdown h2,
+.citationMarkdown h3,
+.citationMarkdown h4,
+.citationMarkdown h5,
+.citationMarkdown h6,
+.citationSummaryHeading {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+
+.citationMarkdownSummary .citationSummaryHeading {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.citationMarkdown a {
+  color: var(--workspace-accent);
+}
+
+.citationTableWrapper {
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  margin: 0 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.citationTable {
+  border-collapse: collapse;
+  min-width: 100%;
+  width: 100%;
+}
+
+.citationTable th,
+.citationTable td {
+  border-bottom: 1px solid var(--workspace-border);
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.citationTable th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.citationTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.citationStatus {
+  color: var(--workspace-muted);
+  margin: 0;
+}
+
+.citationImageStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.copilotCanvas .copilotKitAssistantMessage .copilotKitMarkdown img {
+  background: #fff;
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  display: block;
+  height: auto;
+  margin: 0 0 12px;
+  max-width: min(100%, 720px);
+}
+
+.citationImage {
+  background: #fff;
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  height: auto;
+  max-width: 100%;
+}
+
+.citationMarkdownImage {
+  display: block;
+  margin: 0 0 12px;
+  max-width: min(100%, 720px);
+}
+
+.reasoningCardTransient {
+  animation: pulseThinking 1.8s ease-in-out infinite;
+  border-color: var(--workspace-border-strong);
+  border-style: dashed;
+}
+
+@keyframes pulseThinking {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.loadingState {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.loadingCard {
+  padding: 24px 28px;
+}
+
+@media (max-width: 980px) {
+  .workspaceFrame {
+    grid-template-columns: 1fr;
+  }
+
+  .conversationRail {
+    position: static;
+  }
+
+  .chatSurface {
+    min-height: 68vh;
+  }
+}
+
+@media (max-width: 640px) {
+  .workspaceShell {
+    padding: 14px;
+  }
+
+  .conversationRail,
+  .chatSurface,
+  .loadingCard {
+    border-radius: 16px;
+  }
+
+  .conversationRailHeader {
+    flex-direction: column;
+  }
+
+  .conversationCreateButton {
+    width: 100%;
+  }
+
+  .conversationItemActions {
+    flex-wrap: wrap;
+  }
+}

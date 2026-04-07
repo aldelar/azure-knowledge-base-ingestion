@@ -94,6 +94,19 @@ def _normalize_security_filter_for_local_search(security_filter: str | None) -> 
     return f"({joined})"
 
 
+def build_security_filter(departments: list[str]) -> str | None:
+    """Build the OData department filter used by KB search reads."""
+    if not departments:
+        return None
+
+    dept_list = ",".join(departments)
+    return f"search.in(department, '{dept_list}', ',')"
+
+
+def _escape_odata_string(value: str) -> str:
+    return value.replace("'", "''")
+
+
 def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -> list[SearchResult]:
     """Perform hybrid search (vector + keyword) against the kb-articles index.
 
@@ -166,3 +179,62 @@ def search_kb(query: str, top: int = 5, *, security_filter: str | None = None) -
         top,
     )
     return search_results
+
+
+def get_chunk_by_id(document_id: str, *, security_filter: str | None = None) -> SearchResult | None:
+    """Load a single chunk by its stable search document id."""
+    normalized_id = document_id.strip()
+    if not normalized_id:
+        return None
+
+    select_fields = ["id", "article_id", "chunk_index", "content", "title", "section_header", "image_urls", "department", "summary", "indexed_at"]
+
+    with tracer.start_as_current_span("get_chunk_by_id") as span:
+        span.set_attribute("search.document_id", normalized_id)
+
+        try:
+            result = _get_search_client().get_document(key=normalized_id, selected_fields=select_fields)
+        except Exception:
+            span.set_attribute("search.result_count", 0)
+            logger.info("Chunk lookup for '%s' returned no results", normalized_id)
+            return None
+
+        if not result:
+            span.set_attribute("search.result_count", 0)
+            return None
+
+        if security_filter:
+            security_filter = _normalize_security_filter_for_local_search(security_filter)
+            doc_department = result.get("department", "")
+            if security_filter and doc_department:
+                from agent.security_middleware import resolve_departments
+                allowed = _check_department_access(doc_department, security_filter)
+                if not allowed:
+                    span.set_attribute("search.result_count", 0)
+                    logger.info("Chunk '%s' blocked by security filter", normalized_id)
+                    return None
+
+        search_result = SearchResult(
+            id=result["id"],
+            article_id=result["article_id"],
+            chunk_index=result.get("chunk_index", 0),
+            content=result["content"],
+            title=result.get("title", ""),
+            section_header=result.get("section_header", ""),
+            department=result.get("department", ""),
+            summary=result.get("summary", ""),
+            indexed_at=result.get("indexed_at", ""),
+            image_urls=result.get("image_urls") or [],
+            score=0.0,
+        )
+        span.set_attribute("search.result_count", 1)
+        return search_result
+
+
+def _check_department_access(doc_department: str, security_filter: str) -> bool:
+    """Check if a document's department is allowed by the security filter."""
+    if not security_filter:
+        return True
+    if not doc_department:
+        return True
+    return doc_department.lower() in security_filter.lower()

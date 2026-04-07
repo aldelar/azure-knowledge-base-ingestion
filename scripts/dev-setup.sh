@@ -216,13 +216,6 @@ install_functions_core_tools() {
     npm install -g azure-functions-core-tools@4 --unsafe-perm true
 }
 
-install_playwright_browser() {
-    echo ""
-    echo "Installing Playwright chromium browser for UI tests..."
-    cd "${REPO_ROOT}/src/web-app"
-    uv run playwright install chromium
-}
-
 print_gpu_guidance() {
     local backend
 
@@ -280,12 +273,8 @@ main() {
     install_azd
     install_uv
     install_functions_core_tools
-    install_playwright_browser
     configure_ollama_gpu_device_env
     print_gpu_guidance
-
-    echo ""
-    echo "Done. Next: run make dev-infra-up."
 }
 
 main "$@"

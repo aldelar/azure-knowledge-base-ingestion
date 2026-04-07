@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ENV_FILE="${ROOT_DIR}/.env.dev"
+PYTHON_RUNTIME_DIR="${ROOT_DIR}/src/agent"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
     echo "ERROR: ${ENV_FILE} not found." >&2
@@ -33,8 +34,8 @@ ACTION="${1:?Usage: dev-clean-data.sh <storage|cosmos|index>}"
 case "${ACTION}" in
 storage)
     echo "Clearing staging + serving blob containers..."
-    cd "${ROOT_DIR}/src/web-app"
-    uv run python - <<'PY'
+    cd "${PYTHON_RUNTIME_DIR}"
+    env -u VIRTUAL_ENV uv run python - <<'PY'
 import os
 from azure.storage.blob import BlobServiceClient
 
@@ -54,8 +55,8 @@ PY
 
 cosmos)
     echo "Clearing Cosmos DB containers..."
-    cd "${ROOT_DIR}/src/web-app"
-    uv run python - <<'PY'
+    cd "${PYTHON_RUNTIME_DIR}"
+    env -u VIRTUAL_ENV uv run python - <<'PY'
 import os
 from azure.cosmos import CosmosClient
 
@@ -71,8 +72,6 @@ database = client.get_database_client(db_name)
 containers = {
     os.environ.get("COSMOS_SESSIONS_CONTAINER", "agent-sessions"): "/id",
     os.environ.get("COSMOS_CONVERSATIONS_CONTAINER", "conversations"): "/userId",
-    os.environ.get("COSMOS_MESSAGES_CONTAINER", "messages"): "/conversationId",
-    os.environ.get("COSMOS_REFERENCES_CONTAINER", "references"): "/conversationId",
 }
 
 for container_name, pk_path in containers.items():

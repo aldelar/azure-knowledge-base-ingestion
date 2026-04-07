@@ -31,7 +31,7 @@ Two parameters stored in AZD env: `PROJECT_NAME` is shared across environment wo
 
 | Service | Cosmos DB | AI Search | Blob Storage | AI Services / LLM | Foundry Project |
 |---------|-----------|-----------|-------------|-------------------|-----------------|
-| **web-app** (Chainlit) | Yes (conversations, messages, references) | No | Yes (serving images) | No | No |
+| **web-app** (Next.js + CopilotKit) | Yes (conversations) | No | Yes (serving images) | No | No |
 | **agent** | Yes (agent-sessions) | Yes (kb-articles index) | Yes (serving images) | Yes (GPT model for reasoning) | Yes (prod only — agent registration) |
 | **fn-convert** (all variants) | No | No | Yes (staging read, serving write) | Yes (image analysis) | No |
 | **fn-index** | No | Yes (push chunks to index) | Yes (serving read — images) | Yes (embeddings) | No |
@@ -61,7 +61,7 @@ Two parameters stored in AZD env: `PROJECT_NAME` is shared across environment wo
 │                                                                │
 │  ┌──────────────┐                                              │
 │  │   web-app    │                                              │
-│  │   :8080      │  ← browser UI entry point                   │
+│  │   :3000      │  ← browser UI entry point                   │
 │  └──────────────┘                                              │
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
@@ -155,8 +155,6 @@ Switching is driven by `ENVIRONMENT` env var (`dev` | `prod`). Code uses factory
 | **Cosmos DB** | Database | `kb-agent` | `kb-agent-test` |
 | **Cosmos DB** | Container | `agent-sessions` | `agent-sessions-test` |
 | **Cosmos DB** | Container | `conversations` | `conversations-test` |
-| **Cosmos DB** | Container | `messages` | `messages-test` |
-| **Cosmos DB** | Container | `references` | `references-test` |
 | **Blob Storage** | Blob container | `staging` | `staging-test` |
 | **Blob Storage** | Blob container | `serving` | `serving-test` |
 | **AI Search** | Index | `kb-articles` | `kb-articles-test` |
@@ -164,6 +162,8 @@ Switching is driven by `ENVIRONMENT` env var (`dev` | `prod`). Code uses factory
 > Test resources use `-test` suffix (hyphens, not underscores) where the target resource type allows it. For Azure Blob container names, `staging-test` and `serving-test` are valid; Azure storage account names are a separate rule set and remain lowercase alphanumeric only.
 
 > In prod, Azure uses two separate storage accounts (`st{project}staging{env}` and `st{project}serving{env}`). In dev, Azurite is a single account (`devstoreaccount1`) with both blob containers.
+
+> The Dockerized `web-app` local service runs a production Next.js build (`NODE_ENV=production`) with `ENVIRONMENT=dev`. To keep `/api/images/...` behavior aligned with `make dev-ui-live`, Docker Compose mounts `./kb/serving` into `/app/kb/serving` read-only and the image proxy can fall back to those checked-in files when Azurite does not yet contain the requested serving blob.
 
 ### Prod (Azure)
 
@@ -197,8 +197,6 @@ COSMOS_KEY=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnq
 COSMOS_DATABASE_NAME=kb-agent
 COSMOS_SESSIONS_CONTAINER=agent-sessions
 COSMOS_CONVERSATIONS_CONTAINER=conversations
-COSMOS_MESSAGES_CONTAINER=messages
-COSMOS_REFERENCES_CONTAINER=references
 STAGING_BLOB_ENDPOINT=http://localhost:10000/devstoreaccount1
 SERVING_BLOB_ENDPOINT=http://localhost:10000/devstoreaccount1
 STAGING_CONTAINER_NAME=staging
@@ -228,6 +226,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:18889
 OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 ```
 
+Only `agent-sessions` and `conversations` are part of the current deployment model. Existing Azure environments that were provisioned before the legacy-container retirement must be torn down and recreated, or have the retired containers deleted explicitly, because incremental deployments will not remove them automatically.
+
 ## Makefile Targets
 
 ### Dev (Local) — zero Azure cloud dependency
@@ -244,7 +244,7 @@ OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 | `dev-services-agents-up` | Build & start agent only |
 | `dev-test` | Run unit + integration tests |
 | `dev-test-ui` | Run optional browser-based UI tests |
-| `dev-ui` | Open browser to http://localhost:8080 |
+| `dev-ui` | Open browser to http://localhost:3000 |
 | `dev-pipeline` | Run full KB pipeline locally (convert + index) |
 | `dev-pipeline-convert` | Run fn-convert only (MarkItDown in dev) |
 | `dev-pipeline-index` | Run fn-index only |

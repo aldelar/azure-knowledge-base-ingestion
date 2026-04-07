@@ -11,8 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from shared.client_factories import ChatBackend, create_chat_backend
-
-from shared.config import config
+from shared.config import config, get_config
 
 if TYPE_CHECKING:
     from fn_index.chunker import Chunk
@@ -81,6 +80,10 @@ def summarize_chunks(chunks: list[Chunk]) -> list[str]:
     list[str]
         Summaries in the same order as the input chunks.
     """
+    if not get_config().enable_chunk_summaries:
+        logger.info("Chunk summaries disabled for current environment")
+        return ["" for _ in chunks]
+
     summaries = []
     for chunk in chunks:
         summary = summarize_chunk(chunk.content, chunk.title, chunk.section_header)

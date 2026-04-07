@@ -5,6 +5,7 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ENV_FILE="${ROOT_DIR}/.env.dev"
 COMPOSE_FILE="${ROOT_DIR}/infra/docker/docker-compose.dev-infra.yml"
 COMPOSE_PROJECT_NAME=${DEV_INFRA_PROJECT:-kb-agent-infra}
+PYTHON_RUNTIME_DIR="${ROOT_DIR}/src/agent"
 AZURITE_ACCOUNT_KEY="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -30,6 +31,16 @@ AZURITE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName=devstoreacc
 
 export COSMOS_ENDPOINT STAGING_BLOB_ENDPOINT SERVING_BLOB_ENDPOINT
 export AZURITE_CONNECTION_STRING SEARCH_ENDPOINT OLLAMA_ENDPOINT
+
+normalize_ollama_model_ref() {
+    local model=$1
+    if [[ "${model}" == *:* ]]; then
+        printf '%s\n' "${model}"
+        return 0
+    fi
+
+    printf '%s:latest\n' "${model}"
+}
 
 wait_for_port() {
     local name=$1
@@ -57,7 +68,7 @@ wait_for_cosmos_api() {
     local attempts=${1:-60}
 
     for ((i=1; i<=attempts; i++)); do
-        if (cd "${ROOT_DIR}/src/web-app" && uv run python - <<'PY')
+        if (cd "${PYTHON_RUNTIME_DIR}" && env -u VIRTUAL_ENV uv run python - <<'PY')
 import os, sys, urllib3
 urllib3.disable_warnings()
 
@@ -92,8 +103,8 @@ wait_for_port "Ollama" "localhost" 11434
 wait_for_cosmos_api
 
 echo "Initializing Cosmos DB databases and containers..."
-cd "${ROOT_DIR}/src/web-app"
-uv run python - <<'PY'
+cd "${PYTHON_RUNTIME_DIR}"
+env -u VIRTUAL_ENV uv run python - <<'PY'
 import os, urllib3
 urllib3.disable_warnings()
 
@@ -109,14 +120,10 @@ container_sets = {
     os.environ.get("COSMOS_DATABASE_NAME", "kb-agent"): {
         os.environ.get("COSMOS_SESSIONS_CONTAINER", "agent-sessions"): "/id",
         os.environ.get("COSMOS_CONVERSATIONS_CONTAINER", "conversations"): "/userId",
-        os.environ.get("COSMOS_MESSAGES_CONTAINER", "messages"): "/conversationId",
-        os.environ.get("COSMOS_REFERENCES_CONTAINER", "references"): "/conversationId",
     },
     os.environ.get("COSMOS_TEST_DATABASE_NAME", "kb-agent-test"): {
         os.environ.get("COSMOS_SESSIONS_TEST_CONTAINER", "agent-sessions-test"): "/id",
         os.environ.get("COSMOS_CONVERSATIONS_TEST_CONTAINER", "conversations-test"): "/userId",
-        os.environ.get("COSMOS_MESSAGES_TEST_CONTAINER", "messages-test"): "/conversationId",
-        os.environ.get("COSMOS_REFERENCES_TEST_CONTAINER", "references-test"): "/conversationId",
     },
 }
 
@@ -135,7 +142,7 @@ for database_name, containers in container_sets.items():
 PY
 
 echo "Initializing Azurite blob containers..."
-uv run python - <<'PY'
+env -u VIRTUAL_ENV uv run python - <<'PY'
 import os
 
 from azure.core.exceptions import ResourceExistsError
@@ -157,7 +164,8 @@ PY
 
 echo "Ensuring Ollama models are available..."
 for model in "${AGENT_MODEL_DEPLOYMENT_NAME:-phi4-mini}" "${EMBEDDING_DEPLOYMENT_NAME:-mxbai-embed-large}" "${VISION_DEPLOYMENT_NAME:-moondream}"; do
-    if docker compose --project-directory "${ROOT_DIR}" -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE}" exec -T ollama ollama list | awk 'NR>1 {print $1}' | grep -qx "${model}"; then
+    normalized_model=$(normalize_ollama_model_ref "${model}")
+    if docker compose --project-directory "${ROOT_DIR}" -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE}" exec -T ollama ollama list | awk 'NR>1 {print $1}' | grep -qx "${normalized_model}"; then
         echo "Ollama model already present: ${model}"
         continue
     fi

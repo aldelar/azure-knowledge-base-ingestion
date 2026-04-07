@@ -1,10 +1,111 @@
 # Context Aware & Vision Grounded KB Agent
 
-An Azure accelerator that transforms HTML knowledge base articles into an AI-searchable, image-aware index — and reasons over them with a vision-grounded conversational agent.
+A reference implementation that transforms HTML knowledge base articles into an AI-searchable, image-aware index — and reasons over them with a vision-grounded conversational agent.
 
-Enterprise knowledge bases store thousands of technical articles as HTML pages bundled with screenshots, diagrams, and UI captures. These articles are rich in information but invisible to AI search: traditional keyword search misses context, token-based chunking breaks documents at arbitrary boundaries, and the images — which often carry critical information — are completely lost. This accelerator solves all three problems with a two-stage ingestion pipeline and an agent that can *see*.
+Enterprise knowledge bases store thousands of technical articles as HTML pages bundled with screenshots, diagrams, and UI captures. These articles are rich in information but invisible to AI search:
+
+- **Traditional keyword search misses context** — queries fail to surface relevant articles when the terminology doesn't match exactly.
+- **Token-based chunking breaks documents at arbitrary boundaries** — splitting on token count ignores the semantic structure of articles, producing chunks that lose coherence.
+- **Images are completely lost** — screenshots, diagrams, and UI captures that often carry critical information are stripped out and never indexed.
+
+This reference implementation solves all three problems with a two-stage ingestion pipeline and an agent that can *see*.
+
+The agent is able to leverage images to support its answers, not just answer as text. When a search result contains images, the agent can view them and reason about their visual content — providing richer, more complete answers that draw on the full fidelity of the original articles.
 
 ![Context Aware & Vision Grounded KB Agent — using an image from a search chunk to support its answer](docs/assets/app.png)
+
+The agent has access to well formed chunks broken down based on the understanding of the original context, by paragraphs, tables, and images together, not just arbitrary token splits. This structure-aware chunking preserves the coherence of the original content and leads to higher quality retrieval and more accurate answers.
+
+![Context Aware & Vision Grounded KB Agent — a chunk is a complete paragraph and has the fidelity of the original (including images)](docs/assets/app2.png)
+
+## Deployment Layout
+
+The project runs in two modes. **Local dev** uses Docker Compose with emulators and local models for rapid, self-contained iteration with zero Azure dependency. **Azure prod** deploys the same application services to Azure Container Apps backed by managed Azure platform services. The code is the same — only the infrastructure underneath changes.
+
+```mermaid
+block-beta
+  columns 5
+
+  block:DEV_INFRA:2
+    columns 1
+    DI_TITLE["🐳 Infra · Local Docker"]
+    DI1["Cosmos DB Emulator"]
+    DI2["Azurite · Storage Emulator"]
+    DI3["AI Search Simulator"]
+    DI4["Ollama · Local LLMs<br/><i>qwen2.5 · moondream · mxbai-embed</i>"]
+    DI5["Aspire Dashboard<br/><i>OpenTelemetry</i>"]
+  end
+
+  space
+
+  block:PROD_INFRA:2
+    columns 1
+    PI_TITLE["☁️ Infra · Azure Services"]
+    PI1["Azure Cosmos DB"]
+    PI2["Azure Storage Account"]
+    PI3["Azure AI Search"]
+    PI4["Microsoft Foundry<br/><i>gpt-(5-mini/4.1) · text-embedding-3-small</i>"]
+    PI5["Azure Monitor · App Insights<br/><i>OpenTelemetry</i>"]
+    PI6["API Management · AI Gateway"]
+    PI7["Azure Container Registry"]
+  end
+
+  block:DEV_SVC:2
+    columns 1
+    DS_TITLE["🐳 Services · Local Docker"]
+    DS1["fn-convert"]
+    DS2["fn-index"]
+    DS3["agent<br/><i>Microsoft Agent Framework</i>"]
+    DS4["web-app<br/><i>CopilotKit · AG-UI protocol</i>"]
+  end
+
+  space
+
+  block:PROD_SVC:2
+    columns 1
+    PF_TITLE["☁️ Services · Azure Functions"]
+    PF1["fn-convert"]
+    PF2["fn-index"]
+    PS_TITLE["☁️ Services · Azure Container Apps"]
+    PS3["agent<br/><i>Microsoft Agent Framework</i>"]
+    PS4["web-app<br/><i>CopilotKit · AG-UI protocol</i>"]
+  end
+
+  style DI_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
+  style DS_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
+  style PI_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+  style PF_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+  style PS_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+
+  style DEV_INFRA fill:#263238,stroke:#37474f,color:#cfd8dc
+  style DEV_SVC fill:#263238,stroke:#37474f,color:#cfd8dc
+  style PROD_INFRA fill:#3e2723,stroke:#4e342e,color:#d7ccc8
+  style PROD_SVC fill:#3e2723,stroke:#4e342e,color:#d7ccc8
+
+  style DI1 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI2 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI3 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI4 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DI5 fill:#37474f,stroke:#455a64,color:#eceff1
+
+  style PI1 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI2 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI3 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI4 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI5 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI6 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PI7 fill:#4e342e,stroke:#5d4037,color:#efebe9
+
+  style DS1 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DS2 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DS3 fill:#37474f,stroke:#455a64,color:#eceff1
+  style DS4 fill:#37474f,stroke:#455a64,color:#eceff1
+
+  style PF1 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PF2 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PS3 fill:#4e342e,stroke:#5d4037,color:#efebe9
+  style PS4 fill:#4e342e,stroke:#5d4037,color:#efebe9
+```
 
 ## Getting Started
 
@@ -34,6 +135,32 @@ make dev-up
 
 `dev-up` installs local dependencies, starts emulators, builds all services, runs the pipeline, and prints the local UI URL.
 
+For faster UI iteration, run the backends locally and start the Next.js app on the host with hot reload:
+
+```bash
+make dev-infra-up
+make dev-services-pipeline-up
+make dev-services-agents-up
+make dev-pipeline
+make dev-ui-live
+```
+
+That keeps the infra, functions, and agent in Docker, but serves the web app directly from `src/web-app` on `http://localhost:3001` so UI changes reload immediately.
+
+`make dev-ui-live` runs in the current terminal and can be stopped with `Ctrl+C`. It also writes a copy of its output to `.tmp/logs/dev-ui-live.log`, which you can tail from another terminal with `make dev-ui-live-logs`. If an existing hot-reload server is already running, stop it with `make dev-ui-live-stop`.
+
+If the backends are already up, use:
+
+```bash
+make dev-ui-live
+```
+
+To print the hot-reload URL only, use:
+
+```bash
+make dev-ui-live-url
+```
+
 ### Azure / Prod
 
 Set the project name, then bring everything up:
@@ -51,7 +178,7 @@ See [docs/setup-and-makefile.md](docs/setup-and-makefile.md) for the full target
 
 ## Core Patterns
 
-This solution demonstrates eight architectural patterns for building production-quality AI agents over enterprise content. Each solves a real problem encountered when moving from prototype to production.
+This solution demonstrates nine architectural patterns for building production-quality AI agents over enterprise content. Each solves a real problem encountered when moving from prototype to production.
 
 ### 1. Pluggable Document Normalization
 
@@ -171,42 +298,17 @@ sequenceDiagram
 
 ### 4. Agent-Owned Conversation Memory
 
-**Problem:** When the web app owns conversation history (the typical pattern), the agent is stateless and the UI layer must build, serialize, trim, and pass the full conversation context on every request. This couples the UI to the agent's context management strategy.
+**Problem:** When the web app owns conversation history, the UI layer must build, serialize, trim, and pass the full conversation context on every request. That couples the frontend to the agent's context-management strategy and makes resume fidelity harder to preserve.
 
-**Pattern:** The agent owns its own memory using the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/)'s session persistence and compaction. A custom `CosmosAgentSessionRepository` persists `AgentSession` state to an `agent-sessions` container. The `CompactionProvider` (rc5) applies two strategies: `SlidingWindowStrategy` (keep last 3 turn groups) trims context before the LLM call, and `ToolResultCompactionStrategy` (keep last 1 tool call group) replaces older tool output with summaries after the LLM responds.
+**Pattern:** The agent owns canonical conversation state using the [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/)'s session persistence and compaction. Both the agent and the web app use Cosmos DB as their persistence backend. A custom `CosmosAgentSessionRepository` persists `AgentSession` state to the `agent-sessions` container. The web app owns only lightweight `conversations` metadata for sidebar CRUD and thread selection.
 
-The web app owns conversation **display data** in three dedicated containers — `conversations` (sidebar metadata, PK `/userId`), `messages` (one doc per message, PK `/conversationId`), and `references` (one doc per citation, PK `/conversationId`). No shared documents, no read-modify-write races, no dependency on the agent's internal session format.
+The detailed contracts now live in the dedicated specs: [Agent Session](docs/specs/agent-session.md) defines canonical session persistence and transcript hydration, and [Conversation State Model](docs/specs/conversation-state-model.md) defines ownership boundaries across the web app, AG-UI, and future workflows.
 
 ```mermaid
 flowchart LR
-    subgraph WebApp["Web App (thin client)"]
-        UI["Chainlit UI"]
-    end
-
-    subgraph Agent["KB Agent (Microsoft Agent Framework)"]
-        direction LR
-        AG["Agent<br/><small><i>CosmosAgentSessionRepository</i></small>"]
-        CP["CompactionProvider<br/><small><i>SlidingWindowStrategy</i></small><br/><small><i>ToolResultCompactionStrategy</i></small>"]
-        AG --- CP
-    end
-
-    Sessions[("agent-sessions")]
-    Conv[("conversations")]
-    Msgs[("conversation<br/>messages")]
-    Refs[("message<br/>references")]
-
-    UI -->|"conversation_id<br/>via extra_body"| AG
-    AG -->|"Read/write session"| Sessions
-    UI -->|"Sidebar list"| Conv
-    UI -->|"Append messages"| Msgs
-    UI -->|"Write/read refs"| Refs
-
-    style WebApp fill:#455a64,stroke:#546e7a,color:#ffffff
-    style Agent fill:#3949ab,stroke:#5c6bc0,color:#ffffff
-    style Sessions fill:#616161,stroke:#757575,color:#ffffff
-    style Conv fill:#616161,stroke:#757575,color:#ffffff
-    style Msgs fill:#616161,stroke:#757575,color:#ffffff
-    style Refs fill:#616161,stroke:#757575,color:#ffffff
+    UI["Web App<br/>Next.js + CopilotKit"] -->|"threadId via AG-UI"| Agent["KB Agent<br/>CosmosAgentSessionRepository"]
+    Agent -->|"canonical transcript"| Sessions[("agent-sessions")]
+    UI -->|"sidebar metadata"| Conversations[("conversations")]
 ```
 
 ---
@@ -221,7 +323,7 @@ flowchart LR
 |-------|-----------|
 | **Service-to-service** | System-assigned managed identity on each Container App, with per-service RBAC roles defined in Bicep |
 | **Developer access** | `DefaultAzureCredential` — same code works locally (Azure CLI identity) and deployed (managed identity) |
-| **User authentication** | Entra ID Easy Auth (platform sidecar) + Chainlit OAuth callback for per-user session isolation |
+| **User authentication** | Entra ID Easy Auth (platform sidecar) + Next.js header extraction for per-user session ownership |
 | **Agent API protection** | In-code JWT middleware (RS256, JWKS-cached) for external HTTPS ingress; environment-gated (`REQUIRE_AUTH`) for local dev bypass |
 | **Data access** | Cosmos DB native RBAC (Built-in Data Contributor) — local auth disabled, Entra-only |
 
@@ -269,7 +371,7 @@ Beyond stable routing, APIM provides an extensible policy pipeline — without t
 
 ```mermaid
 flowchart LR
-    CHAT["Chainlit UI"] --> APIM["APIM<br/>AI Gateway"]
+    CHAT["CopilotKit UI"] --> APIM["APIM<br/>AI Gateway"]
     APIM -->|"stable proxy URL"| AGENT["Agent<br/>Container App"]
     APIM -.->|"rate limiting,<br/>content safety,<br/>token tracking"| GOV["Policy Pipeline"]
 
@@ -341,9 +443,75 @@ flowchart LR
 
 ---
 
+### 9. AG-UI Protocol
+
+**Problem:** Traditional chat UIs treat agents as opaque text generators — the user sends a message, waits, and eventually receives a completed response. There is no visibility into what the agent is doing (calling tools, reasoning, waiting on backends), no way for the UI to render tool interactions richly, and no standard contract for resuming interrupted conversations across sessions.
+
+**Pattern:** The [AG-UI protocol](https://docs.ag-ui.com) provides a **streaming event contract** between the agent backend and the UI frontend. Instead of a single response blob, the agent emits a typed event stream (`RUN_STARTED`, `TEXT_MESSAGE_*`, `TOOL_CALL_*`, `REASONING_*`, `STATE_*`, `RUN_FINISHED`) over SSE. The UI consumes these events in real time and renders each interaction phase with purpose-built components.
+
+Core benefits of the AG-UI protocol:
+
+| Benefit | Description |
+|---------|-------------|
+| **Streaming event contract** | Typed SSE events replace opaque request/response — the UI knows exactly what the agent is doing at every moment |
+| **Rich tool rendering** | Tool calls and results are first-class events, enabling the UI to render custom cards (search results, citation pills, progress indicators) instead of raw JSON |
+| **Resumable interactions** | `threadId`-based session continuity lets conversations resume across page reloads and browser sessions — the agent replays from persisted state |
+| **Framework-agnostic** | The protocol is an open standard — any agent framework that emits AG-UI events works with any AG-UI-compatible frontend |
+| **Transparent reasoning** | `REASONING_*` events surface the agent's chain-of-thought as collapsible "Thinking" cards, giving users visibility into the decision process |
+| **State synchronization** | `STATE_SNAPSHOT` and `STATE_DELTA` events allow the agent to push structured state to the UI without embedding it in the text stream |
+
+> **Current scope:** This reference implementation showcases **tool calls and tool results** as the primary AG-UI rich integration. The `search_knowledge_base` tool emits `TOOL_CALL_START/ARGS/END` and `TOOL_CALL_RESULT` events, rendered in the UI as a custom search card with live status, query display, and interactive citation pills. Other AG-UI capabilities (state sync, custom UI widgets) are supported by the protocol but not yet exercised in the UI.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as CopilotKit UI
+    participant RT as CopilotRuntime<br/>(Next.js API route)
+    participant GW as APIM Gateway
+    participant Agent as KB Agent<br/>(AG-UI endpoint)
+    participant LLM as LLM
+    participant Tool as search_knowledge_base
+
+    User->>UI: Send message
+    UI->>RT: GraphQL mutation
+    RT->>GW: POST /ag-ui/ (SSE)
+    GW->>Agent: Forward request
+
+    Agent-->>RT: RUN_STARTED
+    Agent->>LLM: Prompt + history
+
+    Note over Agent: LLM decides to call a tool
+
+    Agent-->>RT: TOOL_CALL_START
+    Agent-->>RT: TOOL_CALL_ARGS (query, filters)
+    RT-->>UI: Stream events
+    Note over UI: Renders search card<br/>with "Searching..." status
+
+    Agent->>Tool: Execute search
+    Tool-->>Agent: Search results
+    Agent-->>RT: TOOL_CALL_END
+    Agent-->>RT: TOOL_CALL_RESULT (citations)
+    RT-->>UI: Stream events
+    Note over UI: Updates card with<br/>citation pills
+
+    Agent->>LLM: Results + conversation
+    Agent-->>RT: TEXT_MESSAGE_START
+    Agent-->>RT: TEXT_MESSAGE_CONTENT (chunks)
+    RT-->>UI: Stream text
+    Note over UI: Renders streaming<br/>markdown response
+    Agent-->>RT: TEXT_MESSAGE_END
+    Agent-->>RT: RUN_FINISHED
+```
+
+On the **agent side**, the Microsoft Agent Framework's AG-UI adapter (`AgentFrameworkAgent` + `add_agent_framework_fastapi_endpoint`) translates agent framework events into AG-UI SSE events automatically. A `_PersistedSessionAgent` wrapper maps AG-UI `threadId` values to Cosmos DB sessions, enabling seamless conversation resume.
+
+On the **UI side**, CopilotKit's `useRenderToolCall` hook lets the app register custom renderers per tool name. The `SearchToolRenderer` component receives tool call arguments and results as structured data and renders them as interactive cards — no string parsing or JSON extraction required.
+
+---
+
 ## Architecture
 
-A **two-stage ingestion pipeline** builds an image-aware search index, and a **conversational agent** (Container App with Foundry integration for tracing) reasons over it with vision capabilities. A **Chainlit thin client** calls the agent via the Responses API through an APIM AI Gateway, and conversation history is persisted in **Cosmos DB** (agent-owned via the Agent Framework's session persistence).
+A **two-stage ingestion pipeline** builds an image-aware search index, and a **conversational agent** (Container App with Foundry integration for tracing) reasons over it with vision capabilities. A **Next.js + CopilotKit thin client** calls the agent via the **AG-UI protocol** through an APIM AI Gateway, while conversation persistence is split between agent-owned `agent-sessions` and web-app-owned `conversations` metadata.
 
 ```mermaid
 flowchart LR
@@ -365,8 +533,8 @@ flowchart LR
     VIS -->|inject| AGENT
     AGENT -->|sessions| COSMOS["Cosmos DB"]
 
-    CHAT["Chainlit UI"] --> APIM["APIM"] --> AGENT
-    CHAT -->|conversations| COSMOS
+    CHAT["CopilotKit UI"] -->|AG-UI + citation lookups| APIM["APIM"] --> AGENT
+    CHAT -->|conversation metadata| COSMOS
 
     style AgentSvc fill:#3949ab,stroke:#5c6bc0,color:#ffffff
     style Pipeline fill:#455a64,stroke:#546e7a,color:#ffffff
@@ -392,7 +560,7 @@ flowchart LR
 │   ├── ards/            Architecture Decision Records
 │   ├── epics/           Epic and story tracking
 │   ├── research/        Spike results and research notes
-│   └── specs/           Architecture, infrastructure, and agent memory specs
+│   └── specs/           Architecture, infrastructure, agent-session, and conversation ownership specs
 ├── infra/
 │   ├── azure/           AZD project, hooks, and Bicep IaC for Azure resources
 │   └── docker/          Local Docker Compose topology for dev infra + services
@@ -404,7 +572,7 @@ flowchart LR
 │   ├── agent/           KB Agent — Container App (Starlette + Agent Framework)
 │   ├── functions/       4 Azure Functions (fn_convert_cu, fn_convert_mistral,
 │   │                    fn_convert_markitdown, fn_index) — each a Container App
-│   └── web-app/         Chainlit thin client (OpenAI SDK + Cosmos data layer)
+│   └── web-app/         Next.js + CopilotKit thin client (AG-UI runtime + Cosmos metadata layer)
 └── Makefile             Developer workflow — local + Azure targets
 ```
 
@@ -414,7 +582,8 @@ flowchart LR
 |----------|-------------|
 | [Architecture](docs/specs/architecture.md) | Pipeline design, converter backends, index schema, agent components, image flow |
 | [Infrastructure](docs/specs/infrastructure.md) | Bicep modules, resource inventory, model deployments, RBAC, networking |
-| [Agent Memory](docs/specs/agent-memory.md) | Cosmos DB schema, session lifecycle, dual-writer pattern |
+| [Agent Session](docs/specs/agent-session.md) | Canonical agent-session persistence, transcript hydration, and resume behavior |
+| [Conversation State Model](docs/specs/conversation-state-model.md) | Ownership boundaries across the web app, AG-UI, workflows, and specialists |
 | [Setup & Makefile Guide](docs/setup-and-makefile.md) | Full Makefile reference, local/Azure workflows, resource naming |
 | [Architecture Decision Records](docs/ards/) | Key design decisions with rationale and alternatives considered |
 

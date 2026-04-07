@@ -27,10 +27,10 @@ from agent_framework._compaction import (
 from agent_framework._sessions import InMemoryHistoryProvider
 
 from agent.client_factories import create_chat_client
-from agent.search_tool import SearchResult, search_kb
 from agent.image_service import get_image_url
-from agent.vision_middleware import VisionImageMiddleware
+from agent.search_tool import SearchResult, build_security_filter, search_kb
 from agent.security_middleware import SecurityFilterMiddleware
+from agent.vision_middleware import VisionImageMiddleware
 from agent.config import config
 
 logger = logging.getLogger(__name__)
@@ -126,10 +126,8 @@ def search_knowledge_base(
 
     # Build OData filter from departments injected by SecurityFilterMiddleware
     departments = kwargs.get("departments", [])
-    security_filter = None
-    if departments:
-        dept_list = ",".join(departments)
-        security_filter = f"search.in(department, '{dept_list}', ',')"
+    security_filter = build_security_filter(departments)
+    if security_filter:
         logger.info("Applying security filter: %s", security_filter)
 
     try:
@@ -142,6 +140,7 @@ def search_knowledge_base(
     for idx, r in enumerate(results, start=1):
         result_dicts.append({
             "ref_number": idx,
+            "chunk_id": r.id,
             "content": r.content,
             "title": r.title,
             "section_header": r.section_header,
@@ -209,7 +208,7 @@ def create_agent() -> Agent:
     vision middleware.
     """
     client = create_chat_client()
-    client.middleware = [VisionImageMiddleware()]
+    client.function_invocation_configuration["max_iterations"] = 3
 
     history = InMemoryHistoryProvider(skip_excluded=True)
     compaction = CompactionProvider(
@@ -223,7 +222,7 @@ def create_agent() -> Agent:
         name="KBSearchAgent",
         instructions=_SYSTEM_PROMPT,
         tools=[search_knowledge_base],
-        middleware=[SecurityFilterMiddleware()],
+        middleware=[SecurityFilterMiddleware(), VisionImageMiddleware()],
         context_providers=[history, compaction],
     )
     logger.info(

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import shared.config as cfg_mod
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from fn_index.summarizer import summarize_chunk, summarize_chunks
+
+
+def _enable_chunk_summaries(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.delenv("ENABLE_CHUNK_SUMMARIES", raising=False)
+    cfg_mod._config = None
 
 
 class TestSummarizeChunk:
@@ -54,7 +59,8 @@ class TestSummarizeChunks:
     """Tests for batch chunk summarization."""
 
     @patch("fn_index.summarizer.summarize_chunk")
-    def test_returns_correct_count(self, mock_summarize):
+    def test_returns_correct_count(self, mock_summarize, monkeypatch):
+        _enable_chunk_summaries(monkeypatch)
         mock_summarize.return_value = "A summary."
         chunks = [
             SimpleNamespace(content="c1", title="T", section_header="S"),
@@ -68,7 +74,8 @@ class TestSummarizeChunks:
         assert mock_summarize.call_count == 3
 
     @patch("fn_index.summarizer.summarize_chunk")
-    def test_preserves_order(self, mock_summarize):
+    def test_preserves_order(self, mock_summarize, monkeypatch):
+        _enable_chunk_summaries(monkeypatch)
         mock_summarize.side_effect = ["Summary 1", "Summary 2"]
         chunks = [
             SimpleNamespace(content="c1", title="T1", section_header="S1"),
@@ -80,8 +87,25 @@ class TestSummarizeChunks:
         assert result == ["Summary 1", "Summary 2"]
 
     @patch("fn_index.summarizer.summarize_chunk")
-    def test_empty_chunks_returns_empty_list(self, mock_summarize):
+    def test_empty_chunks_returns_empty_list(self, mock_summarize, monkeypatch):
+        _enable_chunk_summaries(monkeypatch)
         result = summarize_chunks([])
 
         assert result == []
+        mock_summarize.assert_not_called()
+
+    @patch("fn_index.summarizer.summarize_chunk")
+    def test_returns_empty_summaries_when_disabled(self, mock_summarize, monkeypatch):
+        monkeypatch.setenv("ENVIRONMENT", "dev")
+        monkeypatch.delenv("ENABLE_CHUNK_SUMMARIES", raising=False)
+        cfg_mod._config = None
+
+        chunks = [
+            SimpleNamespace(content="c1", title="T", section_header="S"),
+            SimpleNamespace(content="c2", title="T", section_header="S"),
+        ]
+
+        result = summarize_chunks(chunks)
+
+        assert result == ["", ""]
         mock_summarize.assert_not_called()

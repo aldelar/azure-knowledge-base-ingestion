@@ -120,64 +120,6 @@ resource conversationsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDataba
 }
 
 // ---------------------------------------------------------------------------
-// Container: messages (partition key: /conversationId)
-// Web app owns — one doc per message, insert-only
-// ---------------------------------------------------------------------------
-resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  parent: database
-  name: 'messages'
-  properties: {
-    resource: {
-      id: 'messages'
-      partitionKey: {
-        paths: ['/conversationId']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        includedPaths: [
-          { path: '/*' }
-        ]
-        excludedPaths: [
-          { path: '/content/*' }
-          { path: '/"_etag"/?' }
-        ]
-      }
-      defaultTtl: -1
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Container: references (partition key: /conversationId)
-// Web app owns — one doc per chunk reference, point reads
-// ---------------------------------------------------------------------------
-resource referencesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
-  parent: database
-  name: 'references'
-  properties: {
-    resource: {
-      id: 'references'
-      partitionKey: {
-        paths: ['/conversationId']
-        kind: 'Hash'
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        includedPaths: [
-          { path: '/*' }
-        ]
-        excludedPaths: [
-          { path: '/content/*' }
-          { path: '/"_etag"/?' }
-        ]
-      }
-      defaultTtl: -1
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
 output cosmosAccountId string = cosmosAccount.id
