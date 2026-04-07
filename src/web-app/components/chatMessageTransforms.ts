@@ -431,7 +431,17 @@ export function getCitationMarkdownContent(
 }
 
 export function linkCitationMarkers(content: string): string {
-  const linkedBracketedMarkers = content.replace(citationMarkerPattern, "[$1](#citation-ref-$2)");
+  // First, handle multi-ref brackets like [Ref #1, Ref #2] or [Ref #1, #2]
+  const expandedMultiRefs = content.replace(
+    /\[Ref\s*#\d+(?:\s*,\s*(?:Ref\s*)?#\s*\d+)+\](?!\()/gi,
+    (match) => {
+      const refs = [...match.matchAll(/#\s*(\d+)/g)];
+      return refs.map((r) => `[Ref #${r[1]}](#citation-ref-${r[1]})`).join(", ");
+    },
+  );
+  // Then handle single-ref brackets [Ref #N]
+  const linkedBracketedMarkers = expandedMultiRefs.replace(citationMarkerPattern, "[$1](#citation-ref-$2)");
+  // Finally handle bare Ref #N not already linked
   return linkedBracketedMarkers.replace(/\bRef #(\d+)\b/g, (match, refNumber, offset, value) => {
     const previousCharacter = value[offset - 1];
     const followingCharacters = value.slice(offset + match.length, offset + match.length + 2);

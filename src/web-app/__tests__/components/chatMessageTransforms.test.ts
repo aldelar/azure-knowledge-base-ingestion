@@ -21,6 +21,16 @@ describe("linkCitationMarkers", () => {
     expect(linkCitationMarkers("See Ref #4 and Ref #9 for details."))
       .toBe("See [Ref #4](#citation-ref-4) and [Ref #9](#citation-ref-9) for details.");
   });
+
+  it("splits multi-ref brackets into individual linked pills", () => {
+    expect(linkCitationMarkers("Overview of the architecture. [Ref #1, Ref #2]"))
+      .toBe("Overview of the architecture. [Ref #1](#citation-ref-1), [Ref #2](#citation-ref-2)");
+  });
+
+  it("handles shorthand multi-ref brackets like [Ref #1, #2]", () => {
+    expect(linkCitationMarkers("Details here. [Ref #3, #4, #5]"))
+      .toBe("Details here. [Ref #3](#citation-ref-3), [Ref #4](#citation-ref-4), [Ref #5](#citation-ref-5)");
+  });
 });
 
 describe("canonicalizeCitations", () => {

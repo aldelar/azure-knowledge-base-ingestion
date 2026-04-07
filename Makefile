@@ -326,7 +326,7 @@ prod-up: prod-setup prod-infra-up prod-services-up prod-pipeline
 	@$(MAKE) prod-ui-url
 
 .PHONY: prod-services-up
-prod-services-up: prod-services-app-up prod-services-agents-up prod-services-pipeline-up
+prod-services-up: prod-configure-registries prod-services-app-up prod-services-agents-up prod-services-pipeline-up
 	@$(MAKE) prod-configure-target-ports
 
 .PHONY: prod-configure-registries
@@ -342,7 +342,7 @@ prod-services-down:
 	@echo "Scale-down remains environment-specific. Use Azure CLI or the portal to reduce replicas to zero for deployed Container Apps."
 
 .PHONY: prod-services-pipeline-up
-prod-services-pipeline-up: prod-configure-registries
+prod-services-pipeline-up:
 	@$(AZD) deploy --service func-index
 	@case "$(CONVERTER)" in \
 		cu) $(AZD) deploy --service func-convert-cu ;; \
@@ -352,12 +352,12 @@ prod-services-pipeline-up: prod-configure-registries
 	 esac
 
 .PHONY: prod-services-app-up
-prod-services-app-up: prod-configure-registries
+prod-services-app-up:
 	@$(AZD) deploy --service web-app
 	@$(MAKE) prod-configure-target-ports
 
 .PHONY: prod-services-agents-up
-prod-services-agents-up: prod-configure-registries
+prod-services-agents-up:
 	@$(AZD) deploy --service agent
 	@$(MAKE) prod-configure-target-ports
 

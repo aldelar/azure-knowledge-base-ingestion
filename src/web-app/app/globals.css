@@ -48,7 +48,6 @@ textarea {
 
 .workspaceHeader {
   margin-bottom: 16px;
-  max-width: 68ch;
 }
 
 .workspaceEyebrow {
@@ -737,7 +736,14 @@ textarea {
 }
 
 .reasoningCardTransient {
+  animation: pulseThinking 1.8s ease-in-out infinite;
+  border-color: var(--workspace-border-strong);
   border-style: dashed;
+}
+
+@keyframes pulseThinking {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 .loadingState {

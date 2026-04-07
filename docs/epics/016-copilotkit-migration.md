@@ -899,3 +899,56 @@ Repair the README's agent-memory section so it accurately describes the current 
 
 - [x] The README agent-memory section renders without the prior Mermaid parse error
 - [x] README readers land on the dedicated memory specs instead of stale or misleading container descriptions
+
+### Story 30 — Upgrade MAF to 1.0 GA and Latest AG-UI Pre-Release
+
+> **Status:** Not Started
+> **Depends on:** Stories 1, 11
+
+Upgrade the Microsoft Agent Framework from RC6 pre-release to the 1.0 GA release and pull in the latest `agent-framework-ag-ui` pre-release. This aligns the project with the stable public API surface and picks up any AG-UI improvements or fixes published after the `1.0.0b260330` beta.
+
+#### Context
+
+The project currently pins:
+
+| Package | Current | Target |
+|---|---|---|
+| `agent-framework-core` | `>=1.0.0rc6` | `>=1.0.0` (GA, released 2026-04-02) |
+| `agent-framework-azure-ai` | `>=1.0.0rc6` | Latest available (GA or RC) |
+| `agent-framework-ag-ui` | `>=1.0.0b260330` | Latest pre-release available on PyPI |
+| `azure-ai-agentserver-agentframework` | `>=1.0.0b17` | Latest compatible pre-release |
+| `@ag-ui/client` (npm) | `^0.0.48` | Latest available |
+
+The `[tool.uv]` section contains `override-dependencies` that forced RC6 past `azure-ai-agentserver-agentframework`'s upper-bound pin (`<=rc3`). These overrides should be revisited — the 1.0 GA release may be compatible natively, or the overrides need updating to target `>=1.0.0`.
+
+#### Risks
+
+- **Private API breakage** — the agent code imports from internal modules (`agent_framework._middleware`, `agent_framework._compaction`, `agent_framework._sessions`). The 1.0 GA release may have promoted these to public API, renamed them, or removed them. Each import site must be checked and migrated.
+- **AG-UI adapter API changes** — `AgentFrameworkAgent` and `add_agent_framework_fastapi_endpoint` signatures may have changed between betas.
+- **`azure-ai-agentserver-agentframework` compatibility** — the `from_agent_framework` adapter may need a newer beta to work with core 1.0 without overrides.
+- **npm `@ag-ui/client` protocol changes** — a major bump on the JS side could affect the web-app Copilot Runtime wiring.
+
+#### Deliverables
+
+- [ ] Bump `agent-framework-core` to `>=1.0.0` in `pyproject.toml`
+- [ ] Bump `agent-framework-azure-ai` to the latest available version in `pyproject.toml`
+- [ ] Bump `agent-framework-ag-ui` to the latest pre-release in `pyproject.toml`
+- [ ] Bump `azure-ai-agentserver-agentframework` to the latest compatible version in `pyproject.toml`
+- [ ] Revisit and update (or remove) `[tool.uv] override-dependencies` — they should no longer be needed if upstream pins are compatible with 1.0
+- [ ] Migrate any private API imports (`_middleware`, `_compaction`, `_sessions`) to their 1.0 public equivalents
+- [ ] Bump `@ag-ui/client` in `src/web-app/package.json` to the latest version
+- [ ] Regenerate lockfiles (`uv lock` for agent, `npm install` for web-app)
+- [ ] Run the full agent test suite and fix any regressions from API changes
+- [ ] Run the full web-app test suite and fix any regressions
+- [ ] Manually verify AG-UI SSE stream and Responses API still work end-to-end
+- [ ] Update `requirements.txt` if maintained separately
+
+#### Definition of Done
+
+- [ ] `cd src/agent && uv run pytest tests/ -o addopts= -m "not uitest"` passes with zero regressions
+- [ ] `cd src/web-app && npm test` passes with zero regressions
+- [ ] `make dev-test` passes cleanly
+- [ ] `curl` against `/ag-ui` and `/responses` returns valid event streams
+- [ ] No `agent_framework._*` private module imports remain in agent code
+- [ ] `uv.lock` resolves without override hacks (or overrides are documented as still necessary with rationale)
+- [ ] `package-lock.json` resolves with the latest `@ag-ui/client`

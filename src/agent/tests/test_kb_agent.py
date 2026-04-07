@@ -102,7 +102,7 @@ class TestSystemPrompt:
         assert "Do NOT say things like \"let's search\"" in _SYSTEM_PROMPT
 
     def test_prompt_requires_inline_citations(self) -> None:
-        assert "Every factual sentence or bullet must include at least one inline citation" in _SYSTEM_PROMPT
+        assert "Cite sources inline using [Ref #N] markers" in _SYSTEM_PROMPT
 
     def test_prompt_forbids_external_docs_links(self) -> None:
         assert "Do NOT output bare external documentation links" in _SYSTEM_PROMPT
@@ -142,7 +142,7 @@ class TestSystemPrompt:
             "![Agentic retrieval architecture](/api/images/agentic-retrieval-overview-html_en-us/images/agentic-retrieval-architecture.png)"
             in _SYSTEM_PROMPT
         )
-        assert "This diagram is helpful because it shows the request flow" in _SYSTEM_PROMPT
+        assert "This diagram shows the request flow" in _SYSTEM_PROMPT
 
     def test_prod_prompt_restores_compact_instructions(self) -> None:
         prod_prompt = _load_system_prompt("prod")

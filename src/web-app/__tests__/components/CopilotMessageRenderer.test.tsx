@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 
 import { CopilotMessageRenderer } from "../../components/CopilotMessageRenderer";
 
-const AssistantMessage = ({ message }: any) => <div data-testid="assistant-message">{message?.content ?? ""}</div>;
+const AssistantMessage = ({ message, isLoading }: any) => (
+  <div data-testid="assistant-message" data-loading={isLoading ? "true" : undefined}>
+    {message?.content ?? ""}
+  </div>
+);
 const UserMessage = ({ message }: any) => <div data-testid="user-message">{message?.content ?? ""}</div>;
 
 describe("CopilotMessageRenderer", () => {
@@ -200,22 +204,7 @@ describe("CopilotMessageRenderer", () => {
     expect(screen.getByText("The agent is collecting article matches and ranking the best sections.")).toBeInTheDocument();
   });
 
-  it("shows a synthesis indicator after tool results return but before the assistant answer arrives", () => {
-    const assistantMessage = {
-      id: "assistant-2b",
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "tool-call-2b",
-          type: "function",
-          function: {
-            name: "search_knowledge_base",
-            arguments: JSON.stringify({ query: "content understanding" }),
-          },
-        },
-      ],
-    };
-
+  it("renders assistant message in loading state after tool results return but before text arrives", () => {
     const toolResultMessage = {
       id: "tool-result-2b",
       role: "tool",
@@ -230,16 +219,14 @@ describe("CopilotMessageRenderer", () => {
         AssistantMessage={AssistantMessage}
         UserMessage={UserMessage}
         inProgress={true}
-        index={0}
+        index={1}
         isCurrentMessage={true}
-        message={assistantMessage as any}
-        messages={[assistantMessage, toolResultMessage] as any}
+        message={toolResultMessage as any}
+        messages={[toolResultMessage] as any}
       />,
     );
 
-    expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
-    expect(screen.getByText("Synthesizing an answer from the retrieved sources…")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-message")).toHaveAttribute("data-loading", "true");
   });
 
   it("does not render standalone tool result messages separately", () => {

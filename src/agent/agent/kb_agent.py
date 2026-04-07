@@ -208,6 +208,7 @@ def create_agent() -> Agent:
     vision middleware.
     """
     client = create_chat_client()
+    client.function_invocation_configuration["max_iterations"] = 3
 
     history = InMemoryHistoryProvider(skip_excluded=True)
     compaction = CompactionProvider(

@@ -224,6 +224,19 @@ export function CopilotMessageRenderer({
   markdownTagRenderers,
 }: CopilotMessageRendererProps) {
   if (message.role === "tool") {
+    if (inProgress && isCurrentMessage && AssistantMessage) {
+      return (
+        <AssistantMessage
+          key={`${index}-awaiting`}
+          rawData={message}
+          message={{ ...message, role: "assistant", content: "" } as any}
+          messages={messages as Message[]}
+          isLoading={true}
+          isGenerating={false}
+          isCurrentMessage={true}
+        />
+      );
+    }
     return null;
   }
 
@@ -251,7 +264,9 @@ export function CopilotMessageRenderer({
   const visibleContent = coerceMessageContent(message.content)?.trim();
   const searchCitations = getAssistantSearchCitations(message, messages, index);
   const transformedContent = visibleContent ? transformAssistantContent(visibleContent, searchCitations) : visibleContent;
-  const shouldRenderAssistantMessage = Boolean(visibleContent) || Boolean(message.generativeUI);
+  const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+  const isLoading = inProgress && isCurrentMessage && !visibleContent && toolCalls.length === 0;
+  const shouldRenderAssistantMessage = Boolean(visibleContent) || Boolean(message.generativeUI) || isLoading;
 
   const assistantContent = shouldRenderAssistantMessage && AssistantMessage ? (
     <AssistantMessage
@@ -260,8 +275,8 @@ export function CopilotMessageRenderer({
       rawData={{ ...message, content: transformedContent ?? message.content }}
       message={{ ...message, content: transformedContent ?? message.content } as Message}
       messages={messages as Message[]}
-      isLoading={inProgress && isCurrentMessage && !message.content}
-      isGenerating={inProgress && isCurrentMessage && !!message.content}
+      isLoading={isLoading}
+      isGenerating={inProgress && isCurrentMessage && !!visibleContent}
       isCurrentMessage={isCurrentMessage}
       onRegenerate={() => onRegenerate?.(message.id)}
       onCopy={onCopy}
@@ -273,20 +288,14 @@ export function CopilotMessageRenderer({
     />
   ) : null;
 
-  const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
-  const shouldRenderThinkingFallback =
-    inProgress && isCurrentMessage && !shouldRenderAssistantMessage && toolCalls.length === 0;
-  const shouldRenderPostToolThinkingFallback =
-    inProgress && isCurrentMessage && !shouldRenderAssistantMessage && toolCalls.length > 0;
-
   if (toolCalls.length === 0) {
-    return (
-      <>
-        {assistantContent}
-        {shouldRenderThinkingFallback ? renderTransientThinkingMessage(`${message.id}-thinking`) : null}
-      </>
-    );
+    return <>{assistantContent}</>;
   }
+
+  const allToolCallsComplete = toolCalls.every(
+    (toolCall) => findToolResultMessage(messages, toolCall.id) !== undefined,
+  );
+  const isAwaitingAnswer = inProgress && isCurrentMessage && allToolCallsComplete && !visibleContent;
 
   return (
     <>
@@ -298,12 +307,17 @@ export function CopilotMessageRenderer({
           </div>
         ))}
       </div>
-      {shouldRenderPostToolThinkingFallback
-        ? renderTransientThinkingMessage(
-            `${message.id}-post-tool-thinking`,
-            "Synthesizing an answer from the retrieved sources…",
-          )
-        : null}
+      {isAwaitingAnswer && AssistantMessage ? (
+        <AssistantMessage
+          key={`${index}-loading`}
+          rawData={message}
+          message={{ ...message, content: "" } as Message}
+          messages={messages as Message[]}
+          isLoading={true}
+          isGenerating={false}
+          isCurrentMessage={true}
+        />
+      ) : null}
     </>
   );
 }
