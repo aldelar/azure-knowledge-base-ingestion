@@ -1,7 +1,7 @@
-"""Dev-mode web search using Microsoft Learn search API.
+"""Web search using the Microsoft Learn search API.
 
-Searches whitelisted sites via the free learn.microsoft.com search API.
-Used in local development to avoid Azure Bing API costs.
+The MCP server uses the same Microsoft Learn-backed implementation in both
+dev and prod. Results are constrained to Microsoft Learn documentation pages.
 """
 
 from __future__ import annotations
@@ -18,19 +18,17 @@ logger = logging.getLogger(__name__)
 _SEARCH_TIMEOUT = 15.0
 _MAX_RESULTS = 5
 _MAX_SNIPPET_LEN = 500
+_MICROSOFT_LEARN_HOST = "learn.microsoft.com"
 
 # Microsoft Learn free search API
 _LEARN_SEARCH_URL = "https://learn.microsoft.com/api/search"
 
 
-async def dev_web_search(query: str, whitelist: list[str]) -> str:
-    """Search whitelisted sites via Microsoft Learn search API.
+async def web_search(query: str) -> str:
+    """Search Microsoft Learn documentation.
 
     Returns JSON matching the MCP tool contract.
     """
-    if not whitelist:
-        raise RuntimeError("No whitelisted sites configured for dev web search")
-
     results: list[dict[str, Any]] = []
     try:
         async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT) as client:
@@ -39,42 +37,42 @@ async def dev_web_search(query: str, whitelist: list[str]) -> str:
                 params={
                     "search": query,
                     "locale": "en-us",
-                    "topResults": str(_MAX_RESULTS * 2),  # fetch extra, filter by whitelist
+                    "topResults": str(_MAX_RESULTS * 2),
                 },
             )
             resp.raise_for_status()
             data = resp.json()
 
             search_results = data.get("results", [])
-            idx = 0
+            index = 0
             for item in search_results:
                 url = item.get("url", "")
-                if not _is_whitelisted(url, whitelist):
+                if not _is_microsoft_learn_url(url):
                     continue
 
-                idx += 1
+                index += 1
                 description = item.get("description", "")
                 results.append({
-                    "ref_number": idx,
+                    "ref_number": index,
                     "title": item.get("title", ""),
                     "snippet": description[:_MAX_SNIPPET_LEN] if description else "",
                     "source_url": url,
                     "anchor": "",
                 })
-                if idx >= _MAX_RESULTS:
+                if index >= _MAX_RESULTS:
                     break
     except Exception as exc:
-        logger.error("Dev web search failed", exc_info=True)
+        logger.error("Web search failed", exc_info=True)
         raise RuntimeError("Search failed") from exc
 
-    summary = f"{len(results)} results from {', '.join(whitelist)}"
+    summary = f"{len(results)} results from {_MICROSOFT_LEARN_HOST}"
     return json.dumps({"results": results, "summary": summary}, ensure_ascii=False)
 
 
-def _is_whitelisted(url: str, whitelist: list[str]) -> bool:
-    """Check if a URL belongs to a whitelisted domain."""
+def _is_microsoft_learn_url(url: str) -> bool:
+    """Return whether a URL points to Microsoft Learn."""
     try:
         hostname = urlparse(url).hostname or ""
     except Exception:
         return False
-    return any(hostname == site or hostname.endswith(f".{site}") for site in whitelist)
+    return hostname == _MICROSOFT_LEARN_HOST or hostname.endswith(f".{_MICROSOFT_LEARN_HOST}")

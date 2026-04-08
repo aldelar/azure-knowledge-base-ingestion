@@ -40,7 +40,6 @@ class TestCallTool:
     @pytest.mark.asyncio
     async def test_uses_runtime_search_dispatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ENVIRONMENT", "dev")
-        monkeypatch.setattr("mcp_web_search.server._whitelist", ["learn.microsoft.com"])
 
         with patch("mcp_web_search.server._run_web_search", new=AsyncMock(return_value='{"results": [], "summary": "ok"}')) as mock_search:
             result = await call_tool("web_search", {"query": "test"})
@@ -52,7 +51,6 @@ class TestCallTool:
     @pytest.mark.asyncio
     async def test_missing_environment_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("ENVIRONMENT", raising=False)
-        monkeypatch.setattr("mcp_web_search.server._whitelist", ["learn.microsoft.com"])
 
         with pytest.raises(RuntimeError, match="ENVIRONMENT"):
             await call_tool("web_search", {"query": "test"})
@@ -69,14 +67,12 @@ class TestRuntimeConfiguration:
         with pytest.raises(RuntimeError, match="ENVIRONMENT"):
             _validate_runtime_configuration()
 
-    def test_prod_environment_validates_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_prod_environment_is_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ENVIRONMENT", "prod")
-        monkeypatch.delenv("BING_SEARCH_API_KEY", raising=False)
 
         from mcp_web_search.server import _validate_runtime_configuration
 
-        with pytest.raises(RuntimeError, match="BING_SEARCH_API_KEY"):
-            _validate_runtime_configuration()
+        assert _validate_runtime_configuration() == "prod"
 
 
 class TestSessionManagerConfiguration:

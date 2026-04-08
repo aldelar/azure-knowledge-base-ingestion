@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "553704001345117024"
+      "templateHash": "15182493873455657916"
     }
   },
   "parameters": {
@@ -3277,7 +3277,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos-db'), '2025-04-01').outputs.cosmosDatabaseName.value]"
           },
           "mcpWebSearchEndpoint": {
-            "value": "[format('http://{0}/mcp/', reference(resourceId('Microsoft.Resources/deployments', 'mcp-web-search-container-app'), '2025-04-01').outputs.fqdn.value)]"
+            "value": "[format('https://{0}/mcp/', reference(resourceId('Microsoft.Resources/deployments', 'mcp-web-search-container-app'), '2025-04-01').outputs.fqdn.value)]"
           }
         },
         "template": {

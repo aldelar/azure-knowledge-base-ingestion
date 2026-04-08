@@ -1,6 +1,6 @@
 """MCP web search server — exposes web_search via stateless Streamable HTTP.
 
-Uses the Microsoft Learn search API to search whitelisted documentation sites.
+Uses the Microsoft Learn search API to search Microsoft Learn documentation.
 """
 
 from __future__ import annotations
@@ -12,12 +12,9 @@ import os
 from mcp.server import Server
 from mcp.types import TextContent, Tool
 
-from mcp_web_search.whitelist import load_whitelist
-
 logger = logging.getLogger(__name__)
 
 server = Server("mcp-web-search")
-_whitelist: list[str] = []
 
 
 def _get_environment() -> str:
@@ -28,24 +25,15 @@ def _get_environment() -> str:
 
 
 def _validate_runtime_configuration() -> str:
-    environment = _get_environment()
-    if environment == "prod":
-        from mcp_web_search.search_prod import validate_prod_search_configuration
-
-        validate_prod_search_configuration()
-    return environment
+    return _get_environment()
 
 
 async def _run_web_search(query: str) -> str:
-    environment = _get_environment()
-    if environment == "dev":
-        from mcp_web_search.search_dev import dev_web_search
+    _get_environment()
 
-        return await dev_web_search(query, _whitelist)
+    from mcp_web_search.search import web_search
 
-    from mcp_web_search.search_prod import prod_web_search
-
-    return await prod_web_search(query, _whitelist)
+    return await web_search(query)
 
 
 @server.list_tools()
@@ -53,7 +41,7 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="web_search",
-            description="Search whitelisted web sites for information. Returns structured results with source URLs.",
+            description="Search Microsoft Learn documentation for information. Returns structured results with source URLs.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -86,8 +74,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 def main() -> None:
     """Run the MCP server with stateless JSON streamable HTTP transport."""
-    global _whitelist
-    _whitelist = load_whitelist()
     environment = _validate_runtime_configuration()
 
     logging.basicConfig(

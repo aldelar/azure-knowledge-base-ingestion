@@ -1,7 +1,7 @@
-"""Web Search Agent — searches whitelisted sites via MCP web search tool.
+"""Web Search Agent — searches Microsoft Learn via MCP web search tool.
 
 Connects to an MCP web search server (SSE transport) to find information
-from approved Microsoft documentation sites. Used by the orchestrator
+from Microsoft Learn documentation. Used by the orchestrator
 for Azure topics outside the internal knowledge base scope.
 """
 

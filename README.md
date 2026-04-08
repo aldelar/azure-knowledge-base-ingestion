@@ -24,7 +24,7 @@ The project runs in two modes. **Local dev** uses Docker Compose with emulators 
 
 ```mermaid
 block-beta
-  columns 5
+    columns 7
 
   block:DEV_INFRA:2
     columns 1
@@ -38,9 +38,9 @@ block-beta
 
   space
 
-  block:PROD_INFRA:2
+    block:PROD_INFRA:2
     columns 1
-    PI_TITLE["☁️ Infra · Azure Services"]
+        PI_TITLE["☁️ Infra · Azure Services"]
     PI1["Azure Cosmos DB"]
     PI2["Azure Storage Account"]
     PI3["Azure AI Search"]
@@ -48,7 +48,14 @@ block-beta
     PI5["Azure Monitor · App Insights<br/><i>OpenTelemetry</i>"]
     PI6["API Management · AI Gateway"]
     PI7["Azure Container Registry"]
-    PI8["Bing Grounding API"]
+    end
+
+    space
+
+    block:EXT_DEP:1
+        columns 1
+        EX_TITLE["🌐 External"]
+        EX1["MS Learn API"]
   end
 
   block:DEV_SVC:2
@@ -70,19 +77,21 @@ block-beta
     PF2["fn-index"]
     PS_TITLE["☁️ Services · Azure Container Apps"]
     PS3["agent<br/><i>Microsoft Agent Framework</i>"]
-    PS5["mcp-web-search<br/><i>MCP Server · MS Learn + Bing</i>"]
+    PS5["mcp-web-search<br/><i>MCP Server · MS Learn</i>"]
     PS4["web-app<br/><i>CopilotKit · AG-UI protocol</i>"]
   end
 
   style DI_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
   style DS_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
-  style PI_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+    style PI_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
+    style EX_TITLE fill:#6a1b9a,stroke:#7b1fa2,color:#ffffff
   style PF_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
   style PS_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
 
   style DEV_INFRA fill:#263238,stroke:#37474f,color:#cfd8dc
   style DEV_SVC fill:#263238,stroke:#37474f,color:#cfd8dc
-  style PROD_INFRA fill:#3e2723,stroke:#4e342e,color:#d7ccc8
+    style PROD_INFRA fill:#3e2723,stroke:#4e342e,color:#d7ccc8
+    style EXT_DEP fill:#1f1f1f,stroke:#424242,color:#e0e0e0
   style PROD_SVC fill:#3e2723,stroke:#4e342e,color:#d7ccc8
 
   style DI1 fill:#37474f,stroke:#455a64,color:#eceff1
@@ -98,7 +107,7 @@ block-beta
   style PI5 fill:#4e342e,stroke:#5d4037,color:#efebe9
   style PI6 fill:#4e342e,stroke:#5d4037,color:#efebe9
   style PI7 fill:#4e342e,stroke:#5d4037,color:#efebe9
-  style PI8 fill:#4e342e,stroke:#5d4037,color:#efebe9
+    style EX1 fill:#2b2b2b,stroke:#616161,color:#f5f5f5
 
   style DS1 fill:#37474f,stroke:#455a64,color:#eceff1
   style DS2 fill:#37474f,stroke:#455a64,color:#eceff1
@@ -449,22 +458,19 @@ flowchart LR
 
 ### 9. MCP Server as Tool Backend
 
-**Problem:** Agents need web search capabilities, but implementation varies by environment — dev has no Azure costs budget for Bing API, while prod requires enterprise-grade search with auth and rate limiting. Embedding search logic directly in the agent couples the agent to a specific search implementation.
+**Problem:** Agents need web search capabilities, but embedding search logic directly in the agent couples it to a specific provider and makes retrieval harder to test, deploy, and evolve independently.
 
-**Pattern:** Deploy an **MCP server** as a separate Container App exposing `web_search(query)` via SSE transport. Two implementations share the same MCP tool contract: **dev** uses HTTP fetch + scrape (no Azure costs), **prod** uses Bing Grounding API. The agent connects via `agent-framework` MCP client — it doesn't know which implementation is behind the tool. In prod, APIM sits in front of the MCP server providing JWT auth, rate limiting, and telemetry — the same AI Gateway pattern used for the agent itself. A YAML whitelist (`config/whitelist.yaml`) controls which domains the server will search, enforced at the search level.
+**Pattern:** Deploy an **MCP server** as a separate Container App exposing `web_search(query)` via SSE transport. The same implementation runs in both dev and prod: it queries the Microsoft Learn search API and returns Microsoft Learn documentation results through a stable tool contract. The agent connects via the `agent-framework` MCP client and stays decoupled from the search provider.
 
 ```mermaid
 flowchart LR
-    AGENT["Agent Container"] -->|dev: MCP SSE direct| MCP["MCP Web Search<br/>Container App"]
-    AGENT -->|prod: MCP SSE via gateway| APIM["APIM AI Gateway"]
-    APIM -->|JWT + rate limit| MCP
-    MCP -->|dev: fetch/scrape| WEB["Whitelisted<br/>Web Sites"]
-    MCP -->|prod: Bing API| BING["Bing Grounding<br/>API (whitelisted sites)"]
+    AGENT["Agent Container"] -->|dev/prod: MCP SSE direct| MCP["MCP Web Search<br/>Container App"]
+    MCP -->|search provider| LEARN["Microsoft Learn<br/>Search API"]
+    LEARN -->|returns docs| WEB["Microsoft Learn<br/>Documentation"]
 
     style AGENT fill:#3949ab,stroke:#5c6bc0,color:#ffffff
     style MCP fill:#455a64,stroke:#546e7a,color:#ffffff
-    style BING fill:#0d47a1,stroke:#1565c0,color:#ffffff
-    style APIM fill:#6d8f6d,stroke:#8aac8a,color:#ffffff
+    style LEARN fill:#0d47a1,stroke:#1565c0,color:#ffffff
 ```
 
 ### 10. Multi-Agent Handoff Orchestration
@@ -533,7 +539,7 @@ flowchart LR
     end
 
     ORCH -->|query| AIS
-    ORCH -->|query| WEB["Web Search<br/>whitelisted sites"]
+    ORCH -->|query| WEB["Web Search<br/>Microsoft Learn"]
     ORCH -->|reason| AF["Foundry<br/>GPT-4.1 + Embeddings"]
     VIS -->|fetch| IMG
     VIS -->|inject| ORCH

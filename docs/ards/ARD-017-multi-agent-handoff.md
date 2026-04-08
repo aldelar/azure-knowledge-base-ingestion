@@ -13,7 +13,7 @@ Adopt `HandoffBuilder` from `agent-framework-orchestrations` to create a multi-a
 
 1. **Orchestrator** — triage agent that routes questions by topic
 2. **InternalSearchAgent** — existing KB search, scoped to Azure AI Search + Content Understanding
-3. **WebSearchAgent** — new agent using MCP web search tool against whitelisted sites
+3. **WebSearchAgent** — new agent using MCP web search tool against Microsoft Learn documentation
 
 All agents run in a single container. An MCP web search server runs as a separate Container App.
 
@@ -29,7 +29,7 @@ All agents run in a single container. An MCP web search server runs as a separat
 
 - **Separate Container Apps per agent** — rejected; adds complexity for no benefit since agents share the same LLM client
 - **Custom routing logic** — rejected; `HandoffBuilder` handles this natively
-- **Direct Bing API calls from the agent** — rejected; MCP server pattern enables environment-specific implementations (dev fetch/scrape vs. prod Bing) behind the same tool contract
+- **Direct web-search API calls from the agent** — rejected; the MCP server pattern keeps retrieval behind a stable tool contract and lets the same service run unchanged in dev and prod
 
 ## Consequences
 

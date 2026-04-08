@@ -344,7 +344,7 @@ module agentContainerApp 'modules/agent-container-app.bicep' = {
     applicationInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     cosmosEndpoint: cosmosDb.outputs.cosmosEndpoint
     cosmosDatabaseName: cosmosDb.outputs.cosmosDatabaseName
-    mcpWebSearchEndpoint: 'http://${mcpWebSearchContainerApp.outputs.fqdn}/mcp/'
+    mcpWebSearchEndpoint: 'https://${mcpWebSearchContainerApp.outputs.fqdn}/mcp/'
   }
 }
 
