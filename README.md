@@ -24,7 +24,7 @@ The project runs in two modes. **Local dev** uses Docker Compose with emulators 
 
 ```mermaid
 block-beta
-    columns 7
+    columns 5
 
   block:DEV_INFRA:2
     columns 1
@@ -38,9 +38,9 @@ block-beta
 
   space
 
-    block:PROD_INFRA:2
+  block:PROD_INFRA:2
     columns 1
-        PI_TITLE["☁️ Infra · Azure Services"]
+    PI_TITLE["☁️ Infra · Azure Services"]
     PI1["Azure Cosmos DB"]
     PI2["Azure Storage Account"]
     PI3["Azure AI Search"]
@@ -48,14 +48,6 @@ block-beta
     PI5["Azure Monitor · App Insights<br/><i>OpenTelemetry</i>"]
     PI6["API Management · AI Gateway"]
     PI7["Azure Container Registry"]
-    end
-
-    space
-
-    block:EXT_DEP:1
-        columns 1
-        EX_TITLE["🌐 External"]
-        EX1["MS Learn API"]
   end
 
   block:DEV_SVC:2
@@ -84,14 +76,12 @@ block-beta
   style DI_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
   style DS_TITLE fill:#1565c0,stroke:#1976d2,color:#ffffff
     style PI_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
-    style EX_TITLE fill:#6a1b9a,stroke:#7b1fa2,color:#ffffff
   style PF_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
   style PS_TITLE fill:#bf360c,stroke:#e65100,color:#ffffff
 
   style DEV_INFRA fill:#263238,stroke:#37474f,color:#cfd8dc
   style DEV_SVC fill:#263238,stroke:#37474f,color:#cfd8dc
     style PROD_INFRA fill:#3e2723,stroke:#4e342e,color:#d7ccc8
-    style EXT_DEP fill:#1f1f1f,stroke:#424242,color:#e0e0e0
   style PROD_SVC fill:#3e2723,stroke:#4e342e,color:#d7ccc8
 
   style DI1 fill:#37474f,stroke:#455a64,color:#eceff1
@@ -107,7 +97,6 @@ block-beta
   style PI5 fill:#4e342e,stroke:#5d4037,color:#efebe9
   style PI6 fill:#4e342e,stroke:#5d4037,color:#efebe9
   style PI7 fill:#4e342e,stroke:#5d4037,color:#efebe9
-    style EX1 fill:#2b2b2b,stroke:#616161,color:#f5f5f5
 
   style DS1 fill:#37474f,stroke:#455a64,color:#eceff1
   style DS2 fill:#37474f,stroke:#455a64,color:#eceff1
