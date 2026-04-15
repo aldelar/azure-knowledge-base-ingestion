@@ -1,6 +1,7 @@
 services:
   cosmos-emulator:
     image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
+    restart: unless-stopped
     ports:
       - "8081:8081"
       - "1234:1234"
@@ -19,6 +20,7 @@ services:
 
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
+    restart: unless-stopped
     command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --debug /data/debug.log --skipApiVersionCheck
     ports:
       - "10000:10000"
@@ -37,6 +39,7 @@ services:
 
   search-simulator:
     image: ghcr.io/ellerbach/azure-ai-search-simulator:latest
+    restart: unless-stopped
     ports:
       - "7250:8443"
       - "5250:8080"
@@ -60,6 +63,7 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    restart: unless-stopped
     gpus: all
     ports:
       - "11434:11434"
@@ -79,6 +83,7 @@ services:
 
   aspire-dashboard:
     image: mcr.microsoft.com/dotnet/aspire-dashboard:latest
+    restart: unless-stopped
     ports:
       - "18888:18888"
       - "18889:18889"

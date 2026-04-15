@@ -3,6 +3,7 @@ services:
     build:
       context: ./src/functions
       dockerfile: ./fn_convert_markitdown/Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env.dev
     environment:
@@ -23,6 +24,7 @@ services:
     build:
       context: ./src/functions
       dockerfile: ./fn_index/Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env.dev
     environment:
@@ -43,6 +45,7 @@ services:
     build:
       context: ./src/agent
       dockerfile: ./Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env.dev
     environment:
@@ -66,6 +69,7 @@ services:
     build:
       context: ./src/mcp-web-search
       dockerfile: ./Dockerfile
+    restart: unless-stopped
     environment:
       ENVIRONMENT: dev
       MCP_PORT: "8089"
@@ -84,6 +88,7 @@ services:
     build:
       context: ./src/web-app
       dockerfile: ./Dockerfile
+    restart: unless-stopped
     env_file:
       - ./.env.dev
     environment:
