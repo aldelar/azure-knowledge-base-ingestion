@@ -475,9 +475,9 @@ flowchart LR
 ```mermaid
 flowchart TD
     USER["User Question"] --> ORCH["Orchestrator<br/>(triage)"]
-    ORCH -->|"AI Search / CU"| INT["InternalSearchAgent<br/>search_knowledge_base"]
-    ORCH -->|"Other Azure"| WEB["WebSearchAgent<br/>web_search (MCP)"]
-    ORCH -->|"Non-Azure"| DECLINE["Polite Decline"]
+    ORCH -->|"Indexed Topics"| INT["InternalSearchAgent<br/>search_knowledge_base"]
+    ORCH -->|"Non Indexed Topics"| WEB["WebSearchAgent<br/>web_search (MCP)"]
+    ORCH -->|"Out of Scope Topics"| DECLINE["Polite Decline"]
     INT --> ANSWER["Grounded Answer"]
     WEB --> ANSWER
 
