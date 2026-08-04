@@ -46,7 +46,7 @@ User Request → APIM AI Gateway → Agent Container App → Foundry (tracing + 
 | **Tracing** | Platform-native traces in Foundry Control Plane (Operate → Traces). Agent Framework auto-emits spans for tool calls, model invocations, and middleware. | ✅ Configured via `appinsights-connection` in `foundry-project.bicep` |
 | **Agent Registration** | Register agents in Foundry portal (Operate → Assets) for lifecycle management. | ✅ Via `scripts/register-agent.sh` + APIM connection |
 | **Evaluations** | Batch eval runs to measure quality, groundedness, relevance. Golden datasets + custom evaluators. | ✅ See Epic 006 |
-| **Model Deployments** | Centralized model endpoint management (GPT-4.1, gpt-5-mini, text-embedding-3-small). | ✅ In `ai-services.bicep` |
+| **Model Deployments** | Centralized model endpoint management (GPT-4.1, gpt-5.4-mini, text-embedding-3-small). | ✅ In `ai-services.bicep` |
 | **App Insights Integration** | OTel spans + structured logs exported to App Insights automatically. | ✅ Account-level setting in `ai-services.bicep` |
 
 ### APIM AI Gateway — Traffic Governance
